@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Exact published scene timeline",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "video_id",
+    "duration_seconds",
+    "fps",
+    "master_sha256",
+    "scenes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "video_id": {
+      "type": "string"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "fps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "master_sha256": {
+      "type": "string"
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scene_id",
+          "beat_id",
+          "start_second",
+          "end_second",
+          "narrative_function",
+          "visual_device"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string"
+          },
+          "beat_id": {
+            "type": "string"
+          },
+          "start_second": {
+            "type": "number"
+          },
+          "end_second": {
+            "type": "number"
+          },
+          "narrative_function": {
+            "type": "string"
+          },
+          "visual_device": {
+            "type": "string"
+          },
+          "narration_wpm": {
+            "type": "number"
+          },
+          "concept_density": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prerecorded editorial experiment",
+  "type": "object",
+  "required": [
+    "experiment_id",
+    "hypothesis",
+    "change_variable",
+    "control_rule",
+    "variant_rule",
+    "evaluation_window_days",
+    "primary_observed_metric",
+    "guardrails",
+    "status"
+  ],
+  "properties": {
+    "experiment_id": {
+      "type": "string"
+    },
+    "hypothesis": {
+      "type": "string"
+    },
+    "change_variable": {
+      "type": "string"
+    },
+    "control_rule": {
+      "type": "string"
+    },
+    "variant_rule": {
+      "type": "string"
+    },
+    "evaluation_window_days": {
+      "type": "integer"
+    },
+    "primary_observed_metric": {
+      "enum": [
+        "audienceWatchRatio",
+        "relativeRetentionPerformance",
+        "averageViewDuration",
+        "averageViewPercentage",
+        "estimatedMinutesWatched"
+      ]
+    },
+    "guardrails": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "reviewed",
+        "approved",
+        "running",
+        "inconclusive",
+        "adopted",
+        "reverted"
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Versioned reversible improvement",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "experiment_id",
+    "action",
+    "patch_target",
+    "proposed_patch",
+    "reversible",
+    "reason",
+    "review_status"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string"
+    },
+    "experiment_id": {
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "adopt",
+        "reject",
+        "continue",
+        "rollback"
+      ]
+    },
+    "patch_target": {
+      "type": "string"
+    },
+    "proposed_patch": {
+      "type": "object"
+    },
+    "reversible": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "review_status": {
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ]
+    }
+  }
+}

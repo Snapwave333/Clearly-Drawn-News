@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Immutable asset and rights entry",
+  "type": "object",
+  "required": [
+    "asset_id",
+    "source_path",
+    "output_path",
+    "sha256",
+    "tool",
+    "rights_class"
+  ],
+  "properties": {
+    "asset_id": {
+      "type": "string"
+    },
+    "source_path": {
+      "type": "string"
+    },
+    "output_path": {
+      "type": "string"
+    },
+    "sha256": {
+      "type": "string"
+    },
+    "tool": {
+      "enum": [
+        "vectorcraft",
+        "photocraft",
+        "effectcraft",
+        "blender",
+        "unreal",
+        "kokoro",
+        "ffmpeg",
+        "other"
+      ]
+    },
+    "rights_class": {
+      "enum": [
+        "original",
+        "owned",
+        "public_domain",
+        "licensed",
+        "permission_required"
+      ]
+    },
+    "approved": {
+      "type": "boolean"
+    }
+  }
+}

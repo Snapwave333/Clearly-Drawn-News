@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Official per-video retention response",
+  "type": "object",
+  "required": [
+    "video_id",
+    "retrieved_at",
+    "source",
+    "columnHeaders",
+    "rows"
+  ],
+  "properties": {
+    "video_id": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string"
+    },
+    "source": {
+      "const": "youtube_analytics_reports.query"
+    },
+    "columnHeaders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "data_status": {
+      "enum": [
+        "available",
+        "not_available",
+        "immature",
+        "error"
+      ]
+    }
+  }
+}

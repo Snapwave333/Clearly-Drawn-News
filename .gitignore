@@ -1,0 +1,40 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
+
+# SQLite
+*.db
+*.db-journal
+*.sqlite
+
+# Credentials & secrets
+youtube_credentials.json
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+
+# Coverage
+coverage/
+*.profraw
+
+# Temp
+tmp/
+temp/

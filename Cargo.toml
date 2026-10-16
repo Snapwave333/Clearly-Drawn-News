@@ -1,0 +1,62 @@
+[workspace]
+members = [
+    "crates/atlas-core",
+    "crates/atlas-doctor",
+    "crates/atlas-store",
+    "crates/atlas-opencode",
+    "crates/atlas-analytics",
+    "crates/atlas-agent-bus",
+    "crates/atlas-blender",
+    "crates/atlas-kokoro",
+    "crates/atlas-ffmpeg",
+    "crates/atlas-cli",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["ATLAS STUDIO"]
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# Internal
+atlas-core = { path = "crates/atlas-core" }
+atlas-doctor = { path = "crates/atlas-doctor" }
+atlas-store = { path = "crates/atlas-store" }
+atlas-opencode = { path = "crates/atlas-opencode" }
+atlas-analytics = { path = "crates/atlas-analytics" }
+atlas-agent-bus = { path = "crates/atlas-agent-bus" }
+atlas-blender = { path = "crates/atlas-blender" }
+atlas-kokoro = { path = "crates/atlas-kokoro" }
+atlas-ffmpeg = { path = "crates/atlas-ffmpeg" }
+
+# External
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive", "env", "string"] }
+directories = "5.0"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.34", features = ["bundled", "uuid", "chrono"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.44", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.16", features = ["v4", "serde"] }
+tempfile = "3.19"
+which = "7.0"
+sha2 = "0.10"
+hex = "0.4"
+regex = "1.11"
+url = "2.5"
+oauth2 = { version = "5.0", features = ["reqwest"] }
+keyring = { version = "3.6" }
+base64 = "0.22"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

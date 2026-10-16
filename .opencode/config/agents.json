@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "roles": [
+    {
+      "skill": "accessibility-editor",
+      "role": "accessibility_editor",
+      "skill_file": "skills/accessibility-editor/SKILL.md"
+    },
+    {
+      "skill": "agent-messenger",
+      "role": "coordinator",
+      "skill_file": "skills/agent-messenger/SKILL.md"
+    },
+    {
+      "skill": "analytics-cohort-evaluator",
+      "role": "analytics_cohort_evaluator",
+      "skill_file": "skills/analytics-cohort-evaluator/SKILL.md"
+    },
+    {
+      "skill": "analytics-dashboard",
+      "role": "analytics_dashboard",
+      "skill_file": "skills/analytics-dashboard/SKILL.md"
+    },
+    {
+      "skill": "analytics-ingestion",
+      "role": "analytics_engineer",
+      "skill_file": "skills/analytics-ingestion/SKILL.md"
+    },
+    {
+      "skill": "audience-questions",
+      "role": "audience_researcher",
+      "skill_file": "skills/audience-questions/SKILL.md"
+    },
+    {
+      "skill": "audio-editor",
+      "role": "audio_editor",
+      "skill_file": "skills/audio-editor/SKILL.md"
+    },
+    {
+      "skill": "blender-animator",
+      "role": "blender_animator",
+      "skill_file": "skills/blender-animator/SKILL.md"
+    },
+    {
+      "skill": "channel-strategist",
+      "role": "channel_strategist",
+      "skill_file": "skills/channel-strategist/SKILL.md"
+    },
+    {
+      "skill": "continuous-improvement-auditor",
+      "role": "improvement_auditor",
+      "skill_file": "skills/continuous-improvement-auditor/SKILL.md"
+    },
+    {
+      "skill": "cost-resource-scheduler",
+      "role": "resource_scheduler",
+      "skill_file": "skills/cost-resource-scheduler/SKILL.md"
+    },
+    {
+      "skill": "creative-director",
+      "role": "creative_director",
+      "skill_file": "skills/creative-director/SKILL.md"
+    },
+    {
+      "skill": "effectcraft",
+      "role": "effectcraft_compositor",
+      "skill_file": "skills/effectcraft/SKILL.md"
+    },
+    {
+      "skill": "executive-producer",
+      "role": "executive_producer",
+      "skill_file": "skills/executive-producer/SKILL.md"
+    },
+    {
+      "skill": "experiment-designer",
+      "role": "experiment_designer",
+      "skill_file": "skills/experiment-designer/SKILL.md"
+    },
+    {
+      "skill": "fact-checker",
+      "role": "fact_checker",
+      "skill_file": "skills/fact-checker/SKILL.md"
+    },
+    {
+      "skill": "kokoro-narrator",
+      "role": "voice_director",
+      "skill_file": "skills/kokoro-narrator/SKILL.md"
+    },
+    {
+      "skill": "lead-writer",
+      "role": "lead_writer",
+      "skill_file": "skills/lead-writer/SKILL.md"
+    },
+    {
+      "skill": "motion-director",
+      "role": "motion_director",
+      "skill_file": "skills/motion-director/SKILL.md"
+    },
+    {
+      "skill": "observability",
+      "role": "operations",
+      "skill_file": "skills/observability/SKILL.md"
+    },
+    {
+      "skill": "opencode-nim-bridge",
+      "role": "model_broker",
+      "skill_file": "skills/opencode-nim-bridge/SKILL.md"
+    },
+    {
+      "skill": "pattern-librarian",
+      "role": "pattern_librarian",
+      "skill_file": "skills/pattern-librarian/SKILL.md"
+    },
+    {
+      "skill": "photocraft",
+      "role": "photo_editor",
+      "skill_file": "skills/photocraft/SKILL.md"
+    },
+    {
+      "skill": "publisher",
+      "role": "publisher",
+      "skill_file": "skills/publisher/SKILL.md"
+    },
+    {
+      "skill": "quality-supervisor",
+      "role": "quality_supervisor",
+      "skill_file": "skills/quality-supervisor/SKILL.md"
+    },
+    {
+      "skill": "recursive-optimizer",
+      "role": "recursive_optimizer",
+      "skill_file": "skills/recursive-optimizer/SKILL.md"
+    },
+    {
+      "skill": "research-lead",
+      "role": "research_lead",
+      "skill_file": "skills/research-lead/SKILL.md"
+    },
+    {
+      "skill": "retention-analyst",
+      "role": "retention_analyst",
+      "skill_file": "skills/retention-analyst/SKILL.md"
+    },
+    {
+      "skill": "rights-disclosure",
+      "role": "rights_editor",
+      "skill_file": "skills/rights-disclosure/SKILL.md"
+    },
+    {
+      "skill": "script-editor",
+      "role": "script_editor",
+      "skill_file": "skills/script-editor/SKILL.md"
+    },
+    {
+      "skill": "storyboard-artist",
+      "role": "storyboard_artist",
+      "skill_file": "skills/storyboard-artist/SKILL.md"
+    },
+    {
+      "skill": "subject-editor",
+      "role": "subject_editor",
+      "skill_file": "skills/subject-editor/SKILL.md"
+    },
+    {
+      "skill": "thumbnail-packaging",
+      "role": "packaging_designer",
+      "skill_file": "skills/thumbnail-packaging/SKILL.md"
+    },
+    {
+      "skill": "trend-analyst",
+      "role": "trend_analyst",
+      "skill_file": "skills/trend-analyst/SKILL.md"
+    },
+    {
+      "skill": "trend-scout",
+      "role": "trend_scout",
+      "skill_file": "skills/trend-scout/SKILL.md"
+    },
+    {
+      "skill": "unreal-cinematographer",
+      "role": "unreal_cinematographer",
+      "skill_file": "skills/unreal-cinematographer/SKILL.md"
+    },
+    {
+      "skill": "vector-illustrator",
+      "role": "illustrator",
+      "skill_file": "skills/vector-illustrator/SKILL.md"
+    },
+    {
+      "skill": "video-editor",
+      "role": "video_editor",
+      "skill_file": "skills/video-editor/SKILL.md"
+    }
+  ],
+  "require_independent_review": true,
+  "max_revision_attempts_per_gate": 3,
+  "mandatory_agent_events": [
+    "TASK_CREATED",
+    "TASK_ACCEPTED",
+    "ARTIFACT_READY",
+    "REVIEW_REQUESTED",
+    "REVIEW_PASSED",
+    "REVISION_REQUIRED",
+    "QUALITY_PASSED",
+    "HALTED"
+  ]
+}

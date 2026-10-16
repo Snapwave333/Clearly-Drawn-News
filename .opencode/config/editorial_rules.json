@@ -1,0 +1,46 @@
+{
+  "forbidden": [
+    "fabricated statistics",
+    "plagiarized creative content",
+    "unsourced recent claims",
+    "clickbait that breaks the answer promise",
+    "stock template animation filler",
+    "misleading photorealistic scenes",
+    "deceptive user identity impersonation",
+    "unauthorized publishing",
+    "undisclosed required realistic synthetic media",
+    "automation that fabricates YouTube traffic"
+  ],
+  "invariants": [
+    "every episode solves one teachable question",
+    "source-supported accuracy",
+    "visually meaningful motion",
+    "AI production credits",
+    "rights provenance",
+    "reversible optimization",
+    "per-channel publish authority"
+  ],
+  "creative_house_style": {
+    "dominant_form": "authored_whiteboard_line_drawing",
+    "palette_dark": [
+      "#0D1523",
+      "#DCEEF3",
+      "#3BC5D9",
+      "#ED5BA8"
+    ],
+    "palette_light": [
+      "#FAFAF6",
+      "#102332",
+      "#007E9B",
+      "#C22976"
+    ],
+    "text_minimum_pixels_at_1080p": 28,
+    "avoid": [
+      "floating UI cards as video",
+      "3D for 3D sake",
+      "constant zooms",
+      "cheap typewriter presets",
+      "generic sparkles"
+    ]
+  }
+}

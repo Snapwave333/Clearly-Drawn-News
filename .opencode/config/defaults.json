@@ -1,0 +1,79 @@
+{
+  "app": "ATLAS STUDIO",
+  "mode": "review_before_publish",
+  "platform": "Windows 11",
+  "headless_default": true,
+  "model": {
+    "broker": "opencode_existing_nvidia_provider",
+    "allow_raw_key_extraction": false,
+    "fallback_requires_explicit_authorization": true,
+    "max_parallel_inference": 2
+  },
+  "schedule": {
+    "trend_poll_hours": 6,
+    "analytics_poll_hours": 24,
+    "retention_initial_delay_hours": 48,
+    "retention_followups_after_days": [
+      3,
+      7,
+      14,
+      28
+    ],
+    "daily_video_limit": 1
+  },
+  "render": {
+    "default_engine": "blender",
+    "use_unreal_if_necessary": true,
+    "fps": 30,
+    "resolution": [
+      1920,
+      1080
+    ],
+    "gpu_heavy_concurrency": 1,
+    "max_parallel_light_jobs": 3,
+    "draft_scale": 0.5
+  },
+  "quality": {
+    "min_sources_per_major_claim": 1,
+    "critical_factual_claim_unverified_allowed": 0,
+    "independent_fact_check_required": true,
+    "independent_final_qa_required": true,
+    "max_scene_revisions": 3,
+    "originality_review_required": true
+  },
+  "analytics": {
+    "youtube_oauth_required": true,
+    "analytics_use_unofficial_scrapers": false,
+    "derived_metrics_api_approval": false,
+    "native_youtube_studio_ab_tests_only": true,
+    "min_mature_views_for_editorial_hypothesis": 100,
+    "no_fake_metrics": true,
+    "read_only_scopes": [
+      "https://www.googleapis.com/auth/yt-analytics.readonly",
+      "https://www.googleapis.com/auth/youtube.readonly"
+    ]
+  },
+  "optimizer": {
+    "auto_promote_prompt_changes": false,
+    "auto_change_code": false,
+    "experiment_min_days": 7,
+    "require_independent_review": true,
+    "canary_enabled": true,
+    "improvement_dimensions": [
+      "explanation_clarity",
+      "originality",
+      "retention_observations",
+      "story_completion",
+      "audio_quality",
+      "visual_accessibility"
+    ]
+  },
+  "publishing": {
+    "auto_public_upload": false,
+    "require_factual_gate": true,
+    "require_rights_gate": true,
+    "require_quality_gate": true,
+    "credits_always": true,
+    "synthetic_media_disclosure_when_required": true
+  }
+}

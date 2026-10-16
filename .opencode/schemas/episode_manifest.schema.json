@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Autonomous production episode",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project_id",
+    "title",
+    "question",
+    "state",
+    "publish_mode",
+    "sources",
+    "assets",
+    "approvals",
+    "production_settings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "question": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "publish_mode": {
+      "enum": [
+        "review_before_publish",
+        "autonomous_opt_in"
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "approvals": {
+      "type": "object"
+    },
+    "production_settings": {
+      "type": "object"
+    },
+    "disclosure": {
+      "type": "object"
+    }
+  }
+}

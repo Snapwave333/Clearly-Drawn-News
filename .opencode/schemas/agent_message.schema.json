@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ATLAS agent bus message",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "message_id",
+    "project_id",
+    "task_id",
+    "from",
+    "to",
+    "type",
+    "artifact_ids",
+    "blocking",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "from": {
+      "type": "string"
+    },
+    "to": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "artifact_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blocking": {
+      "type": "boolean"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string"
+    },
+    "feedback": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}
