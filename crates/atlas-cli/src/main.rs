@@ -15,11 +15,13 @@ use uuid::Uuid;
 mod broll;
 mod cache;
 mod daemon;
+mod news;
 mod production;
 
 use broll::import_broll;
 use cache::cmd_cache;
 use daemon::cmd_daemon;
+use news::cmd_news;
 use production::{
     StageTimer, env_parallelism, generate_vector_diagram, render_shots, validate_format_duration,
 };
@@ -297,8 +299,8 @@ enum NewsAction {
     Slate,
     /// Transmit the episode slate to Telegram (@youtubepipline2146_bot) and poll for human approval.
     Telegram {
-        #[arg(long, default_value = "8527817116:AAGLcyMG8cgCQhJOUeXknTZDsAblyTqY8NU")]
-        token: String,
+        #[arg(long, env = "TELEGRAM_BOT_TOKEN", hide_env_values = true)]
+        token: Option<String>,
         #[arg(long)]
         chat_id: Option<i64>,
     },
@@ -306,8 +308,8 @@ enum NewsAction {
     Copyright,
     /// Execute the complete autonomous 15-30 minute newsroom broadcast production pipeline.
     Produce {
-        #[arg(long, default_value = "8527817116:AAGLcyMG8cgCQhJOUeXknTZDsAblyTqY8NU")]
-        token: String,
+        #[arg(long, env = "TELEGRAM_BOT_TOKEN", hide_env_values = true)]
+        token: Option<String>,
         #[arg(long)]
         chat_id: Option<i64>,
         #[arg(long)]
@@ -621,7 +623,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Payroll { action } => cmd_payroll(&store, action).await,
         Commands::Memory { action } => cmd_memory(action).await,
         Commands::Freesound { action } => cmd_freesound(&store, action).await,
-        Commands::News { action } => cmd_news(action).await,
+        Commands::News { action } => cmd_news(&store, action).await,
         Commands::Cache { action } => cmd_cache(&store, action),
     }
 }
@@ -3791,299 +3793,5 @@ async fn cmd_memory(action: MemoryAction) -> anyhow::Result<()> {
             }
         }
     }
-    Ok(())
-}
-
-async fn cmd_news(action: NewsAction) -> anyhow::Result<()> {
-    use atlas_core::{EpisodeDurationPolicy, SHOW_TAGLINE, SHOW_TITLE};
-    use atlas_media::fact_checker::NewsFactChecker;
-    use atlas_media::news_desk::AnimationNewsDesk;
-    use atlas_policy::copyright::{
-        CopyrightComplianceEngine, MediaClassification, MediaType, RightsRecord, ScanResult,
-    };
-    use atlas_policy::telegram::{
-        ApprovalDecision, EpisodeSlateProposal, ProposedNewsStory, TelegramApprovalGate,
-    };
-    use atlas_storyboard::two_anchor_script::TwoAnchorScriptWriter;
-    use chrono::Utc;
-
-    println!("══════════════════════════════════════════════════════════════════");
-    println!("  {} — {}", SHOW_TITLE, SHOW_TAGLINE);
-    println!("  Autonomous Animation Broadcast Newsroom Pipeline");
-    println!("══════════════════════════════════════════════════════════════════");
-
-    let news_desk = AnimationNewsDesk::new();
-    let fact_checker = NewsFactChecker::default();
-    let script_writer = TwoAnchorScriptWriter::new();
-    let policy = EpisodeDurationPolicy::default();
-
-    match action {
-        NewsAction::Research => {
-            println!("\n[1/3] Ingesting developing animation industry wire...");
-            let wire = news_desk.fetch_curated_wire().await;
-            println!("  Found {} candidate industry stories.", wire.len());
-
-            println!("\n[2/3] Running Fact-Checking & Corroboration Engine...");
-            let report = fact_checker.verify_candidates(wire);
-            println!("  Passed:   {} verified stories", report.passed_stories.len());
-            println!("  Rejected: {} unverified/duplicate items", report.rejected_stories.len());
-
-            println!("\n[3/3] Curated Storyline Lineup:");
-            for (idx, story) in report.passed_stories.iter().enumerate() {
-                println!(
-                    "  {:02}. [{:?}] {} (Est: {:.1}m) — Studio: {}",
-                    idx + 1,
-                    story.category,
-                    story.title,
-                    story.estimated_duration_mins,
-                    story.studio_or_organization
-                );
-            }
-            println!("\nEstimated Full Episode Runtime: {:.1} minutes (Target: 15–30 min)", report.estimated_total_minutes);
-        }
-        NewsAction::Slate => {
-            println!("\nGenerating 22-minute, 8-segment two-anchor broadcast script...");
-            let episode = script_writer.generate_broadcast_episode(
-                "Episode 001: MAPPA Chainsaw Man Sequel & Spider-Verse Tech",
-                "2026-10-17",
-            );
-            episode.validate_duration(&policy)?;
-
-            println!("\nEpisode Slate: {}", episode.episode_title);
-            println!("Total Runtime: {:.1}s ({:.1} min) [Compliant with 15–30 min constraint]", episode.total_duration_secs, episode.total_duration_secs / 60.0);
-            println!("Segments ({} total):", episode.segments.len());
-
-            for seg in &episode.segments {
-                println!(
-                    "  Segment {:02}: {:<42} | Category: {:<18} | Duration: {:>5.1}s | Dialogue Lines: {}",
-                    seg.segment_number,
-                    seg.segment_title,
-                    seg.segment_category,
-                    seg.actual_duration_secs,
-                    seg.lines.len()
-                );
-            }
-        }
-        NewsAction::Telegram { token, chat_id } => {
-            let mut gate = TelegramApprovalGate::new(Some(token), chat_id);
-            let wire = news_desk.fetch_curated_wire().await;
-            let report = fact_checker.verify_candidates(wire);
-
-            println!("\nConnecting to Telegram Bot API...");
-            match gate.get_bot_info().await {
-                Ok(bot) => {
-                    println!("Connected to bot: @{} ({})", bot["username"].as_str().unwrap_or("bot"), bot["first_name"].as_str().unwrap_or("Bot"));
-                }
-                Err(err) => {
-                    eprintln!("Failed to connect to Telegram bot: {}", err);
-                    return Ok(());
-                }
-            }
-
-            let proposal_stories: Vec<ProposedNewsStory> = report
-                .passed_stories
-                .iter()
-                .map(|s| ProposedNewsStory {
-                    story_id: s.id.clone(),
-                    category: s.category.as_str().to_string(),
-                    headline: s.title.clone(),
-                    factual_summary: s.factual_summary.clone(),
-                    source_url: s.primary_source_url.clone(),
-                    announcement_date: s.announcement_date.clone(),
-                    estimated_duration_mins: s.estimated_duration_mins,
-                    editorial_angle: s.editorial_angle.clone(),
-                    verified: s.is_verified,
-                })
-                .collect();
-
-            let proposal = EpisodeSlateProposal {
-                episode_id: "EP-001".into(),
-                episode_number: 1,
-                target_duration_mins: report.estimated_total_minutes,
-                stories: proposal_stories,
-            };
-
-            println!("\nTransmitting production approval slate to Telegram...");
-            match gate.send_slate(&proposal).await {
-                Ok(msg_id) => {
-                    println!("Slate delivered! Message ID: {}", msg_id);
-                    println!("Awaiting human approval inline button click in Telegram...");
-                    println!("Buttons: [Approve Full Slate] [Reject Slate] [Replace Story] [More Research]");
-
-                    let decision = gate.poll_approval("EP-001", 60).await
-                        .map_err(|e| anyhow::anyhow!(e))?;
-                    println!("Received Telegram Approval Gate Decision: {:?}", decision);
-                }
-                Err(e) => {
-                    eprintln!("Failed delivering slate via Telegram: {}", e);
-                }
-            }
-        }
-        NewsAction::Copyright => {
-            println!("\nRunning Dedicated Copyright Compliance Agent Scanner...");
-            let engine = CopyrightComplianceEngine::new();
-
-            let sample_assets = vec![
-                RightsRecord {
-                    asset_id: "ue_newsroom_stage".into(),
-                    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
-                    media_type: MediaType::OriginalUnrealFootage,
-                    creator_or_holder: atlas_core::COMPANY_NAME.into(),
-                    source_url: None,
-                    acquisition_timestamp: Utc::now(),
-                    license_type: "Epic Games UE5 License".into(),
-                    commercial_use_permitted: true,
-                    restrictions: vec![],
-                    classification: MediaClassification::Original,
-                    fair_use_assessment: None,
-                    audio_muted_for_clearance: false,
-                },
-                RightsRecord {
-                    asset_id: "mh_anchors_marcus_elena".into(),
-                    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
-                    media_type: MediaType::OriginalMetaHuman,
-                    creator_or_holder: "Epic MetaHuman Creator".into(),
-                    source_url: None,
-                    acquisition_timestamp: Utc::now(),
-                    license_type: "MetaHuman Commercial License".into(),
-                    commercial_use_permitted: true,
-                    restrictions: vec![],
-                    classification: MediaClassification::Original,
-                    fair_use_assessment: None,
-                    audio_muted_for_clearance: false,
-                },
-                RightsRecord {
-                    asset_id: "mappa_csm_teaser_clip".into(),
-                    sha256: "1111111111111111111111111111111111111111111111111111111111111111".into(),
-                    media_type: MediaType::Trailer,
-                    creator_or_holder: "MAPPA / Shueisha".into(),
-                    source_url: Some("https://mappa.co.jp".into()),
-                    acquisition_timestamp: Utc::now(),
-                    license_type: "Fair Use Commentary § 107".into(),
-                    commercial_use_permitted: true,
-                    restrictions: vec!["Trailer audio MUST be muted to prevent Content ID claims".into()],
-                    classification: MediaClassification::ExceptionReviewed,
-                    fair_use_assessment: None,
-                    audio_muted_for_clearance: true,
-                },
-            ];
-
-            for rec in &sample_assets {
-                println!(
-                    "  [REGISTERED] {:<26} | {:<20} | Allowed in render: {} | Audio Muted: {}",
-                    rec.asset_id,
-                    format!("{:?}", rec.classification),
-                    engine.is_cleared_for_render(rec),
-                    rec.audio_muted_for_clearance
-                );
-            }
-
-            match engine.scan_production_manifest(&sample_assets) {
-                ScanResult::AllClear => {
-                    println!("\nPre-Render Publication Firewall Check: PASS");
-                    println!("All third-party video trailer excerpts have original audio MUTED to prevent Content ID strikes.");
-                }
-                res => {
-                    println!("\nScan Result: {:?}", res);
-                }
-            }
-        }
-        NewsAction::Produce { token, chat_id, skip_telegram_wait } => {
-            println!("\n[PHASE 1: RESEARCH & FACT-CHECK]");
-            let wire = news_desk.fetch_curated_wire().await;
-            let report = fact_checker.verify_candidates(wire);
-            println!("  Curated {} verified animation industry stories.", report.passed_stories.len());
-
-            println!("\n[PHASE 2: TELEGRAM HUMAN APPROVAL GATE]");
-            let mut gate = TelegramApprovalGate::new(Some(token), chat_id);
-            if !skip_telegram_wait {
-                let proposal_stories: Vec<ProposedNewsStory> = report
-                    .passed_stories
-                    .iter()
-                    .map(|s| ProposedNewsStory {
-                        story_id: s.id.clone(),
-                        category: s.category.as_str().to_string(),
-                        headline: s.title.clone(),
-                        factual_summary: s.factual_summary.clone(),
-                        source_url: s.primary_source_url.clone(),
-                        announcement_date: s.announcement_date.clone(),
-                        estimated_duration_mins: s.estimated_duration_mins,
-                        editorial_angle: s.editorial_angle.clone(),
-                        verified: s.is_verified,
-                    })
-                    .collect();
-
-                let proposal = EpisodeSlateProposal {
-                    episode_id: "EP-001".into(),
-                    episode_number: 1,
-                    target_duration_mins: report.estimated_total_minutes,
-                    stories: proposal_stories,
-                };
-
-                println!("Transmitting slate to Telegram for editorial approval...");
-                let _ = gate.send_slate(&proposal).await;
-                println!("Waiting for human approval from Telegram...");
-                let decision = gate.poll_approval("EP-001", 30).await
-                    .map_err(|e| anyhow::anyhow!(e))?;
-
-                if !matches!(decision, ApprovalDecision::Approved { .. }) {
-                    println!("Production halted: Telegram approval gate returned {:?}", decision);
-                    return Ok(());
-                }
-            } else {
-                println!("  Telegram approval gate: Pre-approved via verified operator token.");
-            }
-
-            println!("\n[PHASE 3: SCRIPT & DIALOGUE GENERATION]");
-            let episode = script_writer.generate_broadcast_episode(
-                "Episode 001: MAPPA Chainsaw Man Sequel & Spider-Verse Tech",
-                "2026-10-17",
-            );
-            episode.validate_duration(&policy)?;
-            println!("  Generated 8 segments totaling {:.1}s ({:.1} min).", episode.total_duration_secs, episode.total_duration_secs / 60.0);
-
-            println!("\n[PHASE 4: COPYRIGHT & RIGHTS REGISTRY]");
-            println!("  Scanning all media assets: 100% compliant.");
-            println!("  All trailer audio tracks set to MUTED; original score supplied by AIWaves / Freesound.");
-
-            println!("\n[PHASE 5: UNREAL ENGINE 5.8 VIRTUAL STUDIO FILMING]");
-            let uproject = r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject";
-            let ue_cmd = r"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe";
-            let python_script = r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\Content\Python\setup_newsroom_studio.py";
-            println!("  Target Engine: Unreal Engine 5.8 (DirectX 12 / Lumen / MetaHumans)");
-            println!("  Project:       {}", uproject);
-            println!("  Automating:    Two MetaHuman Anchors (Marcus & Elena), 4 CineCameras, Dynamic Video Wall");
-
-            if Path::new(ue_cmd).exists() && Path::new(uproject).exists() {
-                println!("  Executing Unreal Engine command-line automation...");
-                let status = tokio::process::Command::new(ue_cmd)
-                    .arg(uproject)
-                    .arg(format!("-ExecutePythonScript={}", python_script))
-                    .arg("-nullrhi")
-                    .arg("-unattended")
-                    .arg("-nosplash")
-                    .status()
-                    .await;
-                match status {
-                    Ok(s) => println!("  Unreal Engine execution finished with status: {}", s),
-                    Err(e) => println!("  Unreal Engine execution notice: {}", e),
-                }
-            } else {
-                println!("  [Simulated] Unreal Engine 5.8 virtual filming executed successfully.");
-            }
-
-            println!("\n[PHASE 6: 16:9 4K/FHD BROADCAST MASTERING]");
-            println!("  Format: Native 16:9 Widescreen (3840x2160 UHD / 1920x1080 FHD)");
-            println!("  FPS:    30 fps constant");
-            println!("  Audio:  EBU R128 (-14 LUFS) broadcast compliance");
-            println!("  Graphics: Lower-thirds, animated bug, transparent end credits");
-
-            println!("\n══════════════════════════════════════════════════════════════════");
-            println!("  CLEARLY DRAWN NEWS — Episode 001 Production Complete!");
-            println!("  Runtime: {:.1} minutes | Status: READY FOR PUBLICATION", episode.total_duration_secs / 60.0);
-            println!("══════════════════════════════════════════════════════════════════\n");
-        }
-    }
-
     Ok(())
 }

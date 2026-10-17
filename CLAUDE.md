@@ -47,6 +47,9 @@ atlas-studio/
 | `atlas produce --topic <id> --reuse-rendered` | Reassemble from a verified existing frame cache |
 | `ATLAS_RENDER_JOBS=2 atlas produce --topic <id>` | Render up to N Blender shots in parallel (default 1) |
 | `ATLAS_TTS_JOBS=2 atlas produce --topic <id>` | Synthesize up to N Kokoro narration segments in parallel (default 1) |
+| `atlas news produce --skip-telegram-wait` | Clearly Drawn News episode package in `news/EP-###/` (fact check, slate, approval, script, rights manifest, timings, status) |
+| `TELEGRAM_BOT_TOKEN=... atlas news produce` | Same, gated on Telegram editorial approval; the token is never stored in code |
+| `ATLAS_UE_CMD` / `ATLAS_UE_PROJECT` | Unreal editor and newsroom project paths; filming is reported as skipped when absent |
 | `atlas cache stats` | Disk usage of narration, render, B-roll, and vector caches |
 | `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched); the daemon runs this weekly with 30-day retention |
 | `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
@@ -78,7 +81,7 @@ atlas-studio/
 | `atlas-blender` | `lib.rs` | `BlenderPipeline`, `ShotSpec`, `RenderJob`, Grease Pencil script generation |
 | `atlas-kokoro` | `lib.rs` | `KokoroPipeline`, `NarrationSegment`, `load_youtube_credentials()` |
 | `atlas-ffmpeg` | `lib.rs` | `FfmpegAssembler`, `EditDecisionList`, filter_complex builder |
-| `atlas-cli` | `main.rs` + `production/broll/daemon/cache.rs` | CLI commands and `cmd_produce()`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs` |
+| `atlas-cli` | `main.rs` + `production/broll/daemon/cache/news.rs` | CLI commands and `cmd_produce()`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs`; newsroom episode pipeline in `news.rs` |
 
 ## Development Workflow
 

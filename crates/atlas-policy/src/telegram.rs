@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_TELEGRAM_BOT_TOKEN: &str = "8527817116:AAGLcyMG8cgCQhJOUeXknTZDsAblyTqY8NU";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApprovalDecision {
@@ -62,26 +61,29 @@ pub struct CopyrightReviewCard {
 }
 
 pub struct TelegramApprovalGate {
-    pub bot_token: String,
+    bot_token: String,
     pub chat_id: Option<i64>,
     client: reqwest::Client,
 }
 
 impl TelegramApprovalGate {
-    pub fn new(token: Option<String>, chat_id: Option<i64>) -> Self {
+    pub fn new(token: Option<String>, chat_id: Option<i64>) -> Result<Self, String> {
         let bot_token = token
             .filter(|t| !t.trim().is_empty())
             .or_else(|| std::env::var("TELEGRAM_BOT_TOKEN").ok())
-            .unwrap_or_else(|| DEFAULT_TELEGRAM_BOT_TOKEN.to_string());
+            .filter(|t| !t.trim().is_empty())
+            .ok_or_else(|| {
+                "Telegram bot token missing: set TELEGRAM_BOT_TOKEN or pass --token".to_string()
+            })?;
 
-        Self {
+        Ok(Self {
             bot_token,
             chat_id,
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
                 .unwrap_or_default(),
-        }
+        })
     }
 
     pub fn format_slate_markdown(&self, slate: &EpisodeSlateProposal) -> String {
@@ -109,8 +111,8 @@ impl TelegramApprovalGate {
 
     pub async fn get_bot_info(&self) -> Result<serde_json::Value, String> {
         let url = format!("https://api.telegram.org/bot{}/getMe", self.bot_token);
-        let resp = self.client.get(&url).send().await.map_err(|e| e.to_string())?;
-        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        let resp = self.client.get(&url).send().await.map_err(redact_error)?;
+        let json: serde_json::Value = resp.json().await.map_err(redact_error)?;
         if json.get("ok").and_then(|v| v.as_bool()) == Some(true) {
             Ok(json.get("result").cloned().unwrap_or_default())
         } else {
@@ -145,8 +147,8 @@ impl TelegramApprovalGate {
             "reply_markup": keyboard
         });
 
-        let resp = self.client.post(&url).json(&payload).send().await.map_err(|e| e.to_string())?;
-        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        let resp = self.client.post(&url).json(&payload).send().await.map_err(redact_error)?;
+        let json: serde_json::Value = resp.json().await.map_err(redact_error)?;
         if json.get("ok").and_then(|v| v.as_bool()) == Some(true) {
             let msg_id = json["result"]["message_id"].as_i64().unwrap_or(0);
             Ok(msg_id)
@@ -197,8 +199,8 @@ impl TelegramApprovalGate {
             "reply_markup": keyboard
         });
 
-        let resp = self.client.post(&url).json(&payload).send().await.map_err(|e| e.to_string())?;
-        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        let resp = self.client.post(&url).json(&payload).send().await.map_err(redact_error)?;
+        let json: serde_json::Value = resp.json().await.map_err(redact_error)?;
         if json.get("ok").and_then(|v| v.as_bool()) == Some(true) {
             Ok(json["result"]["message_id"].as_i64().unwrap_or(0))
         } else {
@@ -221,8 +223,8 @@ impl TelegramApprovalGate {
                 "?timeout=2".to_string()
             };
 
-            let resp = self.client.get(format!("{url}{query}")).send().await.map_err(|e| e.to_string())?;
-            let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            let resp = self.client.get(format!("{url}{query}")).send().await.map_err(redact_error)?;
+            let json: serde_json::Value = resp.json().await.map_err(redact_error)?;
 
             if let Some(updates) = json.get("result").and_then(|r| r.as_array()) {
                 for u in updates {
@@ -291,8 +293,8 @@ impl TelegramApprovalGate {
 
         // Try extracting chat_id from recent incoming messages
         let url = format!("https://api.telegram.org/bot{}/getUpdates?limit=10", self.bot_token);
-        let resp = self.client.get(&url).send().await.map_err(|e| e.to_string())?;
-        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        let resp = self.client.get(&url).send().await.map_err(redact_error)?;
+        let json: serde_json::Value = resp.json().await.map_err(redact_error)?;
 
         if let Some(updates) = json.get("result").and_then(|r| r.as_array()) {
             for u in updates.iter().rev() {
@@ -308,5 +310,23 @@ impl TelegramApprovalGate {
         }
 
         Err("No active Telegram chat ID found. Send any message or /start to @youtubepipline2146_bot to link your chat, or set TELEGRAM_CHAT_ID.".to_string())
+    }
+}
+
+fn redact_error(error: reqwest::Error) -> String {
+    error.without_url().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gate_requires_a_bot_token() {
+        let missing = TelegramApprovalGate::new(Some("  ".into()), None);
+        if std::env::var("TELEGRAM_BOT_TOKEN").is_err() {
+            assert!(missing.is_err());
+        }
+        assert!(TelegramApprovalGate::new(Some("123:abc".into()), Some(42)).is_ok());
     }
 }
