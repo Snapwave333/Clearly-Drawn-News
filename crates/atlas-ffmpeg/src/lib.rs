@@ -1,3 +1,5 @@
+pub mod broadcast;
+
 use atlas_core::{AtlasError, AtlasResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

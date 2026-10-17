@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -133,6 +134,88 @@ impl RightsRecord {
     }
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct RightsSidecar {
+    pub creator_or_holder: String,
+    pub license_type: String,
+    #[serde(default)]
+    pub source_url: Option<String>,
+    pub commercial_use_permitted: bool,
+}
+
+pub fn sha256_file(path: &Path) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+    Ok(hex::encode(hasher.finalize()))
+}
+
+impl RightsRecord {
+    pub fn for_file(
+        path: &Path,
+        asset_id: &str,
+        media_type: MediaType,
+        creator_or_holder: &str,
+        license_type: &str,
+        classification: MediaClassification,
+    ) -> std::io::Result<Self> {
+        Ok(Self {
+            asset_id: asset_id.to_string(),
+            sha256: sha256_file(path)?,
+            media_type,
+            creator_or_holder: creator_or_holder.to_string(),
+            source_url: None,
+            acquisition_timestamp: Utc::now(),
+            license_type: license_type.to_string(),
+            commercial_use_permitted: classification.is_allowed_in_render(),
+            restrictions: vec![],
+            classification,
+            fair_use_assessment: None,
+            audio_muted_for_clearance: false,
+        })
+    }
+
+    pub fn from_sidecar(path: &Path, asset_id: &str, media_type: MediaType) -> std::io::Result<Self> {
+        let sidecar_path = PathBuf::from(format!("{}.rights.json", path.display()));
+        let sha256 = sha256_file(path)?;
+        let sidecar: Option<RightsSidecar> = std::fs::read(&sidecar_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        let (holder, license, source_url, classification, restrictions) = match sidecar {
+            Some(s) if s.commercial_use_permitted => (s.creator_or_holder, s.license_type, s.source_url, MediaClassification::Cleared, vec![]),
+            Some(s) => (
+                s.creator_or_holder,
+                s.license_type,
+                s.source_url,
+                MediaClassification::Restricted,
+                vec!["License does not permit commercial use".to_string()],
+            ),
+            None => (
+                "Unknown".to_string(),
+                "Undocumented".to_string(),
+                None,
+                MediaClassification::ReviewRequired,
+                vec![format!("No rights record found at {}", sidecar_path.display())],
+            ),
+        };
+        Ok(Self {
+            asset_id: asset_id.to_string(),
+            sha256,
+            media_type,
+            creator_or_holder: holder,
+            source_url,
+            acquisition_timestamp: Utc::now(),
+            license_type: license,
+            commercial_use_permitted: classification.is_allowed_in_render(),
+            restrictions,
+            classification,
+            fair_use_assessment: None,
+            audio_muted_for_clearance: false,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScanResult {
     AllClear,
@@ -214,5 +297,29 @@ impl CopyrightComplianceEngine {
             fair_use_assessment: Some(assessment),
             audio_muted_for_clearance: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn undocumented_music_is_held_for_review() {
+        let dir = tempfile::tempdir().unwrap();
+        let music = dir.path().join("bed.wav");
+        std::fs::write(&music, b"audio").unwrap();
+        let engine = CopyrightComplianceEngine::new();
+        let record = RightsRecord::from_sidecar(&music, "music_bed", MediaType::MusicOrSfx).unwrap();
+        assert_eq!(engine.scan_production_manifest(&[record]), ScanResult::ReviewPending(vec!["music_bed".into()]));
+
+        std::fs::write(
+            dir.path().join("bed.wav.rights.json"),
+            br#"{"creator_or_holder":"AIWaves","license_type":"Original composition","commercial_use_permitted":true}"#,
+        )
+        .unwrap();
+        let record = RightsRecord::from_sidecar(&music, "music_bed", MediaType::MusicOrSfx).unwrap();
+        assert_eq!(record.sha256, sha256_file(&music).unwrap());
+        assert_eq!(engine.scan_production_manifest(&[record]), ScanResult::AllClear);
     }
 }

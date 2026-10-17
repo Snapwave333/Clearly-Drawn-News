@@ -62,14 +62,13 @@ impl PronunciationDictionary {
         Self { entries }
     }
 
-    /// Normalizes text for text-to-speech engines by expanding known difficult pronunciations.
     pub fn phonetically_prepare(&self, text: &str) -> String {
+        let mut terms: Vec<(&&str, &(&str, &str))> = self.entries.iter().collect();
+        terms.sort_by_key(|(term, _)| std::cmp::Reverse(term.len()));
         let mut prepared = text.to_string();
-        for (term, (phonetic, _)) in &self.entries {
-            // Replace word boundary occurrences
-            if prepared.contains(term) {
-                // If it's a specific Japanese title or director, we can keep the reading crisp
-                prepared = prepared.replace(term, phonetic);
+        for (term, (phonetic, _)) in terms {
+            if prepared.contains(*term) {
+                prepared = prepared.replace(*term, &phonetic.to_lowercase());
             }
         }
         prepared
@@ -90,7 +89,7 @@ mod tests {
         let dict = PronunciationDictionary::new();
         let sample = "MAPPA and Studio Ghibli announced a collaboration with Tatsuki Fujimoto.";
         let phon = dict.phonetically_prepare(sample);
-        assert!(phon.contains("MAH-pah"));
-        assert!(phon.contains("JIB-lee"));
+        assert!(phon.contains("mah-pah"));
+        assert!(phon.contains("stoo-dee-oh jib-lee"));
     }
 }

@@ -1,15 +1,17 @@
 use crate::pronunciation::PronunciationDictionary;
-use atlas_core::{AtlasError, AtlasResult, EpisodeDurationPolicy};
+use atlas_core::{AtlasError, AtlasResult, EpisodeDurationPolicy, SHOW_TITLE};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+pub const WORDS_PER_SECOND: f64 = 2.6;
+pub const LINE_PAUSE_SECONDS: f64 = 0.35;
+pub const SEGMENT_CARD_SECONDS: f64 = 2.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnchorRole {
-    /// "The Enthusiast" (Male): Energetic, passionate, animation history expert, humorous hyperbole.
     Enthusiast,
-    /// "The Sharp Counterpart" (Female): Witty, deadpan, observant, dry humor, reality check.
     Counterpart,
-    /// Both anchors delivering in unison or fast back-and-forth
     Duo,
 }
 
@@ -21,6 +23,27 @@ impl AnchorRole {
             Self::Duo => "Marcus & Elena",
         }
     }
+
+    pub fn first_name(&self) -> &'static str {
+        match self {
+            Self::Enthusiast => "Marcus",
+            Self::Counterpart => "Elena",
+            Self::Duo => "Marcus & Elena",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        let v = value.trim().to_lowercase();
+        if v.contains("marcus") && v.contains("elena") || v == "both" || v == "duo" {
+            Some(Self::Duo)
+        } else if v.contains("marcus") || v.contains("enthusiast") {
+            Some(Self::Enthusiast)
+        } else if v.contains("elena") || v.contains("counterpart") {
+            Some(Self::Counterpart)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,10 +52,7 @@ pub enum StudioCameraCut {
     WideTwoShot,
     MarcusCloseUp,
     ElenaCloseUp,
-    MarcusOverShoulder,
-    ElenaOverShoulder,
     VideoWallCenter,
-    SplitScreenAnalysis,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,9 +61,7 @@ pub struct ScriptDialogueLine {
     pub camera_cut: StudioCameraCut,
     pub spoken_text: String,
     pub phonetic_text: String,
-    pub anchor_expression: String,
-    pub partner_reaction_expression: String,
-    pub broll_visual_cue: Option<String>,
+    pub expression: String,
     pub estimated_seconds: f64,
 }
 
@@ -52,9 +70,21 @@ pub struct NewsSegmentScript {
     pub segment_number: usize,
     pub segment_title: String,
     pub segment_category: String,
+    pub story_id: Option<String>,
+    pub headline: String,
+    pub attribution: String,
     pub target_duration_secs: f64,
     pub actual_duration_secs: f64,
     pub lines: Vec<ScriptDialogueLine>,
+}
+
+impl NewsSegmentScript {
+    pub fn word_count(&self) -> usize {
+        self.lines
+            .iter()
+            .map(|l| l.spoken_text.split_whitespace().count())
+            .sum()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -68,23 +98,93 @@ pub struct MasterEpisodeScript {
 }
 
 impl MasterEpisodeScript {
-    /// Validates that the episode adheres strictly to the 15-30 minute duration boundary.
     pub fn validate_duration(&self, policy: &EpisodeDurationPolicy) -> AtlasResult<()> {
-        let total = self.total_duration_secs;
-        if total < policy.min_seconds {
-            return Err(AtlasError::Config(format!(
-                "Episode duration {:.1}s violates minimum requirement of {:.1}s (15 minutes)",
-                total, policy.min_seconds
-            )));
-        }
-        if total > policy.max_seconds {
-            return Err(AtlasError::Config(format!(
-                "Episode duration {:.1}s violates maximum requirement of {:.1}s (30 minutes)",
-                total, policy.max_seconds
-            )));
-        }
-        Ok(())
+        policy
+            .validate(self.total_duration_secs)
+            .map_err(|e| AtlasError::Config(format!("Estimated script length: {e}")))
     }
+
+    pub fn transcript(&self) -> String {
+        self.segments
+            .iter()
+            .flat_map(|s| s.lines.iter())
+            .map(|l| format!("{}: {}", l.speaker.first_name(), l.spoken_text))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScriptStoryBrief {
+    pub story_id: String,
+    pub headline: String,
+    pub category: String,
+    pub organization: String,
+    pub outlets: Vec<String>,
+    pub fact_sheet: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BulletinBrief {
+    pub headline: String,
+    pub outlet: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RawLine {
+    pub speaker: String,
+    pub text: String,
+    #[serde(default)]
+    pub expression: Option<String>,
+}
+
+pub fn estimate_seconds(text: &str) -> f64 {
+    text.split_whitespace().count() as f64 / WORDS_PER_SECOND + LINE_PAUSE_SECONDS
+}
+
+pub fn audit_facts(lines: &[ScriptDialogueLine], fact_sheet: &str) -> Vec<String> {
+    let known: HashSet<String> = number_tokens(fact_sheet).into_iter().collect();
+    let mut issues = Vec::new();
+    for line in lines {
+        for number in number_tokens(&line.spoken_text) {
+            if !known.contains(&number) && !issues.iter().any(|i: &String| i.contains(&number)) {
+                issues.push(format!(
+                    "The figure \"{number}\" does not appear in the fact sheet; remove it or use only figures from the sources."
+                ));
+            }
+        }
+    }
+    issues
+}
+
+fn number_tokens(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    for (i, c) in chars.iter().enumerate() {
+        let joins_digits = matches!(c, ',' | '.')
+            && !current.is_empty()
+            && chars.get(i + 1).is_some_and(|n| n.is_ascii_digit());
+        if c.is_ascii_digit() {
+            current.push(*c);
+        } else if !joins_digits && !current.is_empty() {
+            tokens.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens.retain(|t| t.len() > 1);
+    tokens
+}
+
+struct SegmentMeta<'a> {
+    title: &'a str,
+    category: &'a str,
+    story_id: Option<String>,
+    headline: &'a str,
+    attribution: &'a str,
+    target: f64,
 }
 
 pub struct TwoAnchorScriptWriter {
@@ -104,507 +204,452 @@ impl TwoAnchorScriptWriter {
         }
     }
 
-    /// Generates a complete 22-minute (1320-second) broadcast episode script
-    /// structured across 8 distinct broadcast segments with organic comedic banter.
-    pub fn generate_broadcast_episode(
+    pub fn line(&self, speaker: AnchorRole, spoken: &str, expression: &str, index: usize) -> ScriptDialogueLine {
+        let camera_cut = if index == 0 || speaker == AnchorRole::Duo {
+            StudioCameraCut::WideTwoShot
+        } else if index % 5 == 4 {
+            StudioCameraCut::VideoWallCenter
+        } else if speaker == AnchorRole::Enthusiast {
+            StudioCameraCut::MarcusCloseUp
+        } else {
+            StudioCameraCut::ElenaCloseUp
+        };
+        ScriptDialogueLine {
+            speaker,
+            camera_cut,
+            spoken_text: spoken.trim().to_string(),
+            phonetic_text: self.pronunciation.phonetically_prepare(spoken.trim()),
+            expression: expression.to_string(),
+            estimated_seconds: estimate_seconds(spoken),
+        }
+    }
+
+    fn segment(&self, number: usize, meta: SegmentMeta<'_>, lines: Vec<ScriptDialogueLine>) -> NewsSegmentScript {
+        let actual = SEGMENT_CARD_SECONDS + lines.iter().map(|l| l.estimated_seconds).sum::<f64>();
+        NewsSegmentScript {
+            segment_number: number,
+            segment_title: meta.title.to_string(),
+            segment_category: meta.category.to_string(),
+            story_id: meta.story_id,
+            headline: meta.headline.to_string(),
+            attribution: meta.attribution.to_string(),
+            target_duration_secs: meta.target,
+            actual_duration_secs: actual,
+            lines,
+        }
+    }
+
+    pub fn story_word_budget(&self, story_count: usize, bulletin_count: usize, target_secs: f64) -> usize {
+        let fixed_secs = 45.0 + 50.0 + if bulletin_count > 0 { 12.0 + bulletin_count as f64 * 7.0 } else { 0.0 };
+        let cards = SEGMENT_CARD_SECONDS * (story_count + 3) as f64;
+        let available = (target_secs - fixed_secs - cards).max(story_count as f64 * 120.0);
+        let per_story_secs = available / story_count.max(1) as f64;
+        ((per_story_secs - 12.0 * LINE_PAUSE_SECONDS) * WORDS_PER_SECOND).clamp(280.0, 1100.0) as usize
+    }
+
+    pub fn cold_open(&self, episode_number: u32, stories: &[ScriptStoryBrief], bulletin_count: usize) -> NewsSegmentScript {
+        let headlines: Vec<&str> = stories.iter().take(3).map(|s| s.headline.as_str()).collect();
+        let teaser = match headlines.len() {
+            0 => "a packed rundown from across the animation world".to_string(),
+            1 => headlines[0].to_string(),
+            2 => format!("{}, and {}", headlines[0], headlines[1]),
+            _ => format!("{}; {}; and {}", headlines[0], headlines[1], headlines[2]),
+        };
+        let remaining = stories.len().saturating_sub(3) + bulletin_count;
+        let mut lines = vec![
+            self.line(
+                AnchorRole::Enthusiast,
+                &format!("Welcome to {SHOW_TITLE}, episode {episode_number}. I'm Marcus."),
+                "WarmConfident",
+                0,
+            ),
+            self.line(
+                AnchorRole::Counterpart,
+                &format!("And I'm Elena. On today's desk: {teaser}."),
+                "SharpDirect",
+                1,
+            ),
+        ];
+        if remaining > 0 {
+            lines.push(self.line(
+                AnchorRole::Enthusiast,
+                &format!("Plus {remaining} more stories in our rapid-fire round. Every story today is sourced, and the links are in the description."),
+                "Excited",
+                2,
+            ));
+        }
+        lines.push(self.line(
+            AnchorRole::Counterpart,
+            "Let's get into it.",
+            "DeadpanDryWit",
+            lines.len(),
+        ));
+        self.segment(
+            1,
+            SegmentMeta { title: "Cold Open", category: "Introduction", story_id: None, headline: SHOW_TITLE, attribution: "", target: 45.0 },
+            lines,
+        )
+    }
+
+    pub fn rapid_headlines(&self, number: usize, bulletins: &[BulletinBrief]) -> Option<NewsSegmentScript> {
+        if bulletins.is_empty() {
+            return None;
+        }
+        let mut lines = vec![self.line(
+            AnchorRole::Counterpart,
+            "Time for rapid-fire headlines. These are single-source reports, so we're telling you exactly who reported each one.",
+            "FastPacedAlert",
+            0,
+        )];
+        for (i, bulletin) in bulletins.iter().enumerate() {
+            let speaker = if i % 2 == 0 { AnchorRole::Enthusiast } else { AnchorRole::Counterpart };
+            let headline = bulletin.headline.trim_end_matches(['.', '!', '?']);
+            lines.push(self.line(
+                speaker,
+                &format!("{} reports: {headline}.", bulletin.outlet),
+                "PunchyDelivery",
+                i + 1,
+            ));
+        }
+        let attribution = dedup(bulletins.iter().map(|b| b.outlet.clone())).join(" · ");
+        Some(self.segment(
+            number,
+            SegmentMeta {
+                title: "Rapid-Fire Headlines",
+                category: "Upcoming Releases",
+                story_id: None,
+                headline: "Rapid-Fire Headlines",
+                attribution: &attribution,
+                target: 12.0 + bulletins.len() as f64 * 7.0,
+            },
+            lines,
+        ))
+    }
+
+    pub fn closing(&self, number: usize, stories: &[ScriptStoryBrief]) -> NewsSegmentScript {
+        let question = match stories {
+            [first, second, ..] => format!(
+                "Tell us in the comments: which story are you following, {} or {}?",
+                first.headline.trim_end_matches(['.', '!', '?']),
+                second.headline.trim_end_matches(['.', '!', '?'])
+            ),
+            [only] => format!(
+                "Tell us in the comments what you think about {}.",
+                only.headline.trim_end_matches(['.', '!', '?'])
+            ),
+            [] => "Tell us in the comments what you're watching this week.".to_string(),
+        };
+        let lines = vec![
+            self.line(AnchorRole::Counterpart, "That's the desk for today.", "ReflectiveClosing", 0),
+            self.line(AnchorRole::Enthusiast, &question, "DirectEngagement", 1),
+            self.line(
+                AnchorRole::Counterpart,
+                "A note on how we make this show: our anchors are voiced with AI text-to-speech, the script is written with AI assistance from the reporting linked in the description, and every story is checked against its sources before air.",
+                "WarmProfessional",
+                2,
+            ),
+            self.line(AnchorRole::Enthusiast, "Subscribe so you don't miss tomorrow's edition.", "PlayfulChallenge", 3),
+            self.line(AnchorRole::Duo, "Until next time, keep drawing clearly.", "UnisonSignoff", 4),
+        ];
+        self.segment(
+            number,
+            SegmentMeta { title: "Sign-off & Credits", category: "Credits & Outro", story_id: None, headline: SHOW_TITLE, attribution: "", target: 50.0 },
+            lines,
+        )
+    }
+
+    pub fn story_segment(
         &self,
-        episode_title: &str,
-        episode_date: &str,
-    ) -> MasterEpisodeScript {
-        let mut segments = Vec::new();
+        number: usize,
+        brief: &ScriptStoryBrief,
+        raw_lines: &[RawLine],
+        target_secs: f64,
+    ) -> AtlasResult<NewsSegmentScript> {
+        let mut lines = Vec::new();
+        for (index, raw) in raw_lines.iter().enumerate() {
+            let speaker = AnchorRole::parse(&raw.speaker).ok_or_else(|| {
+                AtlasError::Config(format!("Unknown speaker \"{}\" in story script", raw.speaker))
+            })?;
+            let text = raw.text.trim();
+            if text.is_empty() {
+                continue;
+            }
+            lines.push(self.line(
+                speaker,
+                text,
+                raw.expression.as_deref().unwrap_or("Engaged"),
+                index,
+            ));
+        }
+        let attribution = format!("Sources: {}", brief.outlets.join(" · "));
+        Ok(self.segment(
+            number,
+            SegmentMeta {
+                title: &brief.headline,
+                category: &brief.category,
+                story_id: Some(brief.story_id.clone()),
+                headline: &brief.headline,
+                attribution: &attribution,
+                target: target_secs,
+            },
+            lines,
+        ))
+    }
 
-        // 1. Cold Open & Teaser (60s)
-        segments.push(self.build_cold_open());
-
-        // 2. Lead Story: Chainsaw Man Season 2 & The Reze Arc Movie (240s / 4.0m)
-        segments.push(self.build_lead_story());
-
-        // 3. Sony Spider-Verse Tech & NPR Innovation (210s / 3.5m)
-        segments.push(self.build_spider_verse_story());
-
-        // 4. Adult Animation: Fortiche / Riot Games New Series (210s / 3.5m)
-        segments.push(self.build_fortiche_story());
-
-        // 5. Studio Ghibli Archival & Cel Restoration (180s / 3.0m)
-        segments.push(self.build_ghibli_story());
-
-        // 6. Science SARU & Dandadan Season 2 Breakdown (180s / 3.0m)
-        segments.push(self.build_dandadan_story());
-
-        // 7. Rapid Headlines & Release Bulletins (120s / 2.0m)
-        segments.push(self.build_rapid_headlines());
-
-        // 8. Sign-off, Banter & Transparent Credits (120s / 2.0m)
-        segments.push(self.build_closing_segment());
-
-        let total_duration_secs: f64 = segments.iter().map(|s| s.actual_duration_secs).sum();
-
+    pub fn assemble(&self, episode_title: &str, episode_date: &str, target_secs: f64, segments: Vec<NewsSegmentScript>) -> MasterEpisodeScript {
+        let total_duration_secs = segments.iter().map(|s| s.actual_duration_secs).sum();
         MasterEpisodeScript {
-            show_title: "Clearly Drawn News".into(),
+            show_title: SHOW_TITLE.into(),
             episode_title: episode_title.into(),
             episode_date: episode_date.into(),
-            target_duration_secs: 1320.0,
+            target_duration_secs: target_secs,
             total_duration_secs,
             segments,
         }
     }
+}
 
-    fn make_line(
+fn dedup(values: impl Iterator<Item = String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for v in values {
+        if !out.contains(&v) {
+            out.push(v);
+        }
+    }
+    out
+}
+
+pub fn validate_story_lines(lines: &[ScriptDialogueLine], target_words: usize, fact_sheet: &str) -> Vec<String> {
+    let mut issues = Vec::new();
+    let words: usize = lines.iter().map(|l| l.spoken_text.split_whitespace().count()).sum();
+    let min_words = target_words * 3 / 4;
+    let max_words = target_words * 3 / 2;
+    if words < min_words {
+        issues.push(format!("The segment has {words} words; write at least {min_words} words (target {target_words})."));
+    }
+    if words > max_words {
+        issues.push(format!("The segment has {words} words; keep it under {max_words} words (target {target_words})."));
+    }
+    if lines.len() < 6 {
+        issues.push(format!("The segment has {} lines; write at least 6 alternating lines.", lines.len()));
+    }
+    if !lines.iter().any(|l| l.speaker == AnchorRole::Enthusiast) || !lines.iter().any(|l| l.speaker == AnchorRole::Counterpart) {
+        issues.push("Both Marcus and Elena must speak in the segment.".into());
+    }
+    if let Some(long) = lines.iter().find(|l| l.spoken_text.split_whitespace().count() > 110) {
+        issues.push(format!(
+            "A line by {} is longer than 110 words; split long turns.",
+            long.speaker.first_name()
+        ));
+    }
+    issues.extend(audit_facts(lines, fact_sheet));
+    issues
+}
+
+pub struct NewsScriptDirector {
+    client: reqwest::Client,
+    endpoint: String,
+    api_key: String,
+    model: String,
+}
+
+impl NewsScriptDirector {
+    pub fn from_env() -> Option<Self> {
+        let endpoint = std::env::var("ATLAS_DIRECTOR_URL")
+            .unwrap_or_else(|_| "https://integrate.api.nvidia.com/v1/chat/completions".into());
+        let api_key = std::env::var("ATLAS_DIRECTOR_API_KEY")
+            .or_else(|_| std::env::var("NVIDIA_API_KEY"))
+            .ok()?;
+        let model = std::env::var("ATLAS_NEWS_SCRIPT_MODEL")
+            .or_else(|_| std::env::var("ATLAS_DIRECTOR_MODEL"))
+            .unwrap_or_else(|_| "meta/llama-3.3-70b-instruct".into());
+        Some(Self {
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(180))
+                .build()
+                .unwrap_or_default(),
+            endpoint,
+            api_key,
+            model,
+        })
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub async fn write_story_segment(
         &self,
-        speaker: AnchorRole,
-        camera: StudioCameraCut,
-        spoken: &str,
-        expression: &str,
-        partner_reaction: &str,
-        broll: Option<&str>,
-        duration: f64,
-    ) -> ScriptDialogueLine {
-        ScriptDialogueLine {
-            speaker,
-            camera_cut: camera,
-            spoken_text: spoken.into(),
-            phonetic_text: self.pronunciation.phonetically_prepare(spoken),
-            anchor_expression: expression.into(),
-            partner_reaction_expression: partner_reaction.into(),
-            broll_visual_cue: broll.map(|s| s.into()),
-            estimated_seconds: duration,
+        writer: &TwoAnchorScriptWriter,
+        number: usize,
+        brief: &ScriptStoryBrief,
+        target_words: usize,
+    ) -> AtlasResult<NewsSegmentScript> {
+        let target_secs = target_words as f64 / WORDS_PER_SECOND;
+        let mut feedback: Vec<String> = Vec::new();
+        let mut last_error = String::new();
+        for _attempt in 0..3 {
+            let prompt = story_prompt(brief, target_words, &feedback);
+            let content = match self.complete(&prompt).await {
+                Ok(content) => content,
+                Err(error) => {
+                    last_error = error.to_string();
+                    continue;
+                }
+            };
+            let raw = match parse_lines(&content) {
+                Ok(raw) => raw,
+                Err(error) => {
+                    last_error = error.clone();
+                    feedback = vec![format!("Your previous reply was not valid JSON in the required shape: {error}")];
+                    continue;
+                }
+            };
+            let segment = match writer.story_segment(number, brief, &raw, target_secs) {
+                Ok(segment) => segment,
+                Err(error) => {
+                    last_error = error.to_string();
+                    feedback = vec![error.to_string()];
+                    continue;
+                }
+            };
+            let issues = validate_story_lines(&segment.lines, target_words, &brief.fact_sheet);
+            if issues.is_empty() {
+                return Ok(segment);
+            }
+            last_error = issues.join(" ");
+            feedback = issues;
         }
+        Err(AtlasError::Config(format!(
+            "Script for \"{}\" failed validation after 3 attempts: {last_error}",
+            brief.headline
+        )))
     }
 
-    fn build_cold_open(&self) -> NewsSegmentScript {
-        let lines = vec![
-            self.make_line(
-                AnchorRole::Enthusiast,
-                StudioCameraCut::WideTwoShot,
-                "Welcome to Clearly Drawn News. I'm Marcus.",
-                "WarmConfident",
-                "SubtleSmile",
-                None,
-                3.0,
-            ),
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::ElenaCloseUp,
-                "And I'm Elena. Today: MAPPA breaks their silence on Chainsaw Man, Sony reveals the mind-bending rendering engine behind Beyond the Spider-Verse...",
-                "SharpDirect",
-                "AttentiveNod",
-                Some("Teaser reel: Chainsaw Man & Spider-Verse graphics on studio video wall"),
-                14.0,
-            ),
-            self.make_line(
-                AnchorRole::Enthusiast,
-                StudioCameraCut::MarcusCloseUp,
-                "And Fortiche expands the Runeterra universe with a brand new adult series! Plus, Studio Ghibli opens an 8K cel preservation vault in Mitaka!",
-                "ExcitedGesticulation",
-                "AmusedSkepticalEyebrow",
-                Some("Teaser graphics: Fortiche & Ghibli archivism"),
-                16.0,
-            ),
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::WideTwoShot,
-                "Which means Marcus didn't sleep last night and has analyzed three thousand frames by hand. Let's get straight to the headlines.",
-                "DeadpanDryWit",
-                "ChuckleDefensive",
-                None,
-                12.0,
-            ),
-        ];
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 1,
-            segment_title: "Cold Open & Program Slate".into(),
-            segment_category: "Introduction".into(),
-            target_duration_secs: 60.0,
-            actual_duration_secs: actual,
-            lines,
+    async fn complete(&self, prompt: &str) -> AtlasResult<String> {
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&serde_json::json!({
+                "model": self.model,
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
+                ]
+            }))
+            .send()
+            .await
+            .map_err(|e| AtlasError::Config(format!("Script director request failed: {e}")))?;
+        let status = response.status();
+        let payload: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| AtlasError::Config(format!("Script director returned invalid JSON: {e}")))?;
+        if !status.is_success() {
+            return Err(AtlasError::Config(format!("Script director returned {status}: {payload}")));
         }
-    }
-
-    fn build_lead_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Kicking off with our lead story: MAPPA has officially locked in the production schedule for Chainsaw Man Season Two and the theatrical Reze Arc movie.",
-            "AuthoritativePassion",
-            "NeutralObservant",
-            Some("Video wall shows official MAPPA press release and key visual graphic"),
-            18.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::ElenaCloseUp,
-            "Fans have waited nearly two years since the bomb girl teaser. Marcus, why is MAPPA splitting this between a theatrical feature and a television season?",
-            "InquisitiveAnalytic",
-            "EagerToExplain",
-            None,
-            16.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Because the Reze Arc is singularly cinematic! It is essentially a tight, explosive tragic romance that fits a 90-minute theatrical structure perfectly, allowing the animators to push action choreography and fluid camera moves that television schedules simply suffocate.",
-            "IntenseExuberance",
-            "NoddingAgreement",
-            Some("Muted B-roll: Official teaser visual breakdown and storyboard analysis graphics"),
-            28.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::SplitScreenAnalysis,
-            "And speaking of production schedules, MAPPA's pipeline management has been under intense industry scrutiny since Jujutsu Kaisen Season Two. The studio reports they restructured the production committee, giving animators extended pre-production windows.",
-            "SeriousCritical",
-            "VigorousNod",
-            Some("Infographic: MAPPA timeline breakdown and committee restructuring charts"),
-            24.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Exactly. Tatsuki Fujimoto's cinematic paneling demands insane draftsmanship. Tatsuya Yoshihara and the team are returning with enhanced storyboard planning to protect artists while delivering that raw, unhinged kinetic punch.",
-            "PassionateExpertise",
-            "ImpressedSmirk",
-            None,
-            24.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::WideTwoShot,
-            "If they can pull off the Reze fireworks sequence with sustainable hours, that's not just a win for audiences—it's a critical win for anime working conditions.",
-            "EmpatheticConclusion",
-            "RespectfulAgreement",
-            None,
-            16.0,
-        ));
-
-        // Pad additional dialogue beats to hit ~240s
-        for i in 1..=4 {
-            lines.push(self.make_line(
-                if i % 2 == 1 { AnchorRole::Enthusiast } else { AnchorRole::Counterpart },
-                if i % 2 == 1 { StudioCameraCut::MarcusCloseUp } else { StudioCameraCut::ElenaCloseUp },
-                &format!("Segment discussion beat {}: Exploring the stylistic evolution, compositing shaders, and global theatrical distribution strategy across Japanese and Western box offices.", i),
-                "EngagedDialogue",
-                "ListeningAttentive",
-                Some("Studio graphic: Box office trajectory and streaming metrics"),
-                29.0,
-            ));
-        }
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 2,
-            segment_title: "Chainsaw Man Season 2 & Reze Movie Production Timeline".into(),
-            segment_category: "Anime".into(),
-            target_duration_secs: 240.0,
-            actual_duration_secs: actual,
-            lines,
-        }
-    }
-
-    fn build_spider_verse_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::ElenaCloseUp,
-            "Turning now to western feature animation: Sony Pictures Animation has unveiled a glimpse into the patent-pending NPR—non-photorealistic rendering—tech powering Beyond the Spider-Verse.",
-            "ClearJournalistic",
-            "AwedAnticipation",
-            Some("Video wall: Sony patent diagrams and multi-line shader preview"),
-            22.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Elena, what they are doing with algorithmic ink hatching is unbelievable. In Across the Spider-Verse, Gwen's watercolor mood-ring world was hand-painted per keyframe. For Beyond, Sony created custom shaders that dynamically calculate emotional brush weight in real time!",
-            "AstoundedEnthusiasm",
-            "DelightedObservation",
-            Some("Muted visual breakdown: Brush weight and color temperature comparison"),
-            26.0,
-        ));
-        for i in 1..=5 {
-            lines.push(self.make_line(
-                if i % 2 == 1 { AnchorRole::Counterpart } else { AnchorRole::Enthusiast },
-                if i % 2 == 1 { StudioCameraCut::ElenaCloseUp } else { StudioCameraCut::MarcusCloseUp },
-                &format!("Spider-Verse technical analysis beat {}: Examining how Sony combines machine learning edge-detection with classical 2D animator timing on twos and threes.", i),
-                "TechnicalFocus",
-                "AppreciativeListening",
-                Some("Technical diagram: Framerate modulation and 2D/3D hybrid geometry"),
-                32.0,
-            ));
-        }
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 3,
-            segment_title: "Sony Animation Previews Next-Gen Spider-Verse Rendering".into(),
-            segment_category: "Western Cartoons".into(),
-            target_duration_secs: 210.0,
-            actual_duration_secs: actual,
-            lines,
-        }
-    }
-
-    fn build_fortiche_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "In adult animation, French powerhouse Fortiche Production and Riot Games have officially announced their next joint animated series set in the brutal empire of Noxus.",
-            "ExcitedAuthority",
-            "IntriguedNod",
-            Some("Video wall: Fortiche concept silhouettes and Noxian crest"),
-            22.0,
-        ));
-        for i in 1..=6 {
-            lines.push(self.make_line(
-                if i % 2 == 1 { AnchorRole::Counterpart } else { AnchorRole::Enthusiast },
-                if i % 2 == 1 { StudioCameraCut::ElenaCloseUp } else { StudioCameraCut::MarcusCloseUp },
-                &format!("Fortiche deep-dive beat {}: Analyzing the French studio's matte painting workflow, 3D character blocking, and mature dramatic pacing.", i),
-                "ArtisticAnalysis",
-                "EngagedDiscussion",
-                Some("Studio graphic: Fortiche lighting rigs and background matte breakdown"),
-                31.0,
-            ));
-        }
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 4,
-            segment_title: "Fortiche & Riot Games Announce New Adult Animated Universe".into(),
-            segment_category: "Adult Animation".into(),
-            target_duration_secs: 210.0,
-            actual_duration_secs: actual,
-            lines,
-        }
-    }
-
-    fn build_ghibli_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::ElenaCloseUp,
-            "In studio preservation news: Hayao Miyazaki and Toshio Suzuki have formally opened the Ghibli Archival Facility in Mitaka, safeguarding four decades of physical acetate cels.",
-            "ReverentTone",
-            "DeepRespect",
-            Some("Video wall: Mitaka archival facility photos and classic cel displays"),
-            24.0,
-        ));
-        for i in 1..=5 {
-            lines.push(self.make_line(
-                if i % 2 == 1 { AnchorRole::Enthusiast } else { AnchorRole::Counterpart },
-                if i % 2 == 1 { StudioCameraCut::MarcusCloseUp } else { StudioCameraCut::ElenaCloseUp },
-                &format!("Ghibli cel preservation beat {}: Exploring chemical vinegar syndrome, high-gamut 8K sensor scanning, and historical physical pigment preservation.", i),
-                "HistoricalAppreciation",
-                "AttentiveAnalysis",
-                Some("Archival diagram: Nitrate vs acetate decay and digital color restoration"),
-                31.0,
-            ));
-        }
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 5,
-            segment_title: "Studio Ghibli Opens Physical Cel Archival Facility".into(),
-            segment_category: "Industry & Production".into(),
-            target_duration_secs: 180.0,
-            actual_duration_secs: actual,
-            lines,
-        }
-    }
-
-    fn build_dandadan_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Science SARU has officially renewed Dandadan for Season 2! Fuga Yamashiro returns as director alongside musical virtuoso Kensuke Ushio.",
-            "CelebratoryExcitement",
-            "PlayfulGrin",
-            Some("Video wall: Dandadan Season 2 visual and musical staff announcements"),
-            22.0,
-        ));
-        for i in 1..=5 {
-            lines.push(self.make_line(
-                if i % 2 == 1 { AnchorRole::Counterpart } else { AnchorRole::Enthusiast },
-                if i % 2 == 1 { StudioCameraCut::ElenaCloseUp } else { StudioCameraCut::MarcusCloseUp },
-                &format!("Science SARU kinetic breakdown beat {}: How Yamashiro combines perspective distortion, speed lines, and Ushio's breakbeat soundtrack.", i),
-                "StylisticEnthusiasm",
-                "WittyCommentary",
-                Some("Visual cue: Kinetic line art analysis and color palette breakdown"),
-                31.0,
-            ));
-        }
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 6,
-            segment_title: "Science SARU Renews Dandadan for Season 2".into(),
-            segment_category: "Anime".into(),
-            target_duration_secs: 180.0,
-            actual_duration_secs: actual,
-            lines,
-        }
-    }
-
-    fn build_rapid_headlines(&self) -> NewsSegmentScript {
-        let lines = vec![
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::SplitScreenAnalysis,
-                "Time for rapid-fire bulletins! Netflix orders a new Castlevania spinoff set in 19th century London.",
-                "FastPacedAlert",
-                "ReadyForCue",
-                Some("Lower-third graphic: Castlevania London Spin-off Confirmed"),
-                16.0,
-            ),
-            self.make_line(
-                AnchorRole::Enthusiast,
-                StudioCameraCut::MarcusCloseUp,
-                "Genndy Tartakovsky's upcoming theatrical adventure announces voice cast and locks in a summer release date!",
-                "PunchyDelivery",
-                "AmusedNod",
-                Some("Lower-third graphic: Genndy Tartakovsky Project Update"),
-                16.0,
-            ),
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::ElenaCloseUp,
-                "Ufotable previews Demon Slayer Infinity Castle Arc international theatrical release dates across forty territories.",
-                "CrispReporting",
-                "ExcitedAnticipation",
-                Some("Lower-third graphic: Ufotable Demon Slayer Global Theatrical Rollout"),
-                18.0,
-            ),
-            self.make_line(
-                AnchorRole::Enthusiast,
-                StudioCameraCut::MarcusCloseUp,
-                "And Studio Wit wraps production on their original fantasy film with director George Wada praising non-crunch scheduling.",
-                "TriumphantDelivery",
-                "WarmSmirk",
-                Some("Lower-third graphic: Wit Studio Original Production Wrapped"),
-                18.0,
-            ),
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::WideTwoShot,
-                "Four stories in sixty-eight seconds. Marcus didn't even pass out from oxygen deprivation.",
-                "DeadpanHumor",
-                "LaughingBanter",
-                None,
-                14.0,
-            ),
-            self.make_line(
-                AnchorRole::Enthusiast,
-                StudioCameraCut::MarcusCloseUp,
-                "I trained my lungs specifically for animation press cycles, Elena. Do not question the discipline.",
-                "ComedicDefensive",
-                "RollEyesAffectionate",
-                None,
-                16.0,
-            ),
-        ];
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 7,
-            segment_title: "Rapid-Fire Industry Bulletins".into(),
-            segment_category: "Upcoming Releases".into(),
-            target_duration_secs: 120.0,
-            actual_duration_secs: actual,
-            lines,
-        }
-    }
-
-    fn build_closing_segment(&self) -> NewsSegmentScript {
-        let lines = vec![
-            self.make_line(
-                AnchorRole::Duo,
-                StudioCameraCut::WideTwoShot,
-                "That wraps today's edition of Clearly Drawn News. From hand-drawn preservation in Mitaka to algorithmic shaders in the multiverse, the medium has never been more vibrant.",
-                "ReflectiveClosing",
-                "WarmAgreement",
-                None,
-                18.0,
-            ),
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::ElenaCloseUp,
-                "Remember to subscribe, hit the bell, and let us know in the comments: which project are you anticipating most—Chainsaw Man's Reze arc or the new Fortiche series?",
-                "DirectEngagement",
-                "NoddingAtCamera",
-                Some("End screen callouts and social badges"),
-                16.0,
-            ),
-            self.make_line(
-                AnchorRole::Enthusiast,
-                StudioCameraCut::MarcusCloseUp,
-                "And don't say both, because that is the coward's answer. Pick a side!",
-                "PlayfulChallenge",
-                "LaughingReprimand",
-                None,
-                12.0,
-            ),
-            self.make_line(
-                AnchorRole::Counterpart,
-                StudioCameraCut::ElenaCloseUp,
-                "Ignore him. You can love both. We will see you tomorrow with another breakdown of the art and craft of animation.",
-                "WarmProfessional",
-                "WavingCheerfully",
-                None,
-                16.0,
-            ),
-            self.make_line(
-                AnchorRole::Duo,
-                StudioCameraCut::WideTwoShot,
-                "Until next time—keep drawing clearly.",
-                "UnisonSignoff",
-                "UnisonSignoff",
-                Some("Full transparent production credits, AI disclosure, and copyright registry ledger"),
-                20.0,
-            ),
-        ];
-
-        let actual: f64 = lines.iter().map(|l| l.estimated_seconds).sum();
-        NewsSegmentScript {
-            segment_number: 8,
-            segment_title: "Episode Sign-off & Production Credits".into(),
-            segment_category: "Credits & Outro".into(),
-            target_duration_secs: 120.0,
-            actual_duration_secs: actual,
-            lines,
-        }
+        payload["choices"][0]["message"]["content"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| AtlasError::Config("Script director response omitted message content".into()))
     }
 }
 
-trait HelperFallback {
-    fn speaker_fallback(self) -> AnchorRole;
+const SYSTEM_PROMPT: &str = "You are the head writer of Clearly Drawn News, a daily two-anchor animation news show. Marcus is the Enthusiast: energetic, warm, an animation-history nerd who loves craft details. Elena is the Sharp Counterpart: witty, deadpan, skeptical, and focused on what is actually confirmed. You write natural spoken dialogue for text-to-speech. You never invent facts, dates, numbers, names, quotes, or claims that are not in the provided fact sheet. When the sources leave something unknown, the anchors say it is not yet confirmed. Return valid JSON only.";
+
+fn story_prompt(brief: &ScriptStoryBrief, target_words: usize, feedback: &[String]) -> String {
+    let mut prompt = format!(
+        "Write the dialogue for one story segment.\n\nFACT SHEET (the only facts you may use):\n{}\n\nREQUIREMENTS:\n- About {target_words} spoken words in total, in 8 to 24 alternating lines between Marcus and Elena.\n- Open by stating the news plainly and attributing it to the reporting outlet(s): {}.\n- Explain why it matters for animation fans and for the craft or industry, using only the fact sheet; you may add widely known, non-controversial background about the franchise or studio but no new claims about this news.\n- Include light banter that fits the characters, but keep at least 80% of the words on the story.\n- Do not quote more than ten consecutive words from any source; paraphrase.\n- Write numbers as digits only when they appear in the fact sheet.\n- No stage directions, no markdown, no emojis, no speaker names inside the text.\n\nReturn JSON exactly in this shape: {{\"lines\": [{{\"speaker\": \"Marcus\" or \"Elena\", \"text\": \"...\", \"expression\": \"one or two words\"}}]}}",
+        brief.fact_sheet,
+        brief.outlets.join(", ")
+    );
+    if !feedback.is_empty() {
+        prompt.push_str("\n\nYOUR PREVIOUS DRAFT WAS REJECTED. Fix all of these problems:\n- ");
+        prompt.push_str(&feedback.join("\n- "));
+    }
+    prompt
 }
 
-impl HelperFallback for AnchorRole {
-    fn speaker_fallback(self) -> AnchorRole {
-        AnchorRole::Duo
+pub fn parse_lines(content: &str) -> Result<Vec<RawLine>, String> {
+    let trimmed = content.trim();
+    let body = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+        .and_then(|v| v.strip_suffix("```"))
+        .map(str::trim)
+        .unwrap_or(trimmed);
+    let start = body.find(['{', '[']).ok_or("no JSON object found")?;
+    let value: serde_json::Value = serde_json::from_str(&body[start..]).map_err(|e| e.to_string())?;
+    let array = value
+        .get("lines")
+        .cloned()
+        .or_else(|| value.is_array().then(|| value.clone()))
+        .ok_or("missing \"lines\" array")?;
+    let lines: Vec<RawLine> = serde_json::from_value(array).map_err(|e| e.to_string())?;
+    if lines.is_empty() {
+        return Err("\"lines\" is empty".into());
     }
+    Ok(lines)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_broadcast_episode_duration_compliance() {
-        let writer = TwoAnchorScriptWriter::new();
-        let episode = writer.generate_broadcast_episode(
-            "Episode 001: MAPPA Chainsaw Man Sequel & Spider-Verse Tech",
-            "2026-10-17",
-        );
-        let policy = EpisodeDurationPolicy::default();
+    fn brief() -> ScriptStoryBrief {
+        ScriptStoryBrief {
+            story_id: "csm".into(),
+            headline: "MAPPA Sets Chainsaw Man Season 2 for July 2027".into(),
+            category: "Anime".into(),
+            organization: "MAPPA".into(),
+            outlets: vec!["Anime News Network".into(), "Anime Corner".into()],
+            fact_sheet: "Headline: MAPPA Sets Chainsaw Man Season 2 for July 2027\nSummary: The season premieres in July 2027 with 12 episodes.".into(),
+        }
+    }
 
-        println!("Generated episode duration: {:.1} seconds ({:.1} minutes)", episode.total_duration_secs, episode.total_duration_secs / 60.0);
-        assert!(episode.validate_duration(&policy).is_ok());
-        assert!(episode.total_duration_secs >= 900.0);
-        assert!(episode.total_duration_secs <= 1800.0);
-        assert_eq!(episode.segments.len(), 8);
+    #[test]
+    fn builds_story_segment_from_llm_lines_and_audits_numbers() {
+        let writer = TwoAnchorScriptWriter::new();
+        let json = r#"{"lines":[{"speaker":"Marcus","text":"MAPPA says the season lands in July 2027."},{"speaker":"Elena","text":"With 12 episodes, and nothing else confirmed."},{"speaker":"Marcus","text":"It sold 40 million copies!"}]}"#;
+        let raw = parse_lines(json).unwrap();
+        let segment = writer.story_segment(2, &brief(), &raw, 200.0).unwrap();
+        assert_eq!(segment.lines.len(), 3);
+        assert_eq!(segment.lines[0].camera_cut, StudioCameraCut::WideTwoShot);
+        let issues = validate_story_lines(&segment.lines, 40, &brief().fact_sheet);
+        assert!(issues.iter().any(|i| i.contains("\"40\"")));
+        assert!(issues.iter().any(|i| i.contains("at least 6")));
+        assert!(!issues.iter().any(|i| i.contains("2027")));
+    }
+
+    #[test]
+    fn fixed_segments_use_real_headlines() {
+        let writer = TwoAnchorScriptWriter::new();
+        let open = writer.cold_open(7, &[brief()], 2);
+        assert!(open.lines[1].spoken_text.contains("Chainsaw Man"));
+        let rapid = writer
+            .rapid_headlines(5, &[BulletinBrief { headline: "Pixar dates sequel".into(), outlet: "Cartoon Brew".into() }])
+            .unwrap();
+        assert_eq!(rapid.lines[1].spoken_text, "Cartoon Brew reports: Pixar dates sequel.");
+        assert!(writer.rapid_headlines(5, &[]).is_none());
+    }
+
+    #[test]
+    fn word_budget_scales_with_story_count() {
+        let writer = TwoAnchorScriptWriter::new();
+        let four = writer.story_word_budget(4, 6, 1320.0);
+        let six = writer.story_word_budget(6, 6, 1320.0);
+        assert!(four > six);
+        let total_secs = 4.0 * four as f64 / WORDS_PER_SECOND + 45.0 + 50.0 + 54.0;
+        assert!(EpisodeDurationPolicy::default().is_valid(total_secs));
+    }
+
+    #[test]
+    fn number_tokens_handle_separators() {
+        assert_eq!(number_tokens("It earned 1,200,000 in 2026."), vec!["1200000", "2026"]);
+        assert!(number_tokens("Season 2 airs").is_empty());
     }
 }

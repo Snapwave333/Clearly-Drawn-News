@@ -102,8 +102,9 @@ impl KokoroPipeline {
         let input_file = output_dir.join(format!("{}.txt", segment.segment_id));
         tokio::fs::write(&input_file, &segment.text).await?;
 
-        let model_dir = directories::BaseDirs::new()
-            .map(|dirs| dirs.home_dir().join(".kokoro"))
+        let model_dir = std::env::var_os("ATLAS_KOKORO_MODEL_DIR")
+            .map(PathBuf::from)
+            .or_else(|| directories::BaseDirs::new().map(|dirs| dirs.home_dir().join(".kokoro")))
             .ok_or_else(|| {
                 AtlasError::Render("Unable to resolve the Kokoro model directory".into())
             })?;

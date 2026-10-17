@@ -22,7 +22,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["ATLAS STUDIO"]
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.86"
 
 [workspace.dependencies]
 # Internal
@@ -63,7 +63,6 @@ regex = "1.11"
 url = "2.5"
 oauth2 = { version = "5.0", features = ["reqwest"] }
 keyring = { version = "3.6" }
-base64 = "0.22"
 
 [profile.release]
 lto = true

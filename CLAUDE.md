@@ -16,14 +16,20 @@ The project was developed on Windows (`C:\Users\chrom\Desktop\Marker\atlas-studi
 ```bash
 cargo build --release                         # target/release/atlas(.exe)
 cargo check
-cargo test --workspace                        # ~45 unit tests, no external tools needed
+cargo test --workspace                        # ~65 unit tests, no external tools needed
 cargo test -p atlas-policy                    # one crate
 cargo test -p atlas-policy copyright          # tests whose name matches a filter
 cargo clippy --workspace -- -D warnings       # the bar the audit held the code to
 
 atlas doctor                                  # probe OpenCode, Blender, UE, FFmpeg, Kokoro, ArtCraft tools
 atlas --data-dir <dir> ...                    # override the SQLite/artifact data dir (default: ProjectDirs com/atlas-studio/atlas)
-atlas news research | slate | copyright | telegram | produce [--skip-telegram-wait]
+atlas news research [--json]                  # live RSS wire + cross-outlet fact check
+atlas news slate                              # episode slate (stories + rapid-fire bulletins)
+atlas news telegram                           # send slate to Telegram and wait for a decision
+atlas news produce [--publish --privacy private] [--uhd] [--studio-plate f] [--music f]
+atlas news produce --episode EP-003           # resume an approved episode (reuses selection, script, TTS cache)
+atlas news copyright --episode EP-003         # re-scan an episode's rights_manifest.json
+atlas news publish --episode EP-003 --privacy private
 
 cd office-ui && npm install && npm start      # Electron + Three.js office visualizer (npm run dev for Vite HMR)
 docker compose -f docker-compose.memory.yml up -d   # Neo4j + Graphiti backing `atlas memory`
@@ -44,14 +50,22 @@ All tests are inline `#[cfg(test)]` modules in each crate's `src/` (no `tests/` 
   - `atlas-storyboard`: `DirectorClient` (LLM creative director via `ATLAS_DIRECTOR_URL` / `ATLAS_DIRECTOR_API_KEY` or `NVIDIA_API_KEY` / `ATLAS_DIRECTOR_MODEL`), `two_anchor_script.rs` (8-segment episode), `pronunciation.rs`.
   - `atlas-memory`: Shared Context MCP (working memory) + Graphiti/Neo4j (knowledge graph) with a promoter.
   - `atlas-opencode`: reuses NVIDIA model access through the `opencode` CLI.
-- **The news line is partly scaffolding.** `AnimationNewsDesk::fetch_curated_wire` returns a hardcoded story list (no live fetch), and in `news produce` the copyright, mastering and (when UE isn't installed) Unreal phases only print status. The UE step runs `UnrealEditor-Cmd.exe` with `AtlasStudioOffice/Content/Python/setup_newsroom_studio.py` at hardcoded Windows paths. Don't describe these stages as working end to end without checking the code.
+- **News pipeline** (`atlas-cli/src/news.rs`, stages logged with `NewsProductionStage` to `production_log.json`):
+  1. `atlas-media::news_desk` fetches RSS/Atom feeds (`default_sources()`, or `ATLAS_NEWS_FEEDS="Outlet|url|anime,..."`, or `--feeds-file` JSON; `file://` works for fixtures), classifies category and organization by keyword.
+  2. `fact_checker` drops rumors/reviews and clusters headlines across outlets (`title_tokens`/`same_story`). Stories with ≥ `--min-sources` outlets (default 2) and a known organization are main stories; the rest become attributed single-source bulletins. Fewer than 3 main stories aborts.
+  3. Telegram gate (`atlas-policy::telegram`, HTML messages, `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`, `TELEGRAM_API_BASE` override): Approve / Reject / More Research (re-fetch) / Swap #n (drop a story, re-slate). Mandatory unless `--skip-telegram`.
+  4. `atlas-storyboard::two_anchor_script`: cold open, rapid-fire and sign-off are deterministic from real headlines; each story segment is written by `NewsScriptDirector` (OpenAI-compatible chat API: `ATLAS_DIRECTOR_URL`, `ATLAS_DIRECTOR_API_KEY`/`NVIDIA_API_KEY`, `ATLAS_NEWS_SCRIPT_MODEL`) and rejected/retried if word count, speakers, or any digit not in the fact sheet fails `validate_story_lines`. No LLM key = hard error, never template filler.
+  5. Kokoro per line (`ATLAS_KOKORO_EXE`, `ATLAS_KOKORO_MODEL_DIR`, voices `ATLAS_MARCUS_VOICE`/`ATLAS_ELENA_VOICE`, `ATLAS_TTS_JOBS`), cached by voice+text hash in `<data>/news/tts`.
+  6. `atlas-ffmpeg::broadcast`: dialogue concat with measured durations → timeline; two-pass loudnorm to -14 LUFS; copyright scan of real file hashes (third-party music/plates need a `<file>.rights.json` sidecar or the render is blocked); single-pass 16:9 render of the graphics studio (anchor panels with voice meters, video wall, lower thirds, ticker, segment cards) via `filter_complex_script` with fonts/text files copied into `work/` so no path escaping is needed; SRT, thumbnail, chapters.
+  7. QA (`qa_report.json`: 900–1800 s, resolution, 30 fps, h264/aac stereo, loudness) gates `publish`, which runs `PolicyGuardian` and uploads to YouTube (category 1, synthetic media declared).
+  Outputs live in `<data>/news/episodes/EP-NNN/`. Unreal is optional input only: pass a rendered plate with `--studio-plate`; nothing drives UE automatically.
 - **`.opencode/`** is an agent skill pack for OpenCode (`opencode.json` loads `.opencode/prompts/*RULES.md`): ~40 `skills/*/SKILL.md`, 12 numbered `workflows/`, JSON `schemas/`, Python reference `scripts/`. New agent roles go in `skills/` and `.opencode/config/agents.json`.
 - **`AGENTS.md`** describes the UE 5.8 MetaHuman office simulation (`docs/OFFICE_SIMULATION.md`); `AUDIT_2026-10-16.md` records what was verified versus mocked in the whiteboard pipeline. Readiness (`READY_TO_PUBLISH`) must stay gated on verified frames, duration, size, captions, metadata, disclosures and credits.
 
 ## Conventions
 
-- Rust 2024, rust-version 1.85; `anyhow::Result` in the CLI, `thiserror` errors in crates (`AtlasError`), `tracing` for logs, `rusqlite` bundled.
+- Rust 2024, rust-version 1.86; `anyhow::Result` in the CLI, `thiserror` errors in crates (`AtlasError`), `tracing` for logs, `rusqlite` bundled.
 - Do not add code comments anywhere in the codebase (owner preference).
-- Credentials load from gitignored local files (`youtube_credentials.json`, `youtube_token.json`, `upload_post_credentials.json`, `local.properties`, `freesound_key.txt` in the data dir) or env vars (`UPLOAD_POST_API_KEY`, `TIKTOK_PROFILE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `FREESOUND_API_KEY`, `NVIDIA_API_KEY`, `AIWAVES_DIR`); YouTube refresh tokens go to the OS keyring.
+- Credentials load from gitignored local files (`youtube_credentials.json`, `youtube_token.json`, `upload_post_credentials.json`, `local.properties`, `freesound_key.txt` in the data dir) or env vars (`UPLOAD_POST_API_KEY`, `TIKTOK_PROFILE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ATLAS_NEWS_FONT`/`ATLAS_NEWS_FONT_BOLD`, `FREESOUND_API_KEY`, `NVIDIA_API_KEY`, `AIWAVES_DIR`); YouTube refresh tokens go to the OS keyring.
 - Publishing defaults to `--privacy private`; public publication requires an explicit user decision.
 - `tools/`, `artifacts/`, `*.exe`, `*.db` are gitignored. `main` history was rewritten with `git filter-branch` to strip binaries and credentials.
