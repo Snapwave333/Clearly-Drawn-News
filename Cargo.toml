@@ -12,6 +12,7 @@ members = [
     "crates/atlas-media",
     "crates/atlas-storyboard",
     "crates/atlas-policy",
+    "crates/atlas-memory",
     "crates/atlas-cli",
 ]
 resolver = "3"
@@ -37,6 +38,7 @@ atlas-ffmpeg = { path = "crates/atlas-ffmpeg" }
 atlas-media = { path = "crates/atlas-media" }
 atlas-storyboard = { path = "crates/atlas-storyboard" }
 atlas-policy = { path = "crates/atlas-policy" }
+atlas-memory = { path = "crates/atlas-memory" }
 
 # External
 anyhow = "1.0"

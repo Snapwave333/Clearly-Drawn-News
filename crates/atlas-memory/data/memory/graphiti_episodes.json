@@ -1,0 +1,34 @@
+{
+  "ep_4b7b4b3d77cb43b8beec7c874d4e02cd": {
+    "episode_id": "ep_4b7b4b3d77cb43b8beec7c874d4e02cd",
+    "name": "Kokoro Audio Normalization",
+    "body": "## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_a8f11f879b6c49409433df96270610d3\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter with 2-pass analysis\n\n### Post-Mortem & Verified Takeaways\nNever skip pass 1 or dynamic range will clip\n",
+    "source_description": "Promoted from Task task_a8f11f879b6c49409433df96270610d3 (assigned to: Hermes)",
+    "group_id": "atlas_crew",
+    "created_at": "2026-10-17T02:08:35.156107300Z"
+  },
+  "ep_1e392a98fb87450a9e9fc37a061d7f5a": {
+    "episode_id": "ep_1e392a98fb87450a9e9fc37a061d7f5a",
+    "name": "Kokoro Audio Normalization",
+    "body": "## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_1c4d948558bb4890af59790f9a5b92eb\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter with 2-pass analysis\n\n### Post-Mortem & Verified Takeaways\nNever skip pass 1 or dynamic range will clip\n",
+    "source_description": "Promoted from Task task_1c4d948558bb4890af59790f9a5b92eb (assigned to: Hermes)",
+    "group_id": "atlas_crew",
+    "created_at": "2026-10-17T02:04:45.229400500Z"
+  },
+  "ep_659e11fc9d574148a0f6eaa7666af6ab": {
+    "episode_id": "ep_659e11fc9d574148a0f6eaa7666af6ab",
+    "name": "Kokoro Audio Normalization",
+    "body": "## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_b9419c75602b43f4819fa124633f87e0\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter with 2-pass analysis\n\n### Post-Mortem & Verified Takeaways\nNever skip pass 1 or dynamic range will clip\n",
+    "source_description": "Promoted from Task task_b9419c75602b43f4819fa124633f87e0 (assigned to: Hermes)",
+    "group_id": "atlas_crew",
+    "created_at": "2026-10-17T02:05:42.581763400Z"
+  },
+  "ep_e49360daa99049b4bafc85dfb3bd709b": {
+    "episode_id": "ep_e49360daa99049b4bafc85dfb3bd709b",
+    "name": "Kokoro Audio Normalization",
+    "body": "## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_d2f8f2d07ff444409e0c22c7cf4b62a7\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter with 2-pass analysis\n\n### Post-Mortem & Verified Takeaways\nNever skip pass 1 or dynamic range will clip\n",
+    "source_description": "Promoted from Task task_d2f8f2d07ff444409e0c22c7cf4b62a7 (assigned to: Hermes)",
+    "group_id": "atlas_crew",
+    "created_at": "2026-10-17T02:08:49.063544900Z"
+  }
+}

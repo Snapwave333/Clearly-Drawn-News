@@ -1,0 +1,132 @@
+{
+  "task_d2f8f2d07ff444409e0c22c7cf4b62a7": {
+    "task_id": "task_d2f8f2d07ff444409e0c22c7cf4b62a7",
+    "title": "Kokoro Audio Normalization",
+    "description": "Adjusted LUFS to -14 for YouTube",
+    "assigned_to": "Hermes",
+    "status": "completed",
+    "context_notes": [
+      "Applied loudnorm filter with 2-pass analysis"
+    ],
+    "artifacts": [
+      "output/narration_master.wav"
+    ],
+    "promoted_to_graphiti": true,
+    "created_at": "2026-10-17T02:08:49.042289600Z",
+    "updated_at": "2026-10-17T02:08:51.065857200Z"
+  },
+  "task_a8f11f879b6c49409433df96270610d3": {
+    "task_id": "task_a8f11f879b6c49409433df96270610d3",
+    "title": "Kokoro Audio Normalization",
+    "description": "Adjusted LUFS to -14 for YouTube",
+    "assigned_to": "Hermes",
+    "status": "completed",
+    "context_notes": [
+      "Applied loudnorm filter with 2-pass analysis"
+    ],
+    "artifacts": [
+      "output/narration_master.wav"
+    ],
+    "promoted_to_graphiti": true,
+    "created_at": "2026-10-17T02:08:35.143740900Z",
+    "updated_at": "2026-10-17T02:08:37.167698100Z"
+  },
+  "task_3bcc741a34dd48fea95791f2d3612377": {
+    "task_id": "task_3bcc741a34dd48fea95791f2d3612377",
+    "title": "Pipeline: Kokoro Audio",
+    "description": "Production and coordination for topic: Kokoro Audio",
+    "assigned_to": "OpenClaw",
+    "status": "pending",
+    "context_notes": [
+      "### Graphiti Historical Context for 'Kokoro Audio'",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_1c4d948558bb4890af59790f9a5b92eb\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter...",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_b9419c75602b43f4819fa124633f87e0\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter..."
+    ],
+    "artifacts": [],
+    "promoted_to_graphiti": false,
+    "created_at": "2026-10-17T02:05:44.599836200Z",
+    "updated_at": "2026-10-17T02:05:44.608516400Z"
+  },
+  "task_b9419c75602b43f4819fa124633f87e0": {
+    "task_id": "task_b9419c75602b43f4819fa124633f87e0",
+    "title": "Kokoro Audio Normalization",
+    "description": "Adjusted LUFS to -14 for YouTube",
+    "assigned_to": "Hermes",
+    "status": "completed",
+    "context_notes": [
+      "Applied loudnorm filter with 2-pass analysis"
+    ],
+    "artifacts": [
+      "output/narration_master.wav"
+    ],
+    "promoted_to_graphiti": true,
+    "created_at": "2026-10-17T02:05:42.573675200Z",
+    "updated_at": "2026-10-17T02:05:44.599430700Z"
+  },
+  "task_1c4d948558bb4890af59790f9a5b92eb": {
+    "task_id": "task_1c4d948558bb4890af59790f9a5b92eb",
+    "title": "Kokoro Audio Normalization",
+    "description": "Adjusted LUFS to -14 for YouTube",
+    "assigned_to": "Hermes",
+    "status": "completed",
+    "context_notes": [
+      "Applied loudnorm filter with 2-pass analysis"
+    ],
+    "artifacts": [
+      "output/narration_master.wav"
+    ],
+    "promoted_to_graphiti": true,
+    "created_at": "2026-10-17T02:04:45.216891900Z",
+    "updated_at": "2026-10-17T02:04:47.245933Z"
+  },
+  "task_6254d9c852be4fd3919320cef1ee48d1": {
+    "task_id": "task_6254d9c852be4fd3919320cef1ee48d1",
+    "title": "Pipeline: Kokoro Audio",
+    "description": "Production and coordination for topic: Kokoro Audio",
+    "assigned_to": "OpenClaw",
+    "status": "pending",
+    "context_notes": [
+      "### Graphiti Historical Context for 'Kokoro Audio'",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_a8f11f879b6c49409433df96270610d3\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter...",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_1c4d948558bb4890af59790f9a5b92eb\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter...",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_b9419c75602b43f4819fa124633f87e0\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter...",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_d2f8f2d07ff444409e0c22c7cf4b62a7\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter..."
+    ],
+    "artifacts": [],
+    "promoted_to_graphiti": false,
+    "created_at": "2026-10-17T02:08:51.066442Z",
+    "updated_at": "2026-10-17T02:08:51.106265400Z"
+  },
+  "task_461c6af5e64a4bdb9659bc3204529ce1": {
+    "task_id": "task_461c6af5e64a4bdb9659bc3204529ce1",
+    "title": "Pipeline: Kokoro Audio",
+    "description": "Production and coordination for topic: Kokoro Audio",
+    "assigned_to": "OpenClaw",
+    "status": "pending",
+    "context_notes": [
+      "### Graphiti Historical Context for 'Kokoro Audio'",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_1c4d948558bb4890af59790f9a5b92eb\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter..."
+    ],
+    "artifacts": [],
+    "promoted_to_graphiti": false,
+    "created_at": "2026-10-17T02:04:47.246353400Z",
+    "updated_at": "2026-10-17T02:04:47.251963600Z"
+  },
+  "task_da95be9736ab4145acc81cdd137f2d35": {
+    "task_id": "task_da95be9736ab4145acc81cdd137f2d35",
+    "title": "Pipeline: Kokoro Audio",
+    "description": "Production and coordination for topic: Kokoro Audio",
+    "assigned_to": "OpenClaw",
+    "status": "pending",
+    "context_notes": [
+      "### Graphiti Historical Context for 'Kokoro Audio'",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_1c4d948558bb4890af59790f9a5b92eb\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter...",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_a8f11f879b6c49409433df96270610d3\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter...",
+      "• [Score: 1.00] **Kokoro Audio Normalization**: ## Distilled Knowledge: Kokoro Audio Normalization\n\n- **Task ID:** task_b9419c75602b43f4819fa124633f87e0\n- **Description:** Adjusted LUFS to -14 for YouTube\n- **Lead Agent:** Hermes\n\n### Verified Artifacts\n- `output/narration_master.wav`\n\n### Key Decisions & Execution Notes\n- Applied loudnorm filter..."
+    ],
+    "artifacts": [],
+    "promoted_to_graphiti": false,
+    "created_at": "2026-10-17T02:08:37.168130Z",
+    "updated_at": "2026-10-17T02:08:37.184575500Z"
+  }
+}

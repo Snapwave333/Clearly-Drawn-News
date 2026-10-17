@@ -1,0 +1,11 @@
+{
+  "shared_context_url": "http://localhost:8765",
+  "shared_context_mode": "local_bridge",
+  "graphiti_url": "http://localhost:8000",
+  "graphiti_group_id": "atlas_crew",
+  "graphiti_api_key": null,
+  "auto_promote_on_completion": true,
+  "min_promotion_relevance": 0.65,
+  "prune_ephemeral_after_days": 7,
+  "local_cache_dir": "data/memory"
+}

@@ -39,7 +39,8 @@ pub struct PublishCadencePolicy {
     pub max_long_per_24_hours: usize,
     pub max_shorts_per_24_hours: usize,
     pub max_tiktok_per_24_hours: usize,
-    pub minimum_spacing_minutes: i64,
+    pub youtube_minimum_spacing_minutes: i64,
+    pub tiktok_minimum_spacing_minutes: i64,
     pub video_insert_daily_reserve: usize,
 }
 
@@ -55,14 +56,122 @@ pub enum PublishDecision {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PublishService {
+    YouTube,
+    TikTok,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ServiceBackoff {
+    pub consecutive_failures: u32,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PublishSchedulerState {
+    pub youtube: ServiceBackoff,
+    pub tiktok: ServiceBackoff,
+}
+
+impl PublishSchedulerState {
+    pub fn load(path: &Path) -> AtlasResult<Self> {
+        if !path.is_file() {
+            return Ok(Self::default());
+        }
+        serde_json::from_slice(&std::fs::read(path)?).map_err(|error| {
+            AtlasError::Config(format!(
+                "Invalid publish scheduler state {}: {error}",
+                path.display()
+            ))
+        })
+    }
+
+    pub fn save(&self, path: &Path) -> AtlasResult<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(self).map_err(|error| {
+                AtlasError::Config(format!("Unable to serialize scheduler state: {error}"))
+            })?,
+        )?;
+        Ok(())
+    }
+
+    pub fn can_attempt(&self, service: PublishService, now: DateTime<Utc>) -> bool {
+        self.service(service)
+            .next_attempt_at
+            .is_none_or(|retry_at| retry_at <= now)
+    }
+
+    pub fn record_success(&mut self, service: PublishService) {
+        *self.service_mut(service) = ServiceBackoff::default();
+    }
+
+    pub fn record_failure(
+        &mut self,
+        service: PublishService,
+        error: &str,
+        now: DateTime<Utc>,
+    ) -> DateTime<Utc> {
+        let normalized = error.to_ascii_lowercase();
+        let failures = self.service(service).consecutive_failures.saturating_add(1);
+        let quota_exhausted = normalized.contains("dailylimitexceeded")
+            || normalized.contains("quotaexceeded")
+            || normalized.contains("daily upload limit")
+            || normalized.contains("spam_risk_too_many_pending_share");
+        let throttled = normalized.contains("429")
+            || normalized.contains("rate_limit")
+            || normalized.contains("too many requests");
+        let retry_at = if quota_exhausted {
+            match service {
+                PublishService::YouTube => next_daily_reset(now),
+                PublishService::TikTok => now + Duration::hours(24),
+            }
+        } else {
+            let base_minutes = if throttled { 15_i64 } else { 5_i64 };
+            let multiplier = 2_i64.pow(failures.saturating_sub(1).min(6));
+            now + Duration::minutes((base_minutes * multiplier).min(24 * 60))
+        };
+        *self.service_mut(service) = ServiceBackoff {
+            consecutive_failures: failures,
+            next_attempt_at: Some(retry_at),
+            last_error: Some(error.chars().take(1000).collect()),
+        };
+        retry_at
+    }
+
+    pub fn next_attempt_at(&self, service: PublishService) -> Option<DateTime<Utc>> {
+        self.service(service).next_attempt_at
+    }
+
+    fn service(&self, service: PublishService) -> &ServiceBackoff {
+        match service {
+            PublishService::YouTube => &self.youtube,
+            PublishService::TikTok => &self.tiktok,
+        }
+    }
+
+    fn service_mut(&mut self, service: PublishService) -> &mut ServiceBackoff {
+        match service {
+            PublishService::YouTube => &mut self.youtube,
+            PublishService::TikTok => &mut self.tiktok,
+        }
+    }
+}
+
 impl Default for PublishCadencePolicy {
     fn default() -> Self {
         Self {
             max_public_per_24_hours: 3,
             max_long_per_24_hours: 1,
             max_shorts_per_24_hours: 2,
-            max_tiktok_per_24_hours: 15,
-            minimum_spacing_minutes: 240,
+            max_tiktok_per_24_hours: 5,
+            youtube_minimum_spacing_minutes: 240,
+            tiktok_minimum_spacing_minutes: 180,
             video_insert_daily_reserve: 10,
         }
     }
@@ -133,7 +242,7 @@ impl PublishLedger {
             };
         }
         if let Some(last) = recent.iter().map(|item| item.published_at).max() {
-            let retry_at = last + Duration::minutes(policy.minimum_spacing_minutes);
+            let retry_at = last + Duration::minutes(policy.youtube_minimum_spacing_minutes);
             if retry_at > now {
                 return PublishDecision::Defer {
                     retry_at,
@@ -167,12 +276,29 @@ impl PublishLedger {
             .items
             .iter()
             .filter(|item| item.platform == "tiktok" && item.published_at > window_start)
-            .count();
-        if recent_tiktok >= policy.max_tiktok_per_24_hours {
+            .collect::<Vec<_>>();
+        if recent_tiktok.len() >= policy.max_tiktok_per_24_hours {
+            let retry_at = recent_tiktok
+                .iter()
+                .map(|item| item.published_at + Duration::hours(24))
+                .min()
+                .unwrap_or(now + Duration::hours(24));
             return PublishDecision::Defer {
-                retry_at: now + Duration::hours(1),
-                reason: "TikTok 24-hour limit (15 posts) reached".into(),
+                retry_at,
+                reason: format!(
+                    "TikTok rolling 24-hour safety cap ({} posts) reached",
+                    policy.max_tiktok_per_24_hours
+                ),
             };
+        }
+        if let Some(last) = recent_tiktok.iter().map(|item| item.published_at).max() {
+            let retry_at = last + Duration::minutes(policy.tiktok_minimum_spacing_minutes);
+            if retry_at > now {
+                return PublishDecision::Defer {
+                    retry_at,
+                    reason: "TikTok minimum publication spacing has not elapsed".into(),
+                };
+            }
         }
         PublishDecision::Allow
     }
@@ -269,13 +395,28 @@ mod tests {
             items: vec![tiktok_item],
         };
 
-        // Rejects duplicate on TikTok
         assert!(matches!(
             ledger.decide_tiktok(&PublishCadencePolicy::default(), "tiktok1", Utc::now()),
             PublishDecision::RejectDuplicate { .. }
         ));
 
-        // Allows fresh fingerprint
+        assert!(matches!(
+            ledger.decide_tiktok(
+                &PublishCadencePolicy::default(),
+                "fresh_fingerprint",
+                Utc::now()
+            ),
+            PublishDecision::Defer { .. }
+        ));
+    }
+
+    #[test]
+    fn allows_tiktok_after_spacing_window() {
+        let mut tiktok_item = item("tiktok1", PublishedFormat::Short, 4);
+        tiktok_item.platform = "tiktok".into();
+        let ledger = PublishLedger {
+            items: vec![tiktok_item],
+        };
         assert!(matches!(
             ledger.decide_tiktok(
                 &PublishCadencePolicy::default(),
@@ -284,5 +425,24 @@ mod tests {
             ),
             PublishDecision::Allow
         ));
+    }
+
+    #[test]
+    fn backs_off_rate_limits_exponentially() {
+        let now = Utc::now();
+        let mut state = PublishSchedulerState::default();
+        let first = state.record_failure(PublishService::TikTok, "429 rate_limit_exceeded", now);
+        let second = state.record_failure(PublishService::TikTok, "429 rate_limit_exceeded", now);
+        assert_eq!(first, now + Duration::minutes(15));
+        assert_eq!(second, now + Duration::minutes(30));
+        assert!(!state.can_attempt(PublishService::TikTok, now));
+    }
+
+    #[test]
+    fn defers_daily_quota_to_platform_reset() {
+        let now = Utc::now();
+        let mut state = PublishSchedulerState::default();
+        let retry_at = state.record_failure(PublishService::YouTube, "403 dailyLimitExceeded", now);
+        assert_eq!(retry_at, next_daily_reset(now));
     }
 }

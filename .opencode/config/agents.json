@@ -210,6 +210,17 @@
       "skill": "tiktok-publisher",
       "role": "tiktok_publisher",
       "skill_file": "skills/tiktok-publisher/SKILL.md"
+    },
+    {
+      "skill": "shared-memory-coordinator",
+      "role": "memory_coordinator",
+      "skill_file": "skills/shared-memory-coordinator/SKILL.md"
+    },
+    {
+      "skill": "opencode-builder",
+      "role": "core_builder",
+      "skill_file": "skills/opencode-nim-bridge/SKILL.md",
+      "rules_file": "prompts/OPENCODE_AGENT_RULES.md"
     }
   ],
   "require_independent_review": true,

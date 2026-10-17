@@ -1,3 +1,4 @@
+pub mod compensation;
 pub mod models;
 pub mod optimization;
 pub mod publishing;
@@ -6,11 +7,12 @@ pub mod store;
 pub mod tiktok;
 pub mod youtube;
 
+pub use compensation::{MonetizationEvidence, SimulatedPayrollLedger, SimulatedPayrollRun};
 pub use models::*;
 pub use optimization::OptimizationLoop;
 pub use publishing::{
-    PublishCadencePolicy, PublishDecision, PublishLedger, PublishedFormat, PublishedItem,
-    media_fingerprint,
+    PublishCadencePolicy, PublishDecision, PublishLedger, PublishSchedulerState, PublishService,
+    PublishedFormat, PublishedItem, media_fingerprint,
 };
 pub use recommend::RecommendationEngine;
 pub use store::AnalyticsStore;

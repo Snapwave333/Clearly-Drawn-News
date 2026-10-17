@@ -6,7 +6,6 @@ use tokio::process::Command;
 /// Probes all known ATLAS dependencies and returns their status.
 pub async fn probe_all() -> Vec<ToolProbeResult> {
     let probes = vec![
-        probe_opencode().await,
         probe_blender().await,
         probe_unreal().await,
         probe_ffmpeg().await,
@@ -21,13 +20,18 @@ pub async fn probe_all() -> Vec<ToolProbeResult> {
 
 /// Returns true if the minimal viable pipeline can run (Blender + FFmpeg + OpenCode).
 pub fn has_minimal_pipeline(results: &[ToolProbeResult]) -> bool {
-    [ToolKind::OpenCode, ToolKind::Blender, ToolKind::Ffmpeg]
-        .iter()
-        .all(|kind| {
-            results
-                .iter()
-                .any(|r| &r.kind == kind && r.status.is_available())
-        })
+    [
+        ToolKind::Blender,
+        ToolKind::Ffmpeg,
+        ToolKind::Ffprobe,
+        ToolKind::Kokoro,
+    ]
+    .iter()
+    .all(|kind| {
+        results
+            .iter()
+            .any(|r| &r.kind == kind && r.status.is_available())
+    })
 }
 
 async fn run_version(args: &[&str], path_hint: Option<&str>) -> Option<(String, String)> {
@@ -256,7 +260,7 @@ pub async fn probe_kokoro() -> ToolProbeResult {
             );
         }
     }
-    match run_version(&["kokoro", "--version"], None).await {
+    match run_version(&["kokoro-tts", "--help"], None).await {
         Some((version, path)) => available(ToolKind::Kokoro, version, path),
         None => optional_unavailable(
             ToolKind::Kokoro,

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    ".opencode/prompts/AGENT_SYSTEM_RULES.md",
+    ".opencode/prompts/OPENCODE_AGENT_RULES.md"
+  ],
+  "mcp": {
+    "shared-context": {
+      "command": "npx",
+      "args": ["-y", "@fajar/shared-context-mcp"],
+      "env": {
+        "PORT": "8765"
+      }
+    },
+    "graphiti": {
+      "command": "uvx",
+      "args": ["graphiti-mcp"],
+      "env": {
+        "GRAPHITI_BACKEND": "neo4j",
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password",
+        "GRAPHITI_GROUP_ID": "atlas_opencode"
+      }
+    }
+  }
+}

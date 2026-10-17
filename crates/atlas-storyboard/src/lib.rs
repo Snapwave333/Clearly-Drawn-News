@@ -9,6 +9,12 @@ pub struct StoryboardPlan {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TopicIdea {
+    pub title: String,
+    pub rationale: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoryboardBeat {
     pub title: String,
     pub narration: String,
@@ -170,6 +176,92 @@ impl DirectorClient {
         let plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
             .map_err(|error| AtlasError::Config(format!("Invalid director storyboard: {error}")))?;
         plan.validate(beat_count)?;
+        Ok(plan)
+    }
+
+    pub async fn create_topic(&self, existing_titles: &[String]) -> AtlasResult<TopicIdea> {
+        let existing = existing_titles.join(" | ");
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&serde_json::json!({
+                "model": self.model,
+                "temperature": 0.85,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": "You select accurate evergreen topics for an educational animation channel. Return valid JSON only."},
+                    {"role": "user", "content": format!("Choose one fresh educational topic with a visually explainable mechanism, broad curiosity appeal, and reliable public facts. Avoid news, politics, medical advice, financial advice, dangerous instructions, and every existing title. Existing titles: {existing}. Return exactly title and rationale.")}
+                ]
+            }))
+            .send()
+            .await
+            .map_err(director_error)?
+            .error_for_status()
+            .map_err(director_error)?;
+        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
+        let content = payload["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| {
+                AtlasError::Config("Topic director response omitted JSON content".into())
+            })?;
+        let idea: TopicIdea = serde_json::from_str(strip_json_fence(content))
+            .map_err(|error| AtlasError::Config(format!("Invalid topic idea: {error}")))?;
+        if idea.title.trim().is_empty()
+            || idea.title.chars().count() > 100
+            || existing_titles
+                .iter()
+                .any(|title| title.eq_ignore_ascii_case(idea.title.trim()))
+        {
+            return Err(AtlasError::Config(
+                "Topic director returned an empty, duplicate, or oversized title".into(),
+            ));
+        }
+        Ok(idea)
+    }
+
+    pub async fn create_short_plan(
+        &self,
+        long_plan: &StoryboardPlan,
+        beat_count: usize,
+    ) -> AtlasResult<StoryboardPlan> {
+        let long_json = serde_json::to_string(long_plan)?;
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&serde_json::json!({
+                "model": self.model,
+                "temperature": 0.55,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": "You adapt approved long-form educational storyboards into faithful vertical shorts. Return valid JSON only."},
+                    {"role": "user", "content": format!("Create exactly {beat_count} beats for a sub-60-second vertical short derived only from this approved long-form storyboard: {long_json}. Preserve its thesis and facts. Choose the strongest hook, essential mechanism, misconception or risk, and synthesis. Rewrite tightly instead of adding claims. Every narration sentence must be 8 to 24 words. Keep Luma's character direction and use portrait-friendly focal terms. Return the same StoryboardPlan schema.")}
+                ]
+            }))
+            .send()
+            .await
+            .map_err(director_error)?
+            .error_for_status()
+            .map_err(director_error)?;
+        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
+        let content = payload["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| {
+                AtlasError::Config("Short adapter response omitted JSON content".into())
+            })?;
+        let plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
+            .map_err(|error| AtlasError::Config(format!("Invalid derived short plan: {error}")))?;
+        plan.validate(beat_count)?;
+        if plan
+            .beats
+            .iter()
+            .any(|beat| beat.narration.split_whitespace().count() > 24)
+        {
+            return Err(AtlasError::Config(
+                "Derived short contains narration longer than 24 words".into(),
+            ));
+        }
         Ok(plan)
     }
 }

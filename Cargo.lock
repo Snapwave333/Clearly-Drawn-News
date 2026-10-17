@@ -149,6 +149,7 @@ dependencies = [
  "atlas-ffmpeg",
  "atlas-kokoro",
  "atlas-media",
+ "atlas-memory",
  "atlas-opencode",
  "atlas-policy",
  "atlas-store",
@@ -162,6 +163,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "which",
 ]
 
 [[package]]
@@ -238,6 +240,25 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "atlas-memory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atlas-agent-bus",
+ "atlas-core",
+ "atlas-store",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

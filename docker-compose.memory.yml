@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Graph backend for Graphiti (Neo4j Community)
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: atlas-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # Web HTTP browser
+      - "7687:7687"   # Bolt binary protocol
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j_data:/data
+
+  # Graphiti MCP Server (Long-Term Temporal Knowledge Graph)
+  graphiti:
+    image: python:3.11-slim
+    container_name: atlas-graphiti
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GRAPHITI_BACKEND=neo4j
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
+      - GRAPHITI_GROUP_ID=atlas_opencode
+    depends_on:
+      - neo4j
+    command: >
+      sh -c "pip install --no-cache-dir graphiti-core &&
+             python -m graphiti_core.server --host 0.0.0.0 --port 8000"
+
+  # Shared Context MCP (Short-Term Working Memory & Task Bus)
+  shared-context:
+    image: node:20-alpine
+    container_name: atlas-shared-context
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - PORT=8765
+    command: >
+      sh -c "npx -y @fajar/shared-context-mcp"
+
+volumes:
+  neo4j_data:

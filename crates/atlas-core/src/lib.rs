@@ -22,6 +22,8 @@ pub enum AtlasError {
     Io(#[from] std::io::Error),
     #[error("serialization error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("memory error: {0}")]
+    Memory(String),
     #[error("unknown error: {0}")]
     Other(String),
 }
