@@ -878,7 +878,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     }
     println!("   Script: {} chars", script.len());
 
-    println!("🎙️  Stage 2: Synthesizing narration and timing...");
+    println!("🎙️  Stage 2: Synthesizing narration and importing B-roll in parallel...");
     project.state = ProjectState::AudioBuild;
     store.insert_project(&project)?;
     let data_dir = store.data_dir().to_path_buf();
@@ -898,27 +898,28 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
             pronunciation_hints: Vec::new(),
         })
         .collect::<Vec<_>>();
-    let narration = kokoro_pipeline
-        .synthesize_track(segments.clone(), project.video_id.clone())
-        .await?;
+    let broll_queries = beats
+        .iter()
+        .map(|beat| beat.broll_query().to_string())
+        .collect::<Vec<_>>();
+    let (narration, broll) = tokio::join!(
+        kokoro_pipeline.synthesize_track(segments.clone(), project.video_id.clone()),
+        import_broll(&project.video_id, format, &data_dir, &broll_queries),
+    );
+    let narration = narration?;
     let combined_audio = narration
         .combined_file
         .clone()
         .ok_or_else(|| anyhow::anyhow!("Kokoro did not return a combined narration file"))?;
     println!("   ✓ Timed narration: {}", combined_audio.display());
-
-    println!("🎞️  Importing topic-matched B-roll...");
-    let broll_queries = beats
-        .iter()
-        .map(|beat| beat.broll_query().to_string())
-        .collect::<Vec<_>>();
-    let broll = import_broll(&project.video_id, format, &data_dir, &broll_queries).await;
     println!("   ✓ {} attributed media assets available", broll.len());
 
     println!("🎬 Stage 3: Creating lip-synced shot specifications...");
     project.state = ProjectState::Storyboarding;
     store.insert_project(&project)?;
 
+    let vectors_dir = data_dir.join("vectors").join(&project.video_id);
+    std::fs::create_dir_all(&vectors_dir)?;
     let mut shot_specs = Vec::new();
     for (index, (beat, audio)) in beats.iter().zip(&narration.segments).enumerate() {
         let mut spec = create_test_shot_spec(&render_project_id, &format!("shot_{:03}", index + 1));
@@ -954,10 +955,8 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
             spec.visual_elements[0].transform.position[1] = 1.6;
         }
         beat.apply_visuals(&mut spec, matches!(format, VideoFormat::Short));
-        let vectors_dir = data_dir.join("vectors").join(&project.video_id);
-        std::fs::create_dir_all(&vectors_dir)?;
         for (term_idx, term) in beat.focal_terms().iter().enumerate() {
-            if let Some(svg_path) = generate_vector_diagram(term, term_idx, &vectors_dir).await {
+            if let Some(svg_path) = generate_vector_diagram(term, term_idx, &vectors_dir) {
                 if let Some(elem) = spec.visual_elements.iter_mut().find(|el| el.element_id == format!("focus_{term_idx}")) {
                     elem.properties["svg_path"] = serde_json::json!(svg_path.to_string_lossy());
                 }
@@ -967,15 +966,24 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     }
     println!("   {} shots planned", shot_specs.len());
 
-    println!("🎨 Stage 4: Rendering animated lessons with Blender...");
+    let render_parallelism = std::env::var("ATLAS_RENDER_JOBS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(1);
+    println!(
+        "🎨 Stage 4: Rendering with Blender ({} parallel job{}) while scoring with AIWaves...",
+        render_parallelism,
+        if render_parallelism == 1 { "" } else { "s" }
+    );
     project.state = ProjectState::AssetBuild;
     store.insert_project(&project)?;
 
     let blender_exe = "blender";
     let blender_pipeline = BlenderPipeline::new(blender_exe, &data_dir);
 
+    let mut render_jobs = Vec::new();
     for spec in &shot_specs {
-        println!("   Rendering {}...", spec.shot_id);
         let frames_dir = data_dir
             .join("renders")
             .join(&render_project_id)
@@ -989,20 +997,35 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
             0
         };
         if reusable_frames == spec.duration_frames as usize {
-            println!("   ✓ {} verified cached frames", reusable_frames);
+            println!("   ✓ {} {} verified cached frames", spec.shot_id, reusable_frames);
             continue;
         }
-        let job = atlas_blender::RenderJob {
+        render_jobs.push(atlas_blender::RenderJob {
             job_id: format!("job_{}", spec.shot_id),
             shot_spec: spec.clone(),
             quality: RenderQuality::Final,
             output_dir: frames_dir,
             status: atlas_blender::RenderStatus::Queued,
             output_size: Some([profile.width, profile.height]),
-        };
-        let output = blender_pipeline.render(&job).await?;
-        println!("   ✓ {} real frames", output.frames.len());
+        });
     }
+
+    let total_timeline_duration = shot_specs
+        .iter()
+        .map(|spec| spec.duration_frames as f64 / spec.fps as f64)
+        .sum::<f64>();
+    let (render_result, (original_score, original_sfx)) = tokio::join!(
+        render_shots(&blender_pipeline, render_jobs, render_parallelism),
+        generate_aiwaves_audio(
+            &project.video_id,
+            &project.topic.title,
+            &project_dir,
+            &data_dir,
+            total_timeline_duration,
+            &shot_specs,
+        ),
+    );
+    render_result?;
 
     println!("🔧 Stage 5: Assembling final video with FFmpeg...");
     project.state = ProjectState::EditAndMix;
@@ -1019,21 +1042,6 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     std::fs::create_dir_all(&caption_dir)?;
     let caption_path = caption_dir.join("en.srt");
     write_captions(&caption_path, &segments, &narration)?;
-
-    println!("🎵 Synthesizing original musical score and procedural sound effects with AIWaves...");
-    let total_timeline_duration = shot_specs
-        .iter()
-        .map(|spec| spec.duration_frames as f64 / spec.fps as f64)
-        .sum::<f64>();
-    let (original_score, original_sfx) = generate_aiwaves_audio(
-        &project.video_id,
-        &project.topic.title,
-        &project_dir,
-        &data_dir,
-        total_timeline_duration,
-        &shot_specs,
-    )
-    .await;
 
     let mut audio_tracks = vec![AudioTrack {
         track_id: "narration".into(),
@@ -2052,12 +2060,38 @@ async fn add_vector_thumbnail_title(path: &Path, title: &str, width: u32, height
     }
 }
 
-async fn generate_vector_diagram(
-    term: &str,
-    index: usize,
-    output_dir: &Path,
-) -> Option<PathBuf> {
-    let svg_path = output_dir.join(format!("vector_term_{index}.svg"));
+async fn render_shots(
+    pipeline: &BlenderPipeline,
+    jobs: Vec<atlas_blender::RenderJob>,
+    parallelism: usize,
+) -> anyhow::Result<()> {
+    let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(parallelism.max(1)));
+    let mut tasks = tokio::task::JoinSet::new();
+    for job in jobs {
+        let pipeline = pipeline.clone();
+        let permits = permits.clone();
+        tasks.spawn(async move {
+            let _permit = permits.acquire_owned().await?;
+            println!("   Rendering {}...", job.shot_spec.shot_id);
+            let output = pipeline.render(&job).await?;
+            println!("   ✓ {} {} real frames", job.shot_spec.shot_id, output.frames.len());
+            anyhow::Ok(())
+        });
+    }
+    while let Some(joined) = tasks.join_next().await {
+        if let Err(error) = joined? {
+            tasks.abort_all();
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+fn generate_vector_diagram(term: &str, index: usize, output_dir: &Path) -> Option<PathBuf> {
+    let term_hash = term
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |acc, b| (acc ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+    let svg_path = output_dir.join(format!("vector_{index}_{term_hash:016x}.svg"));
     if svg_path.is_file() {
         return Some(svg_path);
     }
@@ -2093,23 +2127,7 @@ async fn generate_vector_diagram(
   <text x="65" y="176" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#94a3b8">System behavior &amp; state</text>
 </svg>"##);
 
-    if std::fs::write(&svg_path, svg_content).is_err() {
-        return None;
-    }
-
-    if let Some(vectorcraft) = bundled_cli("vectorcraft") {
-        let temp_png = output_dir.join(format!("vector_term_{index}.png"));
-        let _ = tokio::process::Command::new(vectorcraft)
-            .args(["convert"])
-            .arg(&svg_path)
-            .arg(&temp_png)
-            .status()
-            .await;
-        if temp_png.is_file() {
-            let _ = std::fs::remove_file(temp_png);
-        }
-    }
-
+    std::fs::write(&svg_path, svg_content).ok()?;
     Some(svg_path)
 }
 
@@ -4469,3 +4487,21 @@ async fn cmd_news(action: NewsAction) -> anyhow::Result<()> {
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vector_diagrams_are_unique_per_term() {
+        let dir = std::env::temp_dir().join(format!("atlas_vectors_{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = generate_vector_diagram("Photosynthesis", 0, &dir).unwrap();
+        let second = generate_vector_diagram("Mitochondria", 0, &dir).unwrap();
+        let repeat = generate_vector_diagram("Photosynthesis", 0, &dir).unwrap();
+        assert_ne!(first, second);
+        assert_eq!(first, repeat);
+        assert!(std::fs::read_to_string(&second).unwrap().contains("Mitochondria"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}

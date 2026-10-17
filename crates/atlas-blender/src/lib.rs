@@ -164,6 +164,7 @@ pub enum RenderStatus {
     Failed { error: String },
 }
 
+#[derive(Clone)]
 pub struct BlenderPipeline {
     blender_exe: PathBuf,
     workspace_dir: PathBuf,
