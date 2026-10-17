@@ -1,7 +1,7 @@
 use super::*;
 use atlas_core::{EpisodeDurationPolicy, SHOW_TAGLINE, SHOW_TITLE};
 use atlas_media::fact_checker::{FactCheckReport, NewsFactChecker};
-use atlas_media::news_desk::AnimationNewsDesk;
+use atlas_media::news_desk::{AnimationNewsDesk, NewsWire, WireOrigin};
 use atlas_policy::copyright::{
     CopyrightComplianceEngine, MediaClassification, MediaType, RightsRecord, ScanResult,
 };
@@ -32,7 +32,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
     match action {
         NewsAction::Research => {
             println!("\n[1/3] Ingesting developing animation industry wire...");
-            let wire = news_desk.fetch_curated_wire().await;
+            let wire = load_wire(&news_desk).await.items;
             println!("  Found {} candidate industry stories.", wire.len());
 
             println!("\n[2/3] Running Fact-Checking & Corroboration Engine...");
@@ -60,7 +60,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             );
         }
         NewsAction::Slate => {
-            let report = fact_checker.verify_candidates(news_desk.fetch_curated_wire().await);
+            let report = fact_checker.verify_candidates(load_wire(&news_desk).await.items);
             let (episode_id, _) = next_episode(&news_dir);
             let title = episode_title(&episode_id, &report);
             println!("\nGenerating 22-minute, 8-segment two-anchor broadcast script...");
@@ -87,7 +87,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
         }
         NewsAction::Telegram { token, chat_id } => {
             let mut gate = TelegramApprovalGate::new(token, chat_id).map_err(anyhow::Error::msg)?;
-            let report = fact_checker.verify_candidates(news_desk.fetch_curated_wire().await);
+            let report = fact_checker.verify_candidates(load_wire(&news_desk).await.items);
             let (episode_id, episode_number) = next_episode(&news_dir);
 
             println!("\nConnecting to Telegram Bot API...");
@@ -143,7 +143,9 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             timer.begin("research");
             println!("\n[PHASE 1: RESEARCH & FACT-CHECK]");
-            let report = fact_checker.verify_candidates(news_desk.fetch_curated_wire().await);
+            let wire = load_wire(&news_desk).await;
+            let wire_origin = wire.origin;
+            let report = fact_checker.verify_candidates(wire.items);
             if report.passed_stories.is_empty() {
                 anyhow::bail!("Production halted: no stories passed fact-checking");
             }
@@ -230,6 +232,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                     "status": status,
                     "filming": filming.summary(),
                     "runtime_seconds": episode.total_duration_secs,
+                    "wire_origin": wire_origin,
                     "company": atlas_core::COMPANY_NAME,
                 }),
             )?;
@@ -300,6 +303,18 @@ async fn film_in_unreal() -> anyhow::Result<FilmingOutcome> {
         anyhow::bail!("Unreal Engine filming failed with {status}");
     }
     Ok(FilmingOutcome::Filmed)
+}
+
+async fn load_wire(news_desk: &AnimationNewsDesk) -> NewsWire {
+    let wire = news_desk.fetch_wire().await;
+    for error in &wire.feed_errors {
+        eprintln!("  Feed unavailable: {error}");
+    }
+    match wire.origin {
+        WireOrigin::LiveFeeds => println!("  Wire source: live feeds ({} stories)", wire.items.len()),
+        WireOrigin::CuratedFallback => println!("  Wire source: CURATED FALLBACK — no live feed stories were reachable"),
+    }
+    wire
 }
 
 fn write_json(path: &Path, value: &impl Serialize) -> anyhow::Result<()> {

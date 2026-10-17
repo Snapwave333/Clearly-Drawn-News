@@ -64,6 +64,7 @@ url = "2.5"
 oauth2 = { version = "5.0", features = ["reqwest"] }
 keyring = { version = "3.6" }
 base64 = "0.22"
+quick-xml = "0.37"
 
 [profile.release]
 lto = true
