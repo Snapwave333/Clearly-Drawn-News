@@ -15,6 +15,7 @@ const DEFAULT_UE_CMD: &str =
 const DEFAULT_UE_PROJECT: &str =
     r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject";
 const UE_NEWSROOM_SCRIPT: &str = r"Content\Python\setup_newsroom_studio.py";
+const ANCHOR_WARDROBE: &str = include_str!("../../../unreal/wardrobe.json");
 
 pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Result<()> {
     println!("══════════════════════════════════════════════════════════════════");
@@ -200,6 +201,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             println!("\n[PHASE 4: COPYRIGHT & RIGHTS REGISTRY]");
             let manifest = newsroom_rights_manifest();
             write_json(&episode_dir.join("rights_manifest.json"), &manifest)?;
+            std::fs::write(episode_dir.join("wardrobe.json"), ANCHOR_WARDROBE)?;
             match CopyrightComplianceEngine::new().scan_production_manifest(&manifest) {
                 ScanResult::AllClear => println!(
                     "  {} assets scanned: all clear; third-party trailer audio muted.",
@@ -429,6 +431,19 @@ mod tests {
         }
         assert_eq!(next_episode(&dir), ("EP-008".into(), 8));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn anchor_wardrobe_is_smart_casual() {
+        let spec: serde_json::Value = serde_json::from_str(ANCHOR_WARDROBE).unwrap();
+        let banned = spec["banned_keywords"].as_array().unwrap();
+        for word in ["tie", "suit", "hoodie", "jogger"] {
+            assert!(banned.iter().any(|b| b == word));
+        }
+        let anchors = spec["characters"].as_array().unwrap();
+        assert!(anchors.iter().any(|c| c["match"][0] == "marcus"));
+        assert!(anchors.iter().any(|c| c["match"][0] == "elena"));
+        assert_eq!(spec["staff_looks"].as_array().unwrap().len(), 7);
     }
 
     #[test]

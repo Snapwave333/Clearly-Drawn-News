@@ -91,13 +91,13 @@ The Clearly Drawn Studios HQ features 38 dedicated workstations arranged in a 10
 classDiagram
     class DepartmentStyles {
         <<enumeration>>
-        Executive_Leadership : Style 0 (Fab Sleeveless Turtleneck - Designer Black)
-        Engineering_Systems : Style 1 (MetaHuman Sleek Fitted Technical Garment)
-        Creative_Media : Style 2 (MetaHuman Midnight Navy Tailored Garment)
-        Marketing_Growth : Style 3 (MetaHuman Graphite & Slate Smart Casual)
-        Operations_Support : Style 4 (MetaHuman Burgundy & Wine Executive)
-        Analytics_Data : Style 5 (MetaHuman Forest Green & Khaki Professional)
-        Research_Strategy : Style 6 (MetaHuman Steel Grey & Ivory Modernist)
+        Executive_Leadership : Style 0 (Unstructured Blazer & Open-Collar Oxford)
+        Engineering_Systems : Style 1 (Merino Quarter-Zip & Chinos)
+        Creative_Media : Style 2 (Chore Jacket & Fine-Knit Tee)
+        Marketing_Growth : Style 3 (Knit Polo & Pleated Trousers)
+        Operations_Support : Style 4 (Shawl Cardigan & Crewneck Tee)
+        Analytics_Data : Style 5 (Merino Crewneck & Tailored Chinos)
+        Research_Strategy : Style 6 (Suede Overshirt & Mock-Neck Knit)
     }
 
     class MetaHumanAvatars {
@@ -111,17 +111,25 @@ classDiagram
     DepartmentStyles ..> MetaHumanAvatars : Dressed across 38 Workstations
 ```
 
-### 7 Department Outfit Allocation Breakdown
+### Dress Code: Elevated Smart Casual
 
-| Dept # | Functional Cluster | Agent Roles (Sample) | Primary Outfit Asset | Aesthetic / Palette |
-|:------:|:-------------------|:---------------------|:---------------------|:--------------------|
-| **0** | **Executive & Leadership** | `executive_producer`, `coordinator`, `quality_supervisor` | `SKM_SleevelessTurtleneck` (Fab Marketplace) | Designer Black & Silver |
-| **1** | **Engineering & Systems** | `analytics_engineer`, `blender_animator`, `unreal_cinematographer` | `bodyShapeF_CombinedSkelMesh` | Sleek Fitted Technical Charcoal |
-| **2** | **Creative & Media** | `creative_director`, `lead_writer`, `storyboard_artist`, `illustrator` | `bodyShapeA_CombinedSkelMesh` | Midnight Navy Tailored |
-| **3** | **Marketing & Growth** | `channel_strategist`, `audience_researcher`, `thumbnail_optimizer` | `bodyShapeB_CombinedSkelMesh` | Graphite & Slate Smart Casual |
-| **4** | **Operations & Support** | `resource_scheduler`, `operations`, `rights_editor` | `bodyShapeC_CombinedSkelMesh` | Burgundy & Wine Executive |
-| **5** | **Analytics & Optimization** | `retention_analyst`, `analytics_dashboard`, `recursive_optimizer` | `bodyShapeD_CombinedSkelMesh` | Forest Green & Khaki Professional |
-| **6** | **Research & Strategy** | `research_lead`, `trend_scout`, `trend_analyst`, `fact_checker` | `bodyShapeE_CombinedSkelMesh` | Steel Grey & Ivory Modernist |
+Every MetaHuman dresses between business casual and casual: polished but relaxed. No ties, suits, hoodies, or athleisure. The source of truth is [`unreal/wardrobe.json`](unreal/wardrobe.json), applied in Unreal by [`unreal/Content/Python/clearly_drawn_wardrobe.py`](unreal/Content/Python/clearly_drawn_wardrobe.py).
+
+| Character | Look |
+|:----------|:-----|
+| **Marcus** (The Enthusiast) | Unstructured navy blazer, open-collar ecru oxford, stone chinos, brown suede loafers |
+| **Elena** (The Sharp Counterpart) | Soft charcoal overshirt, cream mock-neck knit, tailored olive trousers, black chelsea boots |
+
+| Staff look | Pieces |
+|:-----------|:-------|
+| 1 | Merino crewneck, tailored chinos, white leather sneakers |
+| 2 | Unstructured blazer, open-collar oxford, trousers, loafers |
+| 3 | Chore jacket, fine-knit tee, dark chinos, sneakers |
+| 4 | Knit polo, pleated trousers, leather derbies |
+| 5 | Merino quarter-zip, khaki chinos, sneakers |
+| 6 | Suede overshirt, mock-neck knit, charcoal trousers, chelsea boots |
+| 7 | Shawl cardigan, crewneck tee, stone chinos, sneakers |
+
 
 ---
 

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "dress_code": "Elevated smart casual: polished but relaxed. Unstructured blazers, chore jackets, overshirts, quality knitwear, open collars, tailored chinos, leather sneakers, loafers, or chelsea boots. No ties, no suits, no hoodies, no athleisure.",
+  "banned_keywords": ["tie", "necktie", "bowtie", "tux", "tuxedo", "suit", "waistcoat", "hoodie", "sweatpant", "jogger", "tracksuit", "tank", "shorts", "flipflop", "sandal", "graphic", "pajama", "swim"],
+  "slot_keywords": {
+    "torso": ["top", "torso", "shirt", "tee", "polo", "sweater", "knit", "crew", "jacket", "blazer", "coat", "cardigan", "overshirt", "zip"],
+    "legs": ["legs", "bottom", "pant", "trouser", "chino", "jean", "slacks"],
+    "feet": ["feet", "shoe", "sneaker", "loafer", "boot", "derby", "oxford_shoe"]
+  },
+  "characters": [
+    {
+      "match": ["marcus"],
+      "role": "The Enthusiast, lead anchor",
+      "look": "Unstructured navy blazer over an open-collar ecru oxford, stone chinos, brown suede loafers",
+      "torso": { "prefer": ["blazer", "sportcoat", "jacket", "oxford", "shirt"], "primary": "#2F4156", "secondary": "#F4F1EA" },
+      "legs": { "prefer": ["chino", "trouser", "slacks", "pant"], "primary": "#C2B393" },
+      "feet": { "prefer": ["loafer", "derby", "chelsea", "shoe"], "primary": "#6B4A32" }
+    },
+    {
+      "match": ["elena"],
+      "role": "The Sharp Counterpart, co-anchor",
+      "look": "Soft charcoal overshirt over a cream fine-gauge mock-neck knit, tailored olive trousers, black chelsea boots",
+      "torso": { "prefer": ["overshirt", "jacket", "knit", "sweater", "mock", "turtleneck"], "primary": "#3A3F47", "secondary": "#EFE8DA" },
+      "legs": { "prefer": ["trouser", "slacks", "chino", "pant"], "primary": "#5F5F48" },
+      "feet": { "prefer": ["chelsea", "boot", "loafer", "shoe"], "primary": "#1F1B19" }
+    }
+  ],
+  "staff_looks": [
+    { "look": "Merino crewneck and tailored chinos", "torso": { "prefer": ["crew", "sweater", "knit"], "primary": "#2F4156" }, "legs": { "prefer": ["chino", "trouser"], "primary": "#C2B393" }, "feet": { "prefer": ["sneaker", "shoe"], "primary": "#F1EFE9" } },
+    { "look": "Unstructured blazer and open-collar oxford", "torso": { "prefer": ["blazer", "jacket", "oxford", "shirt"], "primary": "#5B4636", "secondary": "#E6ECF2" }, "legs": { "prefer": ["trouser", "chino"], "primary": "#2C3440" }, "feet": { "prefer": ["loafer", "derby"], "primary": "#6B4A32" } },
+    { "look": "Chore jacket and fine-knit tee", "torso": { "prefer": ["chore", "jacket", "tee"], "primary": "#46553F", "secondary": "#FBFBF9" }, "legs": { "prefer": ["chino", "jean", "trouser"], "primary": "#3A3A38" }, "feet": { "prefer": ["sneaker", "boot"], "primary": "#F1EFE9" } },
+    { "look": "Knit polo and pleated trousers", "torso": { "prefer": ["polo", "knit"], "primary": "#7D6B57" }, "legs": { "prefer": ["trouser", "slacks", "chino"], "primary": "#2C3440" }, "feet": { "prefer": ["loafer", "derby"], "primary": "#1F1B19" } },
+    { "look": "Merino quarter-zip and chinos", "torso": { "prefer": ["zip", "sweater", "knit"], "primary": "#3D4B5C" }, "legs": { "prefer": ["chino", "trouser"], "primary": "#8C7A62" }, "feet": { "prefer": ["sneaker", "shoe"], "primary": "#F1EFE9" } },
+    { "look": "Suede overshirt and mock-neck knit", "torso": { "prefer": ["overshirt", "jacket", "mock", "knit"], "primary": "#8A5B3E", "secondary": "#2B2F33" }, "legs": { "prefer": ["trouser", "chino"], "primary": "#3A3A38" }, "feet": { "prefer": ["chelsea", "boot"], "primary": "#2B211B" } },
+    { "look": "Shawl cardigan and crewneck tee", "torso": { "prefer": ["cardigan", "sweater", "tee"], "primary": "#55595F", "secondary": "#F4F1EA" }, "legs": { "prefer": ["chino", "trouser"], "primary": "#C2B393" }, "feet": { "prefer": ["sneaker", "loafer"], "primary": "#F1EFE9" } }
+  ]
+}
