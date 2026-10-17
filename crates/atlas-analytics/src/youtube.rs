@@ -142,7 +142,10 @@ impl YouTubeAnalyticsClient {
         Self {
             credentials,
             token_store: TokenStore::new(),
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .build()
+                .unwrap_or_default(),
         }
     }
 

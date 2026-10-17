@@ -46,6 +46,7 @@ atlas-studio/
 | `atlas produce --topic <id>` | Render real Blender frames, synthesize Kokoro narration, and assemble MP4 |
 | `atlas produce --topic <id> --reuse-rendered` | Reassemble from a verified existing frame cache |
 | `ATLAS_RENDER_JOBS=2 atlas produce --topic <id>` | Render up to N Blender shots in parallel (default 1) |
+| `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry) |
 | `atlas publish --topic <id> --platform tiktok` | Publish whiteboard Short directly to TikTok (@focogaming) |
 | `atlas publish --topic <id> --platform both` | Publish multi-platform (YouTube + TikTok) |
 | `atlas tiktok info --user focogaming` | Inspect TikTok account connection via Upload-Post |

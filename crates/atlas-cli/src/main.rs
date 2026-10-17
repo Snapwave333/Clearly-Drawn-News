@@ -8,7 +8,7 @@ use atlas_store::Store;
 use chrono::Utc;
 use clap::{Parser, Subcommand, ValueEnum};
 use directories::{BaseDirs, ProjectDirs};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -966,6 +966,14 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     }
     println!("   {} shots planned", shot_specs.len());
 
+    let total_timeline_duration = shot_specs
+        .iter()
+        .map(|spec| spec.duration_frames as f64 / spec.fps as f64)
+        .sum::<f64>();
+    validate_format_duration(format, total_timeline_duration)
+        .map_err(|error| anyhow::anyhow!("Pre-render plan QA: {error}"))?;
+    println!("   ✓ Planned runtime {:.1}s passes {} QA", total_timeline_duration, profile.slug);
+
     let render_parallelism = std::env::var("ATLAS_RENDER_JOBS")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -1010,10 +1018,6 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
         });
     }
 
-    let total_timeline_duration = shot_specs
-        .iter()
-        .map(|spec| spec.duration_frames as f64 / spec.fps as f64)
-        .sum::<f64>();
     let (render_result, (original_score, original_sfx)) = tokio::join!(
         render_shots(&blender_pipeline, render_jobs, render_parallelism),
         generate_aiwaves_audio(
@@ -1159,20 +1163,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
             assembly.frame_count
         );
     }
-    if matches!(format, VideoFormat::Short) && assembly.duration_seconds > 60.0 {
-        anyhow::bail!(
-            "Shorts QA rejected {:.2}s output; maximum is 60 seconds",
-            assembly.duration_seconds
-        );
-    }
-    if matches!(format, VideoFormat::Long)
-        && (assembly.duration_seconds < 900.0 || assembly.duration_seconds > 1800.0)
-    {
-        anyhow::bail!(
-            "Long-form QA rejected {:.2}s output; duration must be between 15 and 30 minutes (900-1800 seconds)",
-            assembly.duration_seconds
-        );
-    }
+    validate_format_duration(format, f64::from(assembly.duration_seconds))?;
     if assembly.width != profile.width || assembly.height != profile.height {
         anyhow::bail!(
             "Release QA rejected {}x{} output; expected {}x{}",
@@ -2060,6 +2051,18 @@ async fn add_vector_thumbnail_title(path: &Path, title: &str, width: u32, height
     }
 }
 
+fn validate_format_duration(format: VideoFormat, seconds: f64) -> anyhow::Result<()> {
+    match format {
+        VideoFormat::Short if seconds > 60.0 => anyhow::bail!(
+            "Shorts QA rejected {seconds:.2}s output; maximum is 60 seconds"
+        ),
+        VideoFormat::Short => Ok(()),
+        VideoFormat::Long => atlas_core::EpisodeDurationPolicy::default()
+            .validate(seconds)
+            .map_err(|error| anyhow::anyhow!("Long-form QA rejected output: {error}")),
+    }
+}
+
 async fn render_shots(
     pipeline: &BlenderPipeline,
     jobs: Vec<atlas_blender::RenderJob>,
@@ -2598,13 +2601,13 @@ async fn import_broll(
         .map(String::as_str)
         .unwrap_or("educational concept close up");
     let video_query = queries.get(1).map(String::as_str).unwrap_or(image_query);
-    let requests = [
-        (image_query, MediaKind::Image),
-        (video_query, MediaKind::Video),
-    ];
+    let (image, video) = tokio::join!(
+        import_media_with_retry(&client, image_query, MediaKind::Image, orientation, &output_dir),
+        import_media_with_retry(&client, video_query, MediaKind::Video, orientation, &output_dir),
+    );
     let mut imported = Vec::new();
-    for (query, kind) in requests {
-        match client.import(query, kind, orientation, &output_dir).await {
+    for (query, result) in [(image_query, image), (video_query, video)] {
+        match result {
             Ok(media) => imported.push(media),
             Err(error) => eprintln!("B-roll source unavailable for {query}: {error}"),
         }
@@ -2615,6 +2618,101 @@ async fn import_broll(
         let _ = std::fs::write(output_dir.join("attribution.json"), json);
     }
     imported
+}
+
+async fn import_media_with_retry(
+    client: &StockMediaClient,
+    query: &str,
+    kind: MediaKind,
+    orientation: MediaOrientation,
+    output_dir: &Path,
+) -> atlas_core::AtlasResult<ImportedMedia> {
+    let mut attempt = 1;
+    loop {
+        match client.import(query, kind, orientation, output_dir).await {
+            Ok(media) => return Ok(media),
+            Err(error) if attempt < BROLL_IMPORT_ATTEMPTS => {
+                let delay = std::time::Duration::from_secs(2_u64.pow(attempt));
+                eprintln!(
+                    "B-roll attempt {attempt}/{BROLL_IMPORT_ATTEMPTS} for {query} failed ({error}); retrying in {}s",
+                    delay.as_secs()
+                );
+                tokio::time::sleep(delay).await;
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+const BROLL_IMPORT_ATTEMPTS: u32 = 3;
+const MAX_PRODUCTION_ATTEMPTS: u32 = 3;
+const PRODUCTION_RETRY_BASE_MINUTES: i64 = 30;
+
+#[derive(Default, Serialize, Deserialize)]
+struct ProductionFailureLedger {
+    #[serde(default)]
+    entries: std::collections::BTreeMap<String, ProductionFailure>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ProductionFailure {
+    attempts: u32,
+    last_error: String,
+    retry_after: chrono::DateTime<Utc>,
+}
+
+impl ProductionFailureLedger {
+    fn load(path: &Path) -> Self {
+        std::fs::read(path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
+    fn save(&self, path: &Path) -> anyhow::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, serde_json::to_vec_pretty(self)?)?;
+        Ok(())
+    }
+
+    fn key(video_id: &str, slug: &str) -> String {
+        format!("{video_id}:{slug}")
+    }
+
+    fn is_blocked(&self, key: &str, now: chrono::DateTime<Utc>) -> bool {
+        self.entries.get(key).is_some_and(|failure| {
+            failure.attempts >= MAX_PRODUCTION_ATTEMPTS || now < failure.retry_after
+        })
+    }
+
+    fn is_quarantined(&self, video_id: &str) -> bool {
+        let prefix = format!("{video_id}:");
+        self.entries.iter().any(|(key, failure)| {
+            key.starts_with(&prefix) && failure.attempts >= MAX_PRODUCTION_ATTEMPTS
+        })
+    }
+
+    fn record_failure(&mut self, key: &str, error: &str, now: chrono::DateTime<Utc>) -> u32 {
+        let attempts = self.entries.get(key).map_or(0, |failure| failure.attempts) + 1;
+        let backoff_minutes =
+            (PRODUCTION_RETRY_BASE_MINUTES << (attempts - 1).min(5)).min(24 * 60);
+        self.entries.insert(
+            key.to_string(),
+            ProductionFailure {
+                attempts,
+                last_error: error.to_string(),
+                retry_after: now + chrono::Duration::minutes(backoff_minutes),
+            },
+        );
+        attempts
+    }
+
+    fn clear(&mut self, key: &str) -> bool {
+        self.entries.remove(key).is_some()
+    }
 }
 
 #[derive(Clone)]
@@ -3406,8 +3504,13 @@ async fn run_daemon_cycle(
         .data_dir()
         .join("publish")
         .join("scheduler_state.json");
+    let failures_path = store
+        .data_dir()
+        .join("daemon")
+        .join("production_failures.json");
     let ledger = PublishLedger::load(&ledger_path)?;
     let mut scheduler = PublishSchedulerState::load(&scheduler_path)?;
+    let mut failures = ProductionFailureLedger::load(&failures_path);
     let now = Utc::now();
     let mut projects = store.list_projects(100)?;
     let active_count = projects
@@ -3415,6 +3518,7 @@ async fn run_daemon_cycle(
         .filter(|project| {
             matches!(project.publish.mode, PublishMode::Autonomous)
                 && !daemon_project_complete(project)
+                && !failures.is_quarantined(&project.video_id)
         })
         .count();
 
@@ -3465,7 +3569,11 @@ async fn run_daemon_cycle(
                 .join(profile.slug)
                 .join("final.mp4");
             if !video_path.is_file() {
-                cmd_produce(
+                let failure_key = ProductionFailureLedger::key(&project.video_id, profile.slug);
+                if failures.is_blocked(&failure_key, now) {
+                    continue;
+                }
+                let produced = cmd_produce(
                     store,
                     ProduceOptions {
                         topic_id: &project.video_id,
@@ -3478,7 +3586,24 @@ async fn run_daemon_cycle(
                         tiktok_draft: false,
                     },
                 )
-                .await?;
+                .await;
+                if let Err(error) = produced {
+                    let attempts = failures.record_failure(&failure_key, &error.to_string(), now);
+                    failures.save(&failures_path)?;
+                    if attempts >= MAX_PRODUCTION_ATTEMPTS {
+                        eprintln!(
+                            "Quarantined {failure_key} after {attempts} failed productions: {error}"
+                        );
+                    } else {
+                        eprintln!(
+                            "Production {failure_key} failed (attempt {attempts}/{MAX_PRODUCTION_ATTEMPTS}); backing off: {error}"
+                        );
+                    }
+                    return Ok(());
+                }
+                if failures.clear(&failure_key) {
+                    failures.save(&failures_path)?;
+                }
             }
 
             if youtube_ready {
@@ -4491,6 +4616,40 @@ async fn cmd_news(action: NewsAction) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn production_failures_back_off_then_quarantine() {
+        let now = Utc::now();
+        let mut ledger = ProductionFailureLedger::default();
+        let key = ProductionFailureLedger::key("vid_1", "long");
+        assert!(!ledger.is_blocked(&key, now));
+
+        assert_eq!(ledger.record_failure(&key, "blender crashed", now), 1);
+        assert!(ledger.is_blocked(&key, now));
+        assert!(!ledger.is_blocked(&key, now + chrono::Duration::minutes(31)));
+        assert!(!ledger.is_quarantined("vid_1"));
+
+        ledger.record_failure(&key, "blender crashed", now);
+        assert!(ledger.is_blocked(&key, now + chrono::Duration::minutes(59)));
+        assert!(!ledger.is_blocked(&key, now + chrono::Duration::minutes(61)));
+
+        ledger.record_failure(&key, "blender crashed", now);
+        assert!(ledger.is_quarantined("vid_1"));
+        assert!(!ledger.is_quarantined("vid_10"));
+        assert!(ledger.is_blocked(&key, now + chrono::Duration::days(7)));
+
+        assert!(ledger.clear(&key));
+        assert!(!ledger.is_blocked(&key, now));
+    }
+
+    #[test]
+    fn duration_qa_matches_format_limits() {
+        assert!(validate_format_duration(VideoFormat::Short, 45.0).is_ok());
+        assert!(validate_format_duration(VideoFormat::Short, 61.0).is_err());
+        assert!(validate_format_duration(VideoFormat::Long, 600.0).is_err());
+        assert!(validate_format_duration(VideoFormat::Long, 1320.0).is_ok());
+        assert!(validate_format_duration(VideoFormat::Long, 1900.0).is_err());
+    }
 
     #[test]
     fn vector_diagrams_are_unique_per_term() {
