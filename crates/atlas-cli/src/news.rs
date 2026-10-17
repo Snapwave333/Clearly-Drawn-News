@@ -113,6 +113,12 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 .map_err(anyhow::Error::msg)?;
             println!("Received Telegram Approval Gate Decision: {:?}", decision);
         }
+        NewsAction::Animatic { episode } => {
+            let episode_dir = news_dir.join(&episode);
+            let script: MasterEpisodeScript = serde_json::from_slice(&std::fs::read(episode_dir.join("script.json"))?)?;
+            let preview = news_preview::render_animatic(&episode_dir, &script).await?;
+            println!("\nPreview animatic: {} ({:.1} min)", preview.path.display(), preview.duration_seconds / 60.0);
+        }
         NewsAction::Health { runs } => {
             news_health::print_health(&news_dir, runs.max(1));
         }
@@ -233,6 +239,21 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             if let news_voice::VoiceOutcome::Voiced { narration, .. } = &voices {
                 println!("  Narration: {}", narration.display());
             }
+            let animatic = if voices.is_voiced() {
+                timer.begin("animatic");
+                match news_preview::render_animatic(&episode_dir, &episode).await {
+                    Ok(preview) => {
+                        println!("  Preview animatic: {} ({:.1} min)", preview.path.display(), preview.duration_seconds / 60.0);
+                        Some(preview.path)
+                    }
+                    Err(error) => {
+                        eprintln!("  Preview animatic skipped: {error}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
             timer.begin("filming");
             println!("\n[PHASE 6: UNREAL ENGINE 5.8 VIRTUAL STUDIO FILMING]");
@@ -263,6 +284,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                     "title": episode.episode_title,
                     "status": status,
                     "voices": voices.summary(),
+                    "preview_animatic": animatic,
                     "filming": filming.summary(),
                     "runtime_seconds": runtime_seconds,
                     "runtime_source": if voices.is_voiced() { "synthesized_audio" } else { "script_estimate" },

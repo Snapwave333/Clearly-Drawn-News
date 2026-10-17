@@ -32,7 +32,7 @@ impl AnchorVoices {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct VoicedLine {
     pub(crate) segment_number: usize,
     pub(crate) line_index: usize,

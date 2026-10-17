@@ -20,6 +20,7 @@ mod daemon;
 mod memory;
 mod news;
 mod news_health;
+mod news_preview;
 mod news_voice;
 mod planning;
 mod produce;
@@ -317,6 +318,11 @@ enum NewsAction {
         token: Option<String>,
         #[arg(long)]
         chat_id: Option<i64>,
+    },
+    #[command(about = "Render (or re-render) an episode's preview animatic from its voiced script")]
+    Animatic {
+        #[arg(long)]
+        episode: String,
     },
     #[command(about = "Show feed reliability and fact-check pass rates across recent wire runs")]
     Health {
