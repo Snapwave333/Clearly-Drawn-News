@@ -48,7 +48,7 @@ atlas-studio/
 | `ATLAS_RENDER_JOBS=2 atlas produce --topic <id>` | Render up to N Blender shots in parallel (default 1) |
 | `ATLAS_TTS_JOBS=2 atlas produce --topic <id>` | Synthesize up to N Kokoro narration segments in parallel (default 1) |
 | `atlas cache stats` | Disk usage of narration, render, B-roll, and vector caches |
-| `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched) |
+| `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched); the daemon runs this weekly with 30-day retention |
 | `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
 | `stage_timings.json` | Written next to each `final.mp4`; per-stage seconds plus the slowest stage |
 | `audio/segments/<hash>.wav` | Narration cache keyed by text, voice, speed, and language; delete to force re-synthesis |
@@ -78,7 +78,7 @@ atlas-studio/
 | `atlas-blender` | `lib.rs` | `BlenderPipeline`, `ShotSpec`, `RenderJob`, Grease Pencil script generation |
 | `atlas-kokoro` | `lib.rs` | `KokoroPipeline`, `NarrationSegment`, `load_youtube_credentials()` |
 | `atlas-ffmpeg` | `lib.rs` | `FfmpegAssembler`, `EditDecisionList`, filter_complex builder |
-| `atlas-cli` | `main.rs` | All CLI commands, vertical slice in `cmd_produce()`, multi-platform `cmd_publish()` |
+| `atlas-cli` | `main.rs` + `production/broll/daemon/cache.rs` | CLI commands and `cmd_produce()`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs` |
 
 ## Development Workflow
 
