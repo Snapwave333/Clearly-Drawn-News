@@ -46,6 +46,9 @@ atlas-studio/
 | `atlas produce --topic <id>` | Render real Blender frames, synthesize Kokoro narration, and assemble MP4 |
 | `atlas produce --topic <id> --reuse-rendered` | Reassemble from a verified existing frame cache |
 | `ATLAS_RENDER_JOBS=2 atlas produce --topic <id>` | Render up to N Blender shots in parallel (default 1) |
+| `ATLAS_TTS_JOBS=2 atlas produce --topic <id>` | Synthesize up to N Kokoro narration segments in parallel (default 1) |
+| `atlas cache stats` | Disk usage of narration, render, B-roll, and vector caches |
+| `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched) |
 | `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
 | `stage_timings.json` | Written next to each `final.mp4`; per-stage seconds plus the slowest stage |
 | `audio/segments/<hash>.wav` | Narration cache keyed by text, voice, speed, and language; delete to force re-synthesis |

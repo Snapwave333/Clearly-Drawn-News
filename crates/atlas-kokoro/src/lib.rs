@@ -71,10 +71,12 @@ pub struct VoiceConfig {
 }
 
 /// Kokoro TTS synthesis pipeline.
+#[derive(Clone)]
 pub struct KokoroPipeline {
     kokoro_exe: PathBuf,
     voice_config: VoiceConfig,
     workspace_dir: PathBuf,
+    parallelism: usize,
 }
 
 impl KokoroPipeline {
@@ -87,7 +89,13 @@ impl KokoroPipeline {
             kokoro_exe: kokoro_exe.into(),
             voice_config,
             workspace_dir: workspace_dir.into(),
+            parallelism: 1,
         }
+    }
+
+    pub fn with_parallelism(mut self, parallelism: usize) -> Self {
+        self.parallelism = parallelism.max(1);
+        self
     }
 
     /// Synthesize a single narration segment.
@@ -155,8 +163,9 @@ impl KokoroPipeline {
         cache_key: &str,
         output_file: &Path,
     ) -> AtlasResult<()> {
-        let partial_file = output_dir.join(format!("{cache_key}.partial.wav"));
-        let input_file = output_dir.join(format!("{cache_key}.txt"));
+        let attempt = Uuid::new_v4().simple();
+        let partial_file = output_dir.join(format!("{cache_key}.{attempt}.partial.wav"));
+        let input_file = output_dir.join(format!("{cache_key}.{attempt}.txt"));
         tokio::fs::write(&input_file, &segment.text).await?;
         let model_dir = directories::BaseDirs::new()
             .map(|dirs| dirs.home_dir().join(".kokoro"))
@@ -230,14 +239,16 @@ impl KokoroPipeline {
         segments: Vec<NarrationSegment>,
         track_id: String,
     ) -> AtlasResult<NarrationTrack> {
-        let mut audio_segments = Vec::new();
-        let mut total_duration = 0.0f32;
-
-        for segment in segments {
-            let audio = self.synthesize_segment(&segment).await?;
-            total_duration += audio.duration_seconds + segment.pause_after_ms as f32 / 1000.0;
-            audio_segments.push(audio);
-        }
+        let pauses = segments
+            .iter()
+            .map(|segment| segment.pause_after_ms as f32 / 1000.0)
+            .sum::<f32>();
+        let audio_segments = self.synthesize_all(segments).await?;
+        let total_duration = audio_segments
+            .iter()
+            .map(|audio| audio.duration_seconds)
+            .sum::<f32>()
+            + pauses;
 
         let combined_file = self.combine_segments(&audio_segments, &track_id).await?;
 
@@ -251,6 +262,45 @@ impl KokoroPipeline {
             sample_rate,
             combined_file: Some(combined_file),
         })
+    }
+
+    async fn synthesize_all(&self, segments: Vec<NarrationSegment>) -> AtlasResult<Vec<AudioSegment>> {
+        if self.parallelism == 1 {
+            let mut audio_segments = Vec::with_capacity(segments.len());
+            for segment in &segments {
+                audio_segments.push(self.synthesize_segment(segment).await?);
+            }
+            return Ok(audio_segments);
+        }
+        let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(self.parallelism));
+        let mut tasks = tokio::task::JoinSet::new();
+        let count = segments.len();
+        for (index, segment) in segments.into_iter().enumerate() {
+            let pipeline = self.clone();
+            let permits = permits.clone();
+            tasks.spawn(async move {
+                let _permit = permits
+                    .acquire_owned()
+                    .await
+                    .map_err(|error| AtlasError::Render(error.to_string()))?;
+                pipeline
+                    .synthesize_segment(&segment)
+                    .await
+                    .map(|audio| (index, audio))
+            });
+        }
+        let mut ordered: Vec<Option<AudioSegment>> = (0..count).map(|_| None).collect();
+        while let Some(joined) = tasks.join_next().await {
+            let joined = joined.map_err(|error| AtlasError::Render(error.to_string()))?;
+            match joined {
+                Ok((index, audio)) => ordered[index] = Some(audio),
+                Err(error) => {
+                    tasks.abort_all();
+                    return Err(error);
+                }
+            }
+        }
+        Ok(ordered.into_iter().flatten().collect())
     }
 
     /// Combine audio segments with pauses into a single file.
