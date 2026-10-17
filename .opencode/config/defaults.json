@@ -10,7 +10,7 @@
     "max_parallel_inference": 2
   },
   "schedule": {
-    "trend_poll_hours": 6,
+    "trend_poll_hours": 3,
     "analytics_poll_hours": 24,
     "retention_initial_delay_hours": 48,
     "retention_followups_after_days": [
@@ -19,7 +19,7 @@
       14,
       28
     ],
-    "daily_video_limit": 1
+    "daily_video_limit": 4
   },
   "render": {
     "default_engine": "blender",

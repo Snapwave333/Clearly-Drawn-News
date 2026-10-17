@@ -166,12 +166,12 @@ impl PublishSchedulerState {
 impl Default for PublishCadencePolicy {
     fn default() -> Self {
         Self {
-            max_public_per_24_hours: 3,
-            max_long_per_24_hours: 1,
-            max_shorts_per_24_hours: 2,
-            max_tiktok_per_24_hours: 5,
-            youtube_minimum_spacing_minutes: 240,
-            tiktok_minimum_spacing_minutes: 180,
+            max_public_per_24_hours: 12,
+            max_long_per_24_hours: 4,
+            max_shorts_per_24_hours: 8,
+            max_tiktok_per_24_hours: 12,
+            youtube_minimum_spacing_minutes: 120,
+            tiktok_minimum_spacing_minutes: 90,
             video_insert_daily_reserve: 10,
         }
     }

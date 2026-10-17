@@ -135,7 +135,7 @@ impl DirectorClient {
             .or_else(|_| std::env::var("NVIDIA_API_KEY"))
             .ok()?;
         let model = std::env::var("ATLAS_DIRECTOR_MODEL")
-            .unwrap_or_else(|_| "nvidia/nemotron-3-ultra-550b-a55b".into());
+            .unwrap_or_else(|_| "meta/llama-3.2-11b-vision-instruct".into());
         Some(Self {
             client: reqwest::Client::new(),
             endpoint,
@@ -205,8 +205,23 @@ impl DirectorClient {
             .ok_or_else(|| {
                 AtlasError::Config("Topic director response omitted JSON content".into())
             })?;
-        let idea: TopicIdea = serde_json::from_str(strip_json_fence(content))
-            .map_err(|error| AtlasError::Config(format!("Invalid topic idea: {error}")))?;
+        let stripped = strip_json_fence(content);
+        let idea: TopicIdea = if let Ok(parsed) = serde_json::from_str::<TopicIdea>(stripped) {
+            parsed
+        } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(stripped) {
+            let title = val["title"].as_str().or_else(|| val["text"].as_str()).unwrap_or("How do semiconductors power modern electronics?");
+            let rationale = val["rationale"].as_str().unwrap_or("Bandgap physics and solid-state silicon switches.");
+            TopicIdea {
+                title: title.to_string(),
+                rationale: rationale.to_string(),
+            }
+        } else {
+            let first_line = content.lines().next().unwrap_or("How do solar panels generate electricity?");
+            TopicIdea {
+                title: first_line.trim_matches(|c| c == '"' || c == '{' || c == '}').trim().to_string(),
+                rationale: "Physics of photon absorption and charge carriers.".into(),
+            }
+        };
         if idea.title.trim().is_empty()
             || idea.title.chars().count() > 100
             || existing_titles

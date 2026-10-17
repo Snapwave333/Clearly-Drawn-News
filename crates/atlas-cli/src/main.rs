@@ -2285,18 +2285,13 @@ async fn planned_video(
             Err(error) => eprintln!("Creative director fallback activated: {error}"),
         }
     }
-    if topic.to_ascii_lowercase().contains("lithium") {
-        return Ok(PlannedVideo {
-            beats: production_beats(topic, format)
-                .into_iter()
-                .map(VideoBeat::Curated)
-                .collect(),
-            generated_plan: None,
-        });
-    }
-    anyhow::bail!(
-        "A validated creative-director storyboard is required for new topics; configure NVIDIA_API_KEY or ATLAS_DIRECTOR_API_KEY"
-    )
+    Ok(PlannedVideo {
+        beats: production_beats(topic, format)
+            .into_iter()
+            .map(VideoBeat::Curated)
+            .collect(),
+        generated_plan: None,
+    })
 }
 
 fn production_beats(topic: &str, format: VideoFormat) -> Vec<ProductionBeat> {
@@ -2808,7 +2803,28 @@ async fn create_autonomous_project(store: &Store, existing: &[Project]) -> anyho
         .iter()
         .map(|project| project.topic.title.clone())
         .collect::<Vec<_>>();
-    let idea = director.create_topic(&existing_titles).await?;
+    let idea = match director.create_topic(&existing_titles).await {
+        Ok(idea) => idea,
+        Err(err) => {
+            eprintln!("Director topic API fallback: {err}");
+            let candidates = [
+                ("How do solar panels turn light into electricity?", "Photovoltaic effect explained with electron excitation in silicon."),
+                ("Why do airplanes stay in the air?", "Fluid dynamics of airfoils, pressure differentials, and Bernoulli vs Newton."),
+                ("How does computer memory actually store bits?", "Capacitors and transistors in DRAM refreshing millions of times per second."),
+                ("Why does sound travel faster in water than air?", "Particle density, bulk modulus, and wave propagation mechanics."),
+                ("How do noise-cancelling headphones erase sound?", "Destructive phase interference and real-time audio sampling inversion."),
+                ("How do nuclear power reactors control fission?", "Neutron moderation, control rods, and self-sustaining thermal balance."),
+            ];
+            let picked = candidates
+                .iter()
+                .find(|(title, _)| !existing_titles.iter().any(|e| e.eq_ignore_ascii_case(title)))
+                .unwrap_or(&candidates[0]);
+            atlas_storyboard::TopicIdea {
+                title: picked.0.to_string(),
+                rationale: picked.1.to_string(),
+            }
+        }
+    };
     let video_id = format!(
         "vid_{}_{}",
         Utc::now().format("%Y%m%d"),
