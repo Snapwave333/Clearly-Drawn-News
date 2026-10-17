@@ -8,7 +8,9 @@ use atlas_policy::copyright::{
 use atlas_policy::telegram::{
     ApprovalDecision, EpisodeSlateProposal, ProposedNewsStory, TelegramApprovalGate,
 };
-use atlas_storyboard::two_anchor_script::TwoAnchorScriptWriter;
+use atlas_storyboard::DirectorClient;
+use atlas_storyboard::story_script::{NewsroomWriter, ScriptMethod, StoryBrief};
+use atlas_storyboard::two_anchor_script::{MasterEpisodeScript, TwoAnchorScriptWriter};
 
 const DEFAULT_UE_CMD: &str =
     r"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe";
@@ -25,7 +27,6 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
     let news_desk = AnimationNewsDesk::new();
     let fact_checker = NewsFactChecker::default();
-    let script_writer = TwoAnchorScriptWriter::new();
     let policy = EpisodeDurationPolicy::default();
     let news_dir = store.data_dir().join("news");
 
@@ -60,18 +61,25 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             );
         }
         NewsAction::Slate => {
-            let report = fact_checker.verify_candidates(load_wire(&news_desk).await.items);
+            let wire = load_wire(&news_desk).await;
+            let origin = wire.origin;
+            let report = fact_checker.verify_candidates(wire.items);
             let (episode_id, _) = next_episode(&news_dir);
             let title = episode_title(&episode_id, &report);
-            println!("\nGenerating 22-minute, 8-segment two-anchor broadcast script...");
-            let episode = script_writer.generate_broadcast_episode(&title, &today());
-            episode.validate_duration(&policy)?;
+            println!("\nWriting the two-anchor broadcast script from {} verified stories...", report.passed_stories.len());
+            let (episode, provenance) = draft_script(origin, &report, &title, &policy).await;
 
             println!("\nEpisode Slate: {}", episode.episode_title);
+            println!("Script method: {}", provenance["method"].as_str().unwrap_or("unknown"));
+            let compliance = match episode.validate_duration(&policy) {
+                Ok(()) => "Compliant with 15–30 min constraint".to_string(),
+                Err(error) => format!("NOT COMPLIANT: {error}"),
+            };
             println!(
-                "Total Runtime: {:.1}s ({:.1} min) [Compliant with 15–30 min constraint]",
+                "Total Runtime: {:.1}s ({:.1} min) [{}]",
                 episode.total_duration_secs,
-                episode.total_duration_secs / 60.0
+                episode.total_duration_secs / 60.0,
+                compliance
             );
             println!("Segments ({} total):", episode.segments.len());
             for seg in &episode.segments {
@@ -188,9 +196,18 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             timer.begin("script");
             println!("\n[PHASE 3: SCRIPT & DIALOGUE GENERATION]");
             let title = episode_title(&episode_id, &report);
-            let episode = script_writer.generate_broadcast_episode(&title, &today());
-            episode.validate_duration(&policy)?;
+            let (episode, provenance) = draft_script(wire_origin, &report, &title, &policy).await;
             write_json(&episode_dir.join("script.json"), &episode)?;
+            write_json(&episode_dir.join("script_provenance.json"), &provenance)?;
+            println!("  Script method: {}", provenance["method"].as_str().unwrap_or("unknown"));
+            if let Err(error) = episode.validate_duration(&policy) {
+                let hint = if provenance["method"] == "template" {
+                    " Template segments are short by design; set NVIDIA_API_KEY (or ATLAS_DIRECTOR_API_KEY) so the director writes full-length segments."
+                } else {
+                    ""
+                };
+                anyhow::bail!("Production halted: {error}.{hint}");
+            }
             println!(
                 "  {}: {} segments totaling {:.1}s ({:.1} min).",
                 episode.episode_title,
@@ -233,6 +250,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                     "filming": filming.summary(),
                     "runtime_seconds": episode.total_duration_secs,
                     "wire_origin": wire_origin,
+                    "script_method": provenance["method"],
                     "company": atlas_core::COMPANY_NAME,
                 }),
             )?;
@@ -303,6 +321,70 @@ async fn film_in_unreal() -> anyhow::Result<FilmingOutcome> {
         anyhow::bail!("Unreal Engine filming failed with {status}");
     }
     Ok(FilmingOutcome::Filmed)
+}
+
+fn outlet_name(url: &str) -> Option<String> {
+    let host = url.split("//").nth(1)?.split('/').next()?.trim_start_matches("www.");
+    let known = atlas_media::news_wire::FEEDS
+        .iter()
+        .find(|feed| feed.url.contains(host))
+        .map(|feed| feed.name.to_string());
+    Some(known.unwrap_or_else(|| host.to_string()))
+}
+
+fn story_briefs(report: &FactCheckReport) -> Vec<StoryBrief> {
+    report
+        .passed_stories
+        .iter()
+        .map(|story| StoryBrief {
+            headline: story.title.clone(),
+            summary: story.factual_summary.clone(),
+            category: story.category.as_str().to_string(),
+            organization: story.studio_or_organization.clone(),
+            outlets: std::iter::once(story.primary_source_url.as_str())
+                .chain(story.secondary_source_url.as_deref())
+                .filter_map(outlet_name)
+                .collect(),
+        })
+        .collect()
+}
+
+async fn draft_script(
+    origin: WireOrigin,
+    report: &FactCheckReport,
+    title: &str,
+    policy: &EpisodeDurationPolicy,
+) -> (MasterEpisodeScript, serde_json::Value) {
+    if origin == WireOrigin::CuratedFallback {
+        let script = TwoAnchorScriptWriter::new().generate_broadcast_episode(title, &today());
+        return (script, serde_json::json!({ "method": "curated", "note": "hand-written script for the curated fallback stories" }));
+    }
+    let briefs = story_briefs(report);
+    let writer = NewsroomWriter::new();
+    let drafted = match DirectorClient::from_env() {
+        Some(director) => writer.director_episode(&director, title, &today(), &briefs, policy).await,
+        None => writer.template_episode(title, &today(), &briefs, policy),
+    };
+    for error in &drafted.director_errors {
+        eprintln!("  Director fell back to template: {error}");
+    }
+    let director_segments = drafted
+        .segment_methods
+        .iter()
+        .filter(|method| **method == ScriptMethod::Director)
+        .count();
+    let method = match director_segments {
+        0 => "template",
+        n if n == drafted.segment_methods.len() => "director",
+        _ => "director_with_template_fallbacks",
+    };
+    let provenance = serde_json::json!({
+        "method": method,
+        "segment_methods": drafted.segment_methods,
+        "director_errors": drafted.director_errors,
+        "briefs": briefs,
+    });
+    (drafted.script, provenance)
 }
 
 async fn load_wire(news_desk: &AnimationNewsDesk) -> NewsWire {
@@ -446,6 +528,14 @@ mod tests {
         }
         assert_eq!(next_episode(&dir), ("EP-008".into(), 8));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn outlets_are_named_from_source_urls() {
+        assert_eq!(outlet_name("https://www.cartoonbrew.com/anime/csm").as_deref(), Some("Cartoon Brew"));
+        assert_eq!(outlet_name("https://www.animenewsnetwork.com/news/x").as_deref(), Some("Anime News Network"));
+        assert_eq!(outlet_name("https://variety.com/2026/film").as_deref(), Some("variety.com"));
+        assert_eq!(outlet_name("not a url"), None);
     }
 
     #[test]
