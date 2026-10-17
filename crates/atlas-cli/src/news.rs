@@ -480,6 +480,7 @@ fn slate_proposal(
                 headline: s.title.clone(),
                 factual_summary: s.factual_summary.clone(),
                 source_url: s.primary_source_url.clone(),
+                secondary_source_url: s.secondary_source_url.clone(),
                 announcement_date: s.announcement_date.clone(),
                 estimated_duration_mins: s.estimated_duration_mins,
                 editorial_angle: s.editorial_angle.clone(),

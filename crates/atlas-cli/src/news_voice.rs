@@ -49,6 +49,7 @@ pub(crate) enum VoiceOutcome {
         narration: PathBuf,
         total_seconds: f32,
         lines: usize,
+        loudness: atlas_ffmpeg::LoudnessReport,
     },
     Skipped(String),
 }
@@ -56,9 +57,11 @@ pub(crate) enum VoiceOutcome {
 impl VoiceOutcome {
     pub(crate) fn summary(&self) -> String {
         match self {
-            Self::Voiced { total_seconds, lines, .. } => format!(
-                "Anchor voices synthesized: {lines} lines, {:.1} minutes of narration",
-                total_seconds / 60.0
+            Self::Voiced { total_seconds, lines, loudness, .. } => format!(
+                "Anchor voices synthesized: {lines} lines, {:.1} minutes of narration at {:.1} LUFS / {:.1} dBTP",
+                total_seconds / 60.0,
+                loudness.output_lufs,
+                loudness.output_true_peak_dbtp
             ),
             Self::Skipped(reason) => format!("Anchor voices skipped: {reason}"),
         }
@@ -191,7 +194,13 @@ pub(crate) async fn voice_episode(
         .combined_file
         .ok_or_else(|| anyhow::anyhow!("Kokoro did not produce a combined narration track"))?;
     let narration = audio_dir.join("episode_narration.wav");
-    std::fs::copy(&combined, &narration)?;
+    let loudness = atlas_ffmpeg::normalize_loudness(
+        "ffmpeg",
+        &combined,
+        &narration,
+        atlas_ffmpeg::LoudnessTarget::default(),
+    )
+    .await?;
     let total_seconds = durations.iter().sum::<f32>();
     std::fs::write(
         episode_dir.join("voice_timeline.json"),
@@ -199,6 +208,7 @@ pub(crate) async fn voice_episode(
             "narration": narration,
             "total_seconds": total_seconds,
             "voices": { "marcus": voices.marcus, "elena": voices.elena },
+            "loudness": loudness,
             "lines": timeline,
         }))?,
     )?;
@@ -206,6 +216,7 @@ pub(crate) async fn voice_episode(
         narration,
         total_seconds,
         lines: timeline.len(),
+        loudness,
     })
 }
 

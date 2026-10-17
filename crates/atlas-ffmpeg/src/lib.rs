@@ -503,6 +503,117 @@ pub struct OutputMetadata {
 
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct LoudnessTarget {
+    pub integrated_lufs: f64,
+    pub true_peak_dbtp: f64,
+    pub loudness_range_lu: f64,
+}
+
+impl Default for LoudnessTarget {
+    fn default() -> Self {
+        Self {
+            integrated_lufs: -16.0,
+            true_peak_dbtp: -1.5,
+            loudness_range_lu: 11.0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LoudnessReport {
+    pub target: LoudnessTarget,
+    pub input_lufs: f64,
+    pub input_true_peak_dbtp: f64,
+    pub output_lufs: f64,
+    pub output_true_peak_dbtp: f64,
+    pub output_loudness_range_lu: f64,
+}
+
+fn loudnorm_stats(stderr: &str) -> AtlasResult<serde_json::Value> {
+    let start = stderr
+        .rfind('{')
+        .ok_or_else(|| AtlasError::Render("loudnorm produced no measurement".into()))?;
+    let end = stderr[start..]
+        .find('}')
+        .map(|offset| start + offset + 1)
+        .ok_or_else(|| AtlasError::Render("loudnorm measurement was truncated".into()))?;
+    serde_json::from_str(&stderr[start..end])
+        .map_err(|error| AtlasError::Render(format!("Invalid loudnorm measurement: {error}")))
+}
+
+fn stat(stats: &serde_json::Value, key: &str) -> AtlasResult<f64> {
+    stats[key]
+        .as_str()
+        .and_then(|value| value.trim().parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+        .ok_or_else(|| AtlasError::Render(format!("loudnorm measurement missing {key}")))
+}
+
+async fn run_loudnorm(ffmpeg_exe: &Path, args: &[String]) -> AtlasResult<serde_json::Value> {
+    let output = Command::new(ffmpeg_exe)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
+        .map_err(|error| AtlasError::Render(format!("Failed to start FFmpeg: {error}")))?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(AtlasError::Render(format!("FFmpeg loudnorm failed: {stderr}")));
+    }
+    loudnorm_stats(&stderr)
+}
+
+pub async fn normalize_loudness(
+    ffmpeg_exe: impl AsRef<Path>,
+    input: &Path,
+    output: &Path,
+    target: LoudnessTarget,
+) -> AtlasResult<LoudnessReport> {
+    let ffmpeg_exe = ffmpeg_exe.as_ref();
+    let base = format!(
+        "loudnorm=I={}:TP={}:LRA={}",
+        target.integrated_lufs, target.true_peak_dbtp, target.loudness_range_lu
+    );
+    let input_arg = input.to_string_lossy().to_string();
+    let measured = run_loudnorm(
+        ffmpeg_exe,
+        &[
+            "-hide_banner".into(), "-nostats".into(), "-i".into(), input_arg.clone(),
+            "-af".into(), format!("{base}:print_format=json"), "-f".into(), "null".into(), "-".into(),
+        ],
+    )
+    .await?;
+    let second_pass = format!(
+        "{base}:measured_I={}:measured_TP={}:measured_LRA={}:measured_thresh={}:offset={}:linear=true:print_format=json",
+        stat(&measured, "input_i")?,
+        stat(&measured, "input_tp")?,
+        stat(&measured, "input_lra")?,
+        stat(&measured, "input_thresh")?,
+        stat(&measured, "target_offset")?,
+    );
+    let applied = run_loudnorm(
+        ffmpeg_exe,
+        &[
+            "-hide_banner".into(), "-nostats".into(), "-y".into(), "-i".into(), input_arg,
+            "-af".into(), second_pass, "-ar".into(), "48000".into(), "-c:a".into(), "pcm_s16le".into(),
+            output.to_string_lossy().to_string(),
+        ],
+    )
+    .await?;
+    info!("Normalized loudness for {}", output.display());
+    Ok(LoudnessReport {
+        target,
+        input_lufs: stat(&measured, "input_i")?,
+        input_true_peak_dbtp: stat(&measured, "input_tp")?,
+        output_lufs: stat(&applied, "output_i")?,
+        output_true_peak_dbtp: stat(&applied, "output_tp")?,
+        output_loudness_range_lu: stat(&applied, "output_lra")?,
+    })
+}
+
 impl std::fmt::Display for CaptionFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -516,6 +627,39 @@ impl std::fmt::Display for CaptionFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn normalizes_quiet_audio_to_target() {
+        if std::process::Command::new("ffmpeg").arg("-version").output().is_err() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("atlas_loudnorm_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let quiet = dir.join("quiet.wav");
+        let made = std::process::Command::new("ffmpeg")
+            .args(["-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=8", "-af", "volume=0.05"])
+            .arg(&quiet)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let output = dir.join("loud.wav");
+        let report = normalize_loudness("ffmpeg", &quiet, &output, LoudnessTarget::default()).await.unwrap();
+        assert!(report.input_lufs < -25.0);
+        assert!((report.output_lufs - -16.0).abs() < 1.0, "{report:?}");
+        assert!(report.output_true_peak_dbtp <= -1.0);
+        assert!(output.is_file());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn parses_loudnorm_json_from_ffmpeg_stderr() {
+        let stderr = "[Parsed_loudnorm_0 @ 0x1] \n{\n\t\"input_i\" : \"-27.31\",\n\t\"input_tp\" : \"-9.80\",\n\t\"input_lra\" : \"2.10\",\n\t\"input_thresh\" : \"-37.50\",\n\t\"target_offset\" : \"0.20\"\n}\n";
+        let stats = loudnorm_stats(stderr).unwrap();
+        assert_eq!(stat(&stats, "input_i").unwrap(), -27.31);
+        assert_eq!(stat(&stats, "target_offset").unwrap(), 0.2);
+        assert!(stat(&stats, "missing").is_err());
+        assert!(loudnorm_stats("no json here").is_err());
+    }
     use tempfile::tempdir;
 
     #[test]

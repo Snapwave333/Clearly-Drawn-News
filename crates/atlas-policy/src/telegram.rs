@@ -31,6 +31,8 @@ pub struct ProposedNewsStory {
     pub headline: String,
     pub factual_summary: String,
     pub source_url: String,
+    #[serde(default)]
+    pub secondary_source_url: Option<String>,
     pub announcement_date: String,
     pub estimated_duration_mins: f64,
     pub editorial_angle: String,
@@ -86,27 +88,21 @@ impl TelegramApprovalGate {
         })
     }
 
-    pub fn format_slate_markdown(&self, slate: &EpisodeSlateProposal) -> String {
-        let mut msg = "📺 *CLEARLY DRAWN NEWS — EDITORIAL SLATE APPROVAL*\n".to_string();
-        msg.push_str(&format!(
-            "Episode: *#{}* (`{}`) | Target: *{:.1} mins* (15–30m Range)\n",
-            slate.episode_number, slate.episode_id, slate.target_duration_mins
-        ));
-        msg.push_str("═══════════════════════════════════════\n\n");
-
-        for (i, s) in slate.stories.iter().enumerate() {
-            let verified_badge = if s.verified { "✅ Verified" } else { "⚠️ Needs Source" };
-            msg.push_str(&format!(
-                "*{}. [{}] {}* (_{:.1}m_ | {})\n",
-                i + 1, s.category, s.headline, s.estimated_duration_mins, verified_badge
-            ));
-            msg.push_str(&format!("• *Facts:* {}\n", s.factual_summary));
-            msg.push_str(&format!("• *Angle:* {}\n", s.editorial_angle));
-            msg.push_str(&format!("• *Source:* [{}]({})\n\n", s.announcement_date, s.source_url));
+    pub fn format_slate_message(&self, slate: &EpisodeSlateProposal) -> String {
+        for (fact_chars, include_angle) in [(320, true), (200, true), (160, false), (90, false)] {
+            let message = render_slate(slate, slate.stories.len(), fact_chars, include_angle);
+            if message.chars().count() <= TELEGRAM_MESSAGE_BUDGET {
+                return message;
+            }
         }
-
-        msg.push_str("⚠️ *MANDATORY APPROVAL GATE*: Production is paused until you click an action below.");
-        msg
+        let mut shown = slate.stories.len();
+        loop {
+            let message = render_slate(slate, shown, 90, false);
+            if message.chars().count() <= TELEGRAM_MESSAGE_BUDGET || shown == 0 {
+                return message;
+            }
+            shown -= 1;
+        }
     }
 
     pub async fn get_bot_info(&self) -> Result<serde_json::Value, String> {
@@ -122,7 +118,7 @@ impl TelegramApprovalGate {
 
     pub async fn send_slate(&mut self, slate: &EpisodeSlateProposal) -> Result<i64, String> {
         let chat_id = self.resolve_chat_id().await?;
-        let text = self.format_slate_markdown(slate);
+        let text = self.format_slate_message(slate);
         let ep = &slate.episode_id;
 
         let keyboard = serde_json::json!({
@@ -142,7 +138,7 @@ impl TelegramApprovalGate {
         let payload = serde_json::json!({
             "chat_id": chat_id,
             "text": text,
-            "parse_mode": "Markdown",
+            "parse_mode": "HTML",
             "disable_web_page_preview": true,
             "reply_markup": keyboard
         });
@@ -160,20 +156,20 @@ impl TelegramApprovalGate {
     pub async fn send_copyright_card(&mut self, card: &CopyrightReviewCard) -> Result<i64, String> {
         let chat_id = self.resolve_chat_id().await?;
         let text = format!(
-            "🛡️ *CLEARLY DRAWN NEWS — MEDIA RIGHTS REVIEW*\n\
-             Asset: `{}` | Episode: `{}`\n\
+            "🛡️ <b>CLEARLY DRAWN NEWS — MEDIA RIGHTS REVIEW</b>\n\
+             Asset: <code>{}</code> | Episode: <code>{}</code>\n\
              ═══════════════════════════════════════\n\
-             • *Description:* {}\n\
-             • *Rights Holder:* {}\n\
-             • *Duration:* {:.1}s\n\
-             • *Editorial Purpose:* {}\n\
-             • *Fair Use Factor:* {}\n\
-             • *Risk Assessment:* *{}*\n\
-             • *Safe Replacement:* {}\n\n\
-             *Action Required:* Clearance approval required before final master rendering.",
-            card.asset_id, card.episode_id, card.asset_description, card.rights_holder,
-            card.intended_duration_secs, card.editorial_purpose, card.fair_use_summary,
-            card.risk_level, card.proposed_replacement
+             • <b>Description:</b> {}\n\
+             • <b>Rights Holder:</b> {}\n\
+             • <b>Duration:</b> {:.1}s\n\
+             • <b>Editorial Purpose:</b> {}\n\
+             • <b>Fair Use Factor:</b> {}\n\
+             • <b>Risk Assessment:</b> <b>{}</b>\n\
+             • <b>Safe Replacement:</b> {}\n\n\
+             <b>Action Required:</b> Clearance approval required before final master rendering.",
+            escape_html(&card.asset_id), escape_html(&card.episode_id), escape_html(&card.asset_description),
+            escape_html(&card.rights_holder), card.intended_duration_secs, escape_html(&card.editorial_purpose),
+            escape_html(&card.fair_use_summary), escape_html(&card.risk_level), escape_html(&card.proposed_replacement)
         );
 
         let id = &card.review_id;
@@ -194,7 +190,7 @@ impl TelegramApprovalGate {
         let payload = serde_json::json!({
             "chat_id": chat_id,
             "text": text,
-            "parse_mode": "Markdown",
+            "parse_mode": "HTML",
             "disable_web_page_preview": true,
             "reply_markup": keyboard
         });
@@ -313,6 +309,71 @@ impl TelegramApprovalGate {
     }
 }
 
+const TELEGRAM_MESSAGE_BUDGET: usize = 3900;
+
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn clip(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let cut = text.chars().take(max_chars).collect::<String>();
+    format!("{}…", cut.trim_end())
+}
+
+fn render_slate(slate: &EpisodeSlateProposal, shown: usize, fact_chars: usize, include_angle: bool) -> String {
+    let corroborated = slate.stories.iter().filter(|s| s.secondary_source_url.is_some()).count();
+    let mut msg = format!(
+        "📺 <b>CLEARLY DRAWN NEWS — EDITORIAL SLATE APPROVAL</b>\n\
+         Episode: <b>#{}</b> (<code>{}</code>) | Target: <b>{:.1} mins</b> (15–30m range)\n\
+         Sourcing: <b>{}/{}</b> stories confirmed by two outlets\n\
+         ═══════════════════════════════════════\n\n",
+        slate.episode_number,
+        escape_html(&slate.episode_id),
+        slate.target_duration_mins,
+        corroborated,
+        slate.stories.len()
+    );
+    for (i, s) in slate.stories.iter().take(shown).enumerate() {
+        let badge = match (&s.secondary_source_url, s.verified) {
+            (_, false) => "⚠️ Needs source",
+            (Some(_), true) => "✅✅ Two sources",
+            (None, true) => "✅ Single source",
+        };
+        msg.push_str(&format!(
+            "<b>{}. [{}] {}</b> (<i>{:.1}m</i> | {})\n",
+            i + 1,
+            escape_html(&s.category),
+            escape_html(&s.headline),
+            s.estimated_duration_mins,
+            badge
+        ));
+        msg.push_str(&format!("• <b>Facts:</b> {}\n", escape_html(&clip(&s.factual_summary, fact_chars))));
+        if include_angle {
+            msg.push_str(&format!("• <b>Angle:</b> {}\n", escape_html(&s.editorial_angle)));
+        }
+        msg.push_str(&format!(
+            "• <b>Sources:</b> <a href=\"{}\">{}</a>",
+            escape_html(&s.source_url),
+            escape_html(&s.announcement_date)
+        ));
+        if let Some(second) = &s.secondary_source_url {
+            msg.push_str(&format!(" · <a href=\"{}\">second outlet</a>", escape_html(second)));
+        }
+        msg.push_str("\n\n");
+    }
+    if shown < slate.stories.len() {
+        msg.push_str(&format!(
+            "… plus {} more stories in the episode's <code>slate.json</code>.\n\n",
+            slate.stories.len() - shown
+        ));
+    }
+    msg.push_str("⚠️ <b>MANDATORY APPROVAL GATE</b>: Production is paused until you click an action below.");
+    msg
+}
+
 fn redact_error(error: reqwest::Error) -> String {
     error.without_url().to_string()
 }
@@ -320,6 +381,58 @@ fn redact_error(error: reqwest::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn story(headline: &str, summary: &str, second: Option<&str>) -> ProposedNewsStory {
+        ProposedNewsStory {
+            story_id: headline.into(),
+            category: "Anime".into(),
+            headline: headline.into(),
+            factual_summary: summary.into(),
+            source_url: "https://www.animenewsnetwork.com/news/a?b=1&c=2".into(),
+            secondary_source_url: second.map(Into::into),
+            announcement_date: "2026-10-17".into(),
+            estimated_duration_mins: 3.5,
+            editorial_angle: "Marcus hypes; Elena checks the schedule.".into(),
+            verified: true,
+        }
+    }
+
+    #[test]
+    fn slate_escapes_live_headlines_and_shows_sourcing() {
+        let gate = TelegramApprovalGate::new(Some("1:x".into()), None).unwrap();
+        let slate = EpisodeSlateProposal {
+            episode_id: "EP-002".into(),
+            episode_number: 2,
+            target_duration_mins: 22.0,
+            stories: vec![
+                story("<Oshi_no_Ko> *Season 3* & [Movie]", "Doga Kobo confirmed it.", Some("https://www.cartoonbrew.com/x")),
+                story("Toei Update", "Single report.", None),
+            ],
+        };
+        let msg = gate.format_slate_message(&slate);
+        assert!(msg.contains("&lt;Oshi_no_Ko&gt; *Season 3* &amp; [Movie]"));
+        assert!(msg.contains("1/2</b> stories confirmed by two outlets"));
+        assert!(msg.contains("✅✅ Two sources"));
+        assert!(msg.contains("✅ Single source"));
+        assert!(msg.contains("href=\"https://www.animenewsnetwork.com/news/a?b=1&amp;c=2\""));
+        assert!(!msg.contains("<Oshi"));
+    }
+
+    #[test]
+    fn slate_fits_telegram_limit() {
+        let gate = TelegramApprovalGate::new(Some("1:x".into()), None).unwrap();
+        let long = "Detailed confirmed facts about the production. ".repeat(40);
+        let slate = EpisodeSlateProposal {
+            episode_id: "EP-003".into(),
+            episode_number: 3,
+            target_duration_mins: 25.0,
+            stories: (0..30).map(|i| story(&format!("Story {i}"), &long, Some("https://x.test"))).collect(),
+        };
+        let msg = gate.format_slate_message(&slate);
+        assert!(msg.chars().count() <= TELEGRAM_MESSAGE_BUDGET);
+        assert!(msg.contains("more stories in the episode"));
+        assert!(msg.ends_with("click an action below."));
+    }
 
     #[test]
     fn gate_requires_a_bot_token() {
