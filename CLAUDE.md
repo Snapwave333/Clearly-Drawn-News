@@ -89,7 +89,7 @@ atlas-studio/
 | `atlas-blender` | `lib.rs` | `BlenderPipeline`, `ShotSpec`, `RenderJob`, Grease Pencil script generation |
 | `atlas-kokoro` | `lib.rs` | `KokoroPipeline`, `NarrationSegment`, `load_youtube_credentials()` |
 | `atlas-ffmpeg` | `lib.rs` | `FfmpegAssembler`, `EditDecisionList`, filter_complex builder |
-| `atlas-cli` | `main.rs` + `production/broll/daemon/cache/news.rs` | CLI commands and `cmd_produce()`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs`; newsroom episode pipeline in `news.rs` |
+| `atlas-cli` | `main.rs` + `production/broll/planning/audio/analytics/memory/daemon/cache/news*.rs` | CLI commands and `cmd_produce()`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs`; beat planning, lip-sync cues, and captions in `planning.rs`; Freesound and AIWaves scoring in `audio.rs`; `analytics.rs` and `memory.rs` commands; newsroom pipeline in `news.rs`, `news_voice.rs`, and `news_health.rs` |
 
 ## Development Workflow
 
