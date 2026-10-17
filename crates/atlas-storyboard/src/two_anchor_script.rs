@@ -122,8 +122,12 @@ impl TwoAnchorScriptWriter {
             self.build_closing_segment(),
         ];
 
-        for line in segments.iter_mut().flat_map(|segment| segment.lines.iter_mut()) {
-            line.phonetic_text = self.pronunciation.phonetically_prepare(&line.spoken_text);
+        for segment in &mut segments {
+            for line in &mut segment.lines {
+                line.phonetic_text = self.pronunciation.phonetically_prepare(&line.spoken_text);
+                line.estimated_seconds = crate::story_script::estimate_seconds(&line.spoken_text);
+            }
+            segment.actual_duration_secs = segment.lines.iter().map(|line| line.estimated_seconds).sum();
         }
 
         let total_duration_secs: f64 = segments.iter().map(|s| s.actual_duration_secs).sum();
@@ -576,18 +580,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_broadcast_episode_duration_compliance() {
+    fn test_broadcast_episode_is_timed_from_its_words() {
         let writer = TwoAnchorScriptWriter::new();
         let episode = writer.generate_broadcast_episode(
             "Episode 001: MAPPA Chainsaw Man Sequel & Spider-Verse Tech",
             "2026-10-17",
         );
-        let policy = EpisodeDurationPolicy::default();
-
-        println!("Generated episode duration: {:.1} seconds ({:.1} minutes)", episode.total_duration_secs, episode.total_duration_secs / 60.0);
-        assert!(episode.validate_duration(&policy).is_ok());
-        assert!(episode.total_duration_secs >= 900.0);
-        assert!(episode.total_duration_secs <= 1800.0);
         assert_eq!(episode.segments.len(), 8);
+        let spoken: f64 = episode
+            .segments
+            .iter()
+            .flat_map(|segment| &segment.lines)
+            .map(|line| crate::story_script::estimate_seconds(&line.spoken_text))
+            .sum();
+        assert!((episode.total_duration_secs - spoken).abs() < 1e-6);
+        assert!(episode.validate_duration(&EpisodeDurationPolicy::default()).is_err());
     }
 }

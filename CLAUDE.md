@@ -50,6 +50,7 @@ atlas-studio/
 | `atlas news research` | Live RSS/Atom wire from Anime News Network, Cartoon Brew, Animation Magazine, and Crunchyroll News; stories from 7 days, cross-outlet corroboration, rumor flagging; falls back to the curated wire (labelled) when feeds are unreachable |
 | `NVIDIA_API_KEY=... atlas news produce` | Director (LLM) writes each live story's Marcus/Elena dialogue from verified facts only, in parallel; invalid segments fall back to templates. Without a key, template segments run about 1 minute per story and production halts if under 15 minutes. Provenance in `script_provenance.json` |
 | `atlas news produce --skip-telegram-wait` | Clearly Drawn News episode package in `news/EP-###/` (fact check, slate, approval, script, rights manifest, timings, status) |
+| `ATLAS_MARCUS_VOICE` / `ATLAS_ELENA_VOICE` | Kokoro voices for the anchors (defaults `am_michael` / `af_bella`); `atlas news produce` writes `audio/episode_narration.wav`, per-line `audio/lines/*.wav`, and `voice_timeline.json` for Unreal lip sync, and reports runtime from the synthesized audio |
 | `TELEGRAM_BOT_TOKEN=... atlas news produce` | Same, gated on Telegram editorial approval; the token is never stored in code |
 | `ATLAS_UE_CMD` / `ATLAS_UE_PROJECT` | Unreal editor and newsroom project paths; filming is reported as skipped when absent |
 | `py "<repo>/unreal/Content/Python/clearly_drawn_wardrobe.py"` | Unreal Editor Python console: dry run listing which dress-code clothing each MetaHuman would get |

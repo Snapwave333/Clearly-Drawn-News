@@ -201,12 +201,12 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             write_json(&episode_dir.join("script_provenance.json"), &provenance)?;
             println!("  Script method: {}", provenance["method"].as_str().unwrap_or("unknown"));
             if let Err(error) = episode.validate_duration(&policy) {
-                let hint = if provenance["method"] == "template" {
-                    " Template segments are short by design; set NVIDIA_API_KEY (or ATLAS_DIRECTOR_API_KEY) so the director writes full-length segments."
-                } else {
+                let hint = if provenance["method"] == "director" {
                     ""
+                } else {
+                    " Set NVIDIA_API_KEY (or ATLAS_DIRECTOR_API_KEY) so the director writes full-length segments from live stories."
                 };
-                anyhow::bail!("Production halted: {error}.{hint}");
+                eprintln!("  ⚠ Script runtime {:.1} min: {error}.{hint}", episode.total_duration_secs / 60.0);
             }
             println!(
                 "  {}: {} segments totaling {:.1}s ({:.1} min).",
@@ -229,17 +229,35 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 blocked => anyhow::bail!("Production halted by rights firewall: {blocked:?}"),
             }
 
+            timer.begin("voices");
+            println!("\n[PHASE 5: ANCHOR VOICE SYNTHESIS]");
+            let voices = news_voice::voice_episode(store.data_dir(), &episode_dir, &episode_id, &episode).await?;
+            println!("  {}", voices.summary());
+            if let news_voice::VoiceOutcome::Voiced { narration, .. } = &voices {
+                println!("  Narration: {}", narration.display());
+            }
+
             timer.begin("filming");
-            println!("\n[PHASE 5: UNREAL ENGINE 5.8 VIRTUAL STUDIO FILMING]");
+            println!("\n[PHASE 6: UNREAL ENGINE 5.8 VIRTUAL STUDIO FILMING]");
             let filming = film_in_unreal().await?;
             println!("  {}", filming.summary());
 
             let timings = timer.finish();
             write_json(&episode_dir.join("stage_timings.json"), &timings)?;
-            let status = if filming.is_filmed() {
-                "FILMED — ready for broadcast mastering"
-            } else {
-                "SCRIPT PACKAGE READY — Unreal filming pending"
+            let runtime_seconds = match &voices {
+                news_voice::VoiceOutcome::Voiced { total_seconds, .. } => f64::from(*total_seconds),
+                news_voice::VoiceOutcome::Skipped(_) => episode.total_duration_secs,
+            };
+            let runtime_check = policy.validate(runtime_seconds);
+            if let Err(problem) = &runtime_check {
+                eprintln!("  ⚠ Runtime check: {problem}");
+            }
+            let status = match (voices.is_voiced(), runtime_check.is_ok(), filming.is_filmed()) {
+                (true, false, _) => "VOICED — runtime outside the 15–30 minute policy; needs a longer script",
+                (true, true, true) => "VOICED & FILMED — ready for broadcast mastering",
+                (true, true, false) => "VOICED — Unreal filming pending",
+                (false, _, true) => "FILMED — anchor voices pending",
+                (false, _, false) => "SCRIPT PACKAGE READY — voices and Unreal filming pending",
             };
             write_json(
                 &episode_dir.join("status.json"),
@@ -247,8 +265,11 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                     "episode_id": episode_id,
                     "title": episode.episode_title,
                     "status": status,
+                    "voices": voices.summary(),
                     "filming": filming.summary(),
-                    "runtime_seconds": episode.total_duration_secs,
+                    "runtime_seconds": runtime_seconds,
+                    "runtime_source": if voices.is_voiced() { "synthesized_audio" } else { "script_estimate" },
+                    "runtime_compliant": runtime_check.is_ok(),
                     "wire_origin": wire_origin,
                     "script_method": provenance["method"],
                     "company": atlas_core::COMPANY_NAME,
@@ -259,7 +280,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             println!("  {} — {}", SHOW_TITLE, episode.episode_title);
             println!(
                 "  Runtime: {:.1} minutes | Status: {}",
-                episode.total_duration_secs / 60.0,
+                runtime_seconds / 60.0,
                 status
             );
             println!("  Package: {}", episode_dir.display());

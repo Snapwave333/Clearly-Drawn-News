@@ -16,6 +16,7 @@ mod broll;
 mod cache;
 mod daemon;
 mod news;
+mod news_voice;
 mod production;
 
 use broll::import_broll;
