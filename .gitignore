@@ -49,4 +49,5 @@ artifacts/
 
 # Temp
 tmp/
-temp/
+temp/__pycache__/
+*.pyc
