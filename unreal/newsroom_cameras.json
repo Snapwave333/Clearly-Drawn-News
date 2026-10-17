@@ -1,0 +1,16 @@
+{
+  "fps": 30,
+  "tail_seconds": 1.0,
+  "sequence_folder": "/Game/ClearlyDrawn/Episodes",
+  "audio_folder": "/Game/ClearlyDrawn/Episodes/Audio",
+  "cameras": {
+    "wide_two_shot": ["wide", "two_shot", "master"],
+    "marcus_close_up": ["marcus"],
+    "elena_close_up": ["elena"],
+    "marcus_over_shoulder": ["marcus_ots", "over_shoulder_marcus", "marcus"],
+    "elena_over_shoulder": ["elena_ots", "over_shoulder_elena", "elena"],
+    "video_wall_center": ["video_wall", "wall", "center"],
+    "split_screen_analysis": ["split", "analysis", "wide"]
+  },
+  "fallback_camera": "wide_two_shot"
+}
