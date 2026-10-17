@@ -1,4 +1,4 @@
-# ATLAS STUDIO — Autonomous YouTube Educational Video Production & 3D MetaHuman Office
+# Clearly Drawn Studios — ATLAS Autonomous Production Engine & 3D MetaHuman Office
 
 ## Project Status: Milestone 1 Verified Locally; UE 5.8 3D Office Simulation Live
 
@@ -85,7 +85,7 @@ flowchart TD
 
 ## 38 AI Agent Workstations & 7 Department Outfit Styles
 
-The Atlas Studio office features 38 dedicated workstations arranged in a 10-column layout, surrounded by the 38-seat Boardroom, Central Operations Hub, Kitchenette / Breakroom, and Brainstorm Bullpen. Every agent is represented by a normal, realistic human MetaHuman avatar (strictly no zombie or generic monster models).
+The Clearly Drawn Studios HQ features 38 dedicated workstations arranged in a 10-column layout, surrounded by the 38-seat Boardroom, Central Operations Hub, Kitchenette / Breakroom, and Brainstorm Bullpen. Every agent is represented by a normal, realistic human MetaHuman avatar (strictly no zombie or generic monster models).
 
 ```mermaid
 classDiagram

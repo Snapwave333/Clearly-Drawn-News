@@ -85,9 +85,7 @@ impl TelegramApprovalGate {
     }
 
     pub fn format_slate_markdown(&self, slate: &EpisodeSlateProposal) -> String {
-        let mut msg = format!(
-            "📺 *CLEARLY DRAWN NEWS — EDITORIAL SLATE APPROVAL*\n"
-        );
+        let mut msg = "📺 *CLEARLY DRAWN NEWS — EDITORIAL SLATE APPROVAL*\n".to_string();
         msg.push_str(&format!(
             "Episode: *#{}* (`{}`) | Target: *{:.1} mins* (15–30m Range)\n",
             slate.episode_number, slate.episode_id, slate.target_duration_mins

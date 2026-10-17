@@ -111,36 +111,25 @@ impl TwoAnchorScriptWriter {
         episode_title: &str,
         episode_date: &str,
     ) -> MasterEpisodeScript {
-        let mut segments = Vec::new();
+        let mut segments = vec![
+            self.build_cold_open(),
+            self.build_lead_story(),
+            self.build_spider_verse_story(),
+            self.build_fortiche_story(),
+            self.build_ghibli_story(),
+            self.build_dandadan_story(),
+            self.build_rapid_headlines(),
+            self.build_closing_segment(),
+        ];
 
-        // 1. Cold Open & Teaser (60s)
-        segments.push(self.build_cold_open());
-
-        // 2. Lead Story: Chainsaw Man Season 2 & The Reze Arc Movie (240s / 4.0m)
-        segments.push(self.build_lead_story());
-
-        // 3. Sony Spider-Verse Tech & NPR Innovation (210s / 3.5m)
-        segments.push(self.build_spider_verse_story());
-
-        // 4. Adult Animation: Fortiche / Riot Games New Series (210s / 3.5m)
-        segments.push(self.build_fortiche_story());
-
-        // 5. Studio Ghibli Archival & Cel Restoration (180s / 3.0m)
-        segments.push(self.build_ghibli_story());
-
-        // 6. Science SARU & Dandadan Season 2 Breakdown (180s / 3.0m)
-        segments.push(self.build_dandadan_story());
-
-        // 7. Rapid Headlines & Release Bulletins (120s / 2.0m)
-        segments.push(self.build_rapid_headlines());
-
-        // 8. Sign-off, Banter & Transparent Credits (120s / 2.0m)
-        segments.push(self.build_closing_segment());
+        for line in segments.iter_mut().flat_map(|segment| segment.lines.iter_mut()) {
+            line.phonetic_text = self.pronunciation.phonetically_prepare(&line.spoken_text);
+        }
 
         let total_duration_secs: f64 = segments.iter().map(|s| s.actual_duration_secs).sum();
 
         MasterEpisodeScript {
-            show_title: "Clearly Drawn News".into(),
+            show_title: atlas_core::SHOW_TITLE.into(),
             episode_title: episode_title.into(),
             episode_date: episode_date.into(),
             target_duration_secs: 1320.0,
@@ -150,7 +139,6 @@ impl TwoAnchorScriptWriter {
     }
 
     fn make_line(
-        &self,
         speaker: AnchorRole,
         camera: StudioCameraCut,
         spoken: &str,
@@ -163,7 +151,7 @@ impl TwoAnchorScriptWriter {
             speaker,
             camera_cut: camera,
             spoken_text: spoken.into(),
-            phonetic_text: self.pronunciation.phonetically_prepare(spoken),
+            phonetic_text: String::new(),
             anchor_expression: expression.into(),
             partner_reaction_expression: partner_reaction.into(),
             broll_visual_cue: broll.map(|s| s.into()),
@@ -173,7 +161,7 @@ impl TwoAnchorScriptWriter {
 
     fn build_cold_open(&self) -> NewsSegmentScript {
         let lines = vec![
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Enthusiast,
                 StudioCameraCut::WideTwoShot,
                 "Welcome to Clearly Drawn News. I'm Marcus.",
@@ -182,7 +170,7 @@ impl TwoAnchorScriptWriter {
                 None,
                 3.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::ElenaCloseUp,
                 "And I'm Elena. Today: MAPPA breaks their silence on Chainsaw Man, Sony reveals the mind-bending rendering engine behind Beyond the Spider-Verse...",
@@ -191,7 +179,7 @@ impl TwoAnchorScriptWriter {
                 Some("Teaser reel: Chainsaw Man & Spider-Verse graphics on studio video wall"),
                 14.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Enthusiast,
                 StudioCameraCut::MarcusCloseUp,
                 "And Fortiche expands the Runeterra universe with a brand new adult series! Plus, Studio Ghibli opens an 8K cel preservation vault in Mitaka!",
@@ -200,7 +188,7 @@ impl TwoAnchorScriptWriter {
                 Some("Teaser graphics: Fortiche & Ghibli archivism"),
                 16.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::WideTwoShot,
                 "Which means Marcus didn't sleep last night and has analyzed three thousand frames by hand. Let's get straight to the headlines.",
@@ -223,65 +211,66 @@ impl TwoAnchorScriptWriter {
     }
 
     fn build_lead_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Kicking off with our lead story: MAPPA has officially locked in the production schedule for Chainsaw Man Season Two and the theatrical Reze Arc movie.",
-            "AuthoritativePassion",
-            "NeutralObservant",
-            Some("Video wall shows official MAPPA press release and key visual graphic"),
-            18.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::ElenaCloseUp,
-            "Fans have waited nearly two years since the bomb girl teaser. Marcus, why is MAPPA splitting this between a theatrical feature and a television season?",
-            "InquisitiveAnalytic",
-            "EagerToExplain",
-            None,
-            16.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Because the Reze Arc is singularly cinematic! It is essentially a tight, explosive tragic romance that fits a 90-minute theatrical structure perfectly, allowing the animators to push action choreography and fluid camera moves that television schedules simply suffocate.",
-            "IntenseExuberance",
-            "NoddingAgreement",
-            Some("Muted B-roll: Official teaser visual breakdown and storyboard analysis graphics"),
-            28.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::SplitScreenAnalysis,
-            "And speaking of production schedules, MAPPA's pipeline management has been under intense industry scrutiny since Jujutsu Kaisen Season Two. The studio reports they restructured the production committee, giving animators extended pre-production windows.",
-            "SeriousCritical",
-            "VigorousNod",
-            Some("Infographic: MAPPA timeline breakdown and committee restructuring charts"),
-            24.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Exactly. Tatsuki Fujimoto's cinematic paneling demands insane draftsmanship. Tatsuya Yoshihara and the team are returning with enhanced storyboard planning to protect artists while delivering that raw, unhinged kinetic punch.",
-            "PassionateExpertise",
-            "ImpressedSmirk",
-            None,
-            24.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::WideTwoShot,
-            "If they can pull off the Reze fireworks sequence with sustainable hours, that's not just a win for audiences—it's a critical win for anime working conditions.",
-            "EmpatheticConclusion",
-            "RespectfulAgreement",
-            None,
-            16.0,
-        ));
+        let mut lines = vec![
+            Self::make_line(
+                AnchorRole::Enthusiast,
+                StudioCameraCut::MarcusCloseUp,
+                "Kicking off with our lead story: MAPPA has officially locked in the production schedule for Chainsaw Man Season Two and the theatrical Reze Arc movie.",
+                "AuthoritativePassion",
+                "NeutralObservant",
+                Some("Video wall shows official MAPPA press release and key visual graphic"),
+                18.0,
+            ),
+            Self::make_line(
+                AnchorRole::Counterpart,
+                StudioCameraCut::ElenaCloseUp,
+                "Fans have waited nearly two years since the bomb girl teaser. Marcus, why is MAPPA splitting this between a theatrical feature and a television season?",
+                "InquisitiveAnalytic",
+                "EagerToExplain",
+                None,
+                16.0,
+            ),
+            Self::make_line(
+                AnchorRole::Enthusiast,
+                StudioCameraCut::MarcusCloseUp,
+                "Because the Reze Arc is singularly cinematic! It is essentially a tight, explosive tragic romance that fits a 90-minute theatrical structure perfectly, allowing the animators to push action choreography and fluid camera moves that television schedules simply suffocate.",
+                "IntenseExuberance",
+                "NoddingAgreement",
+                Some("Muted B-roll: Official teaser visual breakdown and storyboard analysis graphics"),
+                28.0,
+            ),
+            Self::make_line(
+                AnchorRole::Counterpart,
+                StudioCameraCut::SplitScreenAnalysis,
+                "And speaking of production schedules, MAPPA's pipeline management has been under intense industry scrutiny since Jujutsu Kaisen Season Two. The studio reports they restructured the production committee, giving animators extended pre-production windows.",
+                "SeriousCritical",
+                "VigorousNod",
+                Some("Infographic: MAPPA timeline breakdown and committee restructuring charts"),
+                24.0,
+            ),
+            Self::make_line(
+                AnchorRole::Enthusiast,
+                StudioCameraCut::MarcusCloseUp,
+                "Exactly. Tatsuki Fujimoto's cinematic paneling demands insane draftsmanship. Tatsuya Yoshihara and the team are returning with enhanced storyboard planning to protect artists while delivering that raw, unhinged kinetic punch.",
+                "PassionateExpertise",
+                "ImpressedSmirk",
+                None,
+                24.0,
+            ),
+            Self::make_line(
+                AnchorRole::Counterpart,
+                StudioCameraCut::WideTwoShot,
+                "If they can pull off the Reze fireworks sequence with sustainable hours, that's not just a win for audiences—it's a critical win for anime working conditions.",
+                "EmpatheticConclusion",
+                "RespectfulAgreement",
+                None,
+                16.0,
+            ),
+        ];
 
         // Pad additional dialogue beats to hit ~240s
         for i in 1..=4 {
-            lines.push(self.make_line(
+            lines.push(Self::make_line(
                 if i % 2 == 1 { AnchorRole::Enthusiast } else { AnchorRole::Counterpart },
                 if i % 2 == 1 { StudioCameraCut::MarcusCloseUp } else { StudioCameraCut::ElenaCloseUp },
                 &format!("Segment discussion beat {}: Exploring the stylistic evolution, compositing shaders, and global theatrical distribution strategy across Japanese and Western box offices.", i),
@@ -304,27 +293,28 @@ impl TwoAnchorScriptWriter {
     }
 
     fn build_spider_verse_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::ElenaCloseUp,
-            "Turning now to western feature animation: Sony Pictures Animation has unveiled a glimpse into the patent-pending NPR—non-photorealistic rendering—tech powering Beyond the Spider-Verse.",
-            "ClearJournalistic",
-            "AwedAnticipation",
-            Some("Video wall: Sony patent diagrams and multi-line shader preview"),
-            22.0,
-        ));
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Elena, what they are doing with algorithmic ink hatching is unbelievable. In Across the Spider-Verse, Gwen's watercolor mood-ring world was hand-painted per keyframe. For Beyond, Sony created custom shaders that dynamically calculate emotional brush weight in real time!",
-            "AstoundedEnthusiasm",
-            "DelightedObservation",
-            Some("Muted visual breakdown: Brush weight and color temperature comparison"),
-            26.0,
-        ));
+        let mut lines = vec![
+            Self::make_line(
+                AnchorRole::Counterpart,
+                StudioCameraCut::ElenaCloseUp,
+                "Turning now to western feature animation: Sony Pictures Animation has unveiled a glimpse into the patent-pending NPR—non-photorealistic rendering—tech powering Beyond the Spider-Verse.",
+                "ClearJournalistic",
+                "AwedAnticipation",
+                Some("Video wall: Sony patent diagrams and multi-line shader preview"),
+                22.0,
+            ),
+            Self::make_line(
+                AnchorRole::Enthusiast,
+                StudioCameraCut::MarcusCloseUp,
+                "Elena, what they are doing with algorithmic ink hatching is unbelievable. In Across the Spider-Verse, Gwen's watercolor mood-ring world was hand-painted per keyframe. For Beyond, Sony created custom shaders that dynamically calculate emotional brush weight in real time!",
+                "AstoundedEnthusiasm",
+                "DelightedObservation",
+                Some("Muted visual breakdown: Brush weight and color temperature comparison"),
+                26.0,
+            ),
+        ];
         for i in 1..=5 {
-            lines.push(self.make_line(
+            lines.push(Self::make_line(
                 if i % 2 == 1 { AnchorRole::Counterpart } else { AnchorRole::Enthusiast },
                 if i % 2 == 1 { StudioCameraCut::ElenaCloseUp } else { StudioCameraCut::MarcusCloseUp },
                 &format!("Spider-Verse technical analysis beat {}: Examining how Sony combines machine learning edge-detection with classical 2D animator timing on twos and threes.", i),
@@ -347,18 +337,19 @@ impl TwoAnchorScriptWriter {
     }
 
     fn build_fortiche_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "In adult animation, French powerhouse Fortiche Production and Riot Games have officially announced their next joint animated series set in the brutal empire of Noxus.",
-            "ExcitedAuthority",
-            "IntriguedNod",
-            Some("Video wall: Fortiche concept silhouettes and Noxian crest"),
-            22.0,
-        ));
+        let mut lines = vec![
+            Self::make_line(
+                AnchorRole::Enthusiast,
+                StudioCameraCut::MarcusCloseUp,
+                "In adult animation, French powerhouse Fortiche Production and Riot Games have officially announced their next joint animated series set in the brutal empire of Noxus.",
+                "ExcitedAuthority",
+                "IntriguedNod",
+                Some("Video wall: Fortiche concept silhouettes and Noxian crest"),
+                22.0,
+            ),
+        ];
         for i in 1..=6 {
-            lines.push(self.make_line(
+            lines.push(Self::make_line(
                 if i % 2 == 1 { AnchorRole::Counterpart } else { AnchorRole::Enthusiast },
                 if i % 2 == 1 { StudioCameraCut::ElenaCloseUp } else { StudioCameraCut::MarcusCloseUp },
                 &format!("Fortiche deep-dive beat {}: Analyzing the French studio's matte painting workflow, 3D character blocking, and mature dramatic pacing.", i),
@@ -381,18 +372,19 @@ impl TwoAnchorScriptWriter {
     }
 
     fn build_ghibli_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Counterpart,
-            StudioCameraCut::ElenaCloseUp,
-            "In studio preservation news: Hayao Miyazaki and Toshio Suzuki have formally opened the Ghibli Archival Facility in Mitaka, safeguarding four decades of physical acetate cels.",
-            "ReverentTone",
-            "DeepRespect",
-            Some("Video wall: Mitaka archival facility photos and classic cel displays"),
-            24.0,
-        ));
+        let mut lines = vec![
+            Self::make_line(
+                AnchorRole::Counterpart,
+                StudioCameraCut::ElenaCloseUp,
+                "In studio preservation news: Hayao Miyazaki and Toshio Suzuki have formally opened the Ghibli Archival Facility in Mitaka, safeguarding four decades of physical acetate cels.",
+                "ReverentTone",
+                "DeepRespect",
+                Some("Video wall: Mitaka archival facility photos and classic cel displays"),
+                24.0,
+            ),
+        ];
         for i in 1..=5 {
-            lines.push(self.make_line(
+            lines.push(Self::make_line(
                 if i % 2 == 1 { AnchorRole::Enthusiast } else { AnchorRole::Counterpart },
                 if i % 2 == 1 { StudioCameraCut::MarcusCloseUp } else { StudioCameraCut::ElenaCloseUp },
                 &format!("Ghibli cel preservation beat {}: Exploring chemical vinegar syndrome, high-gamut 8K sensor scanning, and historical physical pigment preservation.", i),
@@ -415,18 +407,19 @@ impl TwoAnchorScriptWriter {
     }
 
     fn build_dandadan_story(&self) -> NewsSegmentScript {
-        let mut lines = Vec::new();
-        lines.push(self.make_line(
-            AnchorRole::Enthusiast,
-            StudioCameraCut::MarcusCloseUp,
-            "Science SARU has officially renewed Dandadan for Season 2! Fuga Yamashiro returns as director alongside musical virtuoso Kensuke Ushio.",
-            "CelebratoryExcitement",
-            "PlayfulGrin",
-            Some("Video wall: Dandadan Season 2 visual and musical staff announcements"),
-            22.0,
-        ));
+        let mut lines = vec![
+            Self::make_line(
+                AnchorRole::Enthusiast,
+                StudioCameraCut::MarcusCloseUp,
+                "Science SARU has officially renewed Dandadan for Season 2! Fuga Yamashiro returns as director alongside musical virtuoso Kensuke Ushio.",
+                "CelebratoryExcitement",
+                "PlayfulGrin",
+                Some("Video wall: Dandadan Season 2 visual and musical staff announcements"),
+                22.0,
+            ),
+        ];
         for i in 1..=5 {
-            lines.push(self.make_line(
+            lines.push(Self::make_line(
                 if i % 2 == 1 { AnchorRole::Counterpart } else { AnchorRole::Enthusiast },
                 if i % 2 == 1 { StudioCameraCut::ElenaCloseUp } else { StudioCameraCut::MarcusCloseUp },
                 &format!("Science SARU kinetic breakdown beat {}: How Yamashiro combines perspective distortion, speed lines, and Ushio's breakbeat soundtrack.", i),
@@ -450,7 +443,7 @@ impl TwoAnchorScriptWriter {
 
     fn build_rapid_headlines(&self) -> NewsSegmentScript {
         let lines = vec![
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::SplitScreenAnalysis,
                 "Time for rapid-fire bulletins! Netflix orders a new Castlevania spinoff set in 19th century London.",
@@ -459,7 +452,7 @@ impl TwoAnchorScriptWriter {
                 Some("Lower-third graphic: Castlevania London Spin-off Confirmed"),
                 16.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Enthusiast,
                 StudioCameraCut::MarcusCloseUp,
                 "Genndy Tartakovsky's upcoming theatrical adventure announces voice cast and locks in a summer release date!",
@@ -468,7 +461,7 @@ impl TwoAnchorScriptWriter {
                 Some("Lower-third graphic: Genndy Tartakovsky Project Update"),
                 16.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::ElenaCloseUp,
                 "Ufotable previews Demon Slayer Infinity Castle Arc international theatrical release dates across forty territories.",
@@ -477,7 +470,7 @@ impl TwoAnchorScriptWriter {
                 Some("Lower-third graphic: Ufotable Demon Slayer Global Theatrical Rollout"),
                 18.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Enthusiast,
                 StudioCameraCut::MarcusCloseUp,
                 "And Studio Wit wraps production on their original fantasy film with director George Wada praising non-crunch scheduling.",
@@ -486,7 +479,7 @@ impl TwoAnchorScriptWriter {
                 Some("Lower-third graphic: Wit Studio Original Production Wrapped"),
                 18.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::WideTwoShot,
                 "Four stories in sixty-eight seconds. Marcus didn't even pass out from oxygen deprivation.",
@@ -495,7 +488,7 @@ impl TwoAnchorScriptWriter {
                 None,
                 14.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Enthusiast,
                 StudioCameraCut::MarcusCloseUp,
                 "I trained my lungs specifically for animation press cycles, Elena. Do not question the discipline.",
@@ -519,7 +512,7 @@ impl TwoAnchorScriptWriter {
 
     fn build_closing_segment(&self) -> NewsSegmentScript {
         let lines = vec![
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Duo,
                 StudioCameraCut::WideTwoShot,
                 "That wraps today's edition of Clearly Drawn News. From hand-drawn preservation in Mitaka to algorithmic shaders in the multiverse, the medium has never been more vibrant.",
@@ -528,7 +521,7 @@ impl TwoAnchorScriptWriter {
                 None,
                 18.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::ElenaCloseUp,
                 "Remember to subscribe, hit the bell, and let us know in the comments: which project are you anticipating most—Chainsaw Man's Reze arc or the new Fortiche series?",
@@ -537,7 +530,7 @@ impl TwoAnchorScriptWriter {
                 Some("End screen callouts and social badges"),
                 16.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Enthusiast,
                 StudioCameraCut::MarcusCloseUp,
                 "And don't say both, because that is the coward's answer. Pick a side!",
@@ -546,7 +539,7 @@ impl TwoAnchorScriptWriter {
                 None,
                 12.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Counterpart,
                 StudioCameraCut::ElenaCloseUp,
                 "Ignore him. You can love both. We will see you tomorrow with another breakdown of the art and craft of animation.",
@@ -555,7 +548,7 @@ impl TwoAnchorScriptWriter {
                 None,
                 16.0,
             ),
-            self.make_line(
+            Self::make_line(
                 AnchorRole::Duo,
                 StudioCameraCut::WideTwoShot,
                 "Until next time—keep drawing clearly.",
@@ -575,16 +568,6 @@ impl TwoAnchorScriptWriter {
             actual_duration_secs: actual,
             lines,
         }
-    }
-}
-
-trait HelperFallback {
-    fn speaker_fallback(self) -> AnchorRole;
-}
-
-impl HelperFallback for AnchorRole {
-    fn speaker_fallback(self) -> AnchorRole {
-        AnchorRole::Duo
     }
 }
 

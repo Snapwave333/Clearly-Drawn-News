@@ -1,4 +1,17 @@
-# CLAUDE.md — ATLAS STUDIO Development Guide
+# CLAUDE.md — Clearly Drawn Studios (ATLAS engine) Development Guide
+
+## Brand Identity
+
+| Layer | Name | Source of truth |
+|-------|------|-----------------|
+| Company | Clearly Drawn Studios | `atlas_core::COMPANY_NAME` |
+| Company tagline | Every story, clearly drawn. | `atlas_core::COMPANY_TAGLINE` |
+| Production engine | ATLAS (`atlas` CLI) | `atlas_core::PRODUCTION_ENGINE` |
+| Flagship show | Clearly Drawn News | `atlas_core::SHOW_TITLE` |
+| Channel | Clearly Drawn | `atlas_core::CHANNEL_NAME` |
+| Office simulation | Clearly Drawn Studios HQ | `office-ui/` |
+
+Use these constants instead of hardcoding brand strings in Rust.
 
 ## Quick Start
 

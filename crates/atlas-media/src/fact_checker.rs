@@ -1,4 +1,4 @@
-use crate::news_desk::{AnimationCategory, VerifiedNewsItem};
+use crate::news_desk::VerifiedNewsItem;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -67,10 +67,22 @@ impl NewsFactChecker {
             }
 
             // Check primary source valid URL
-            if !item.primary_source_url.starts_with("http://")
-                && !item.primary_source_url.starts_with("https://")
-            {
+            if !is_http_url(&item.primary_source_url) {
                 rejected_stories.push((item, "Invalid primary source URL".into()));
+                continue;
+            }
+
+            let source_count = 1 + item
+                .secondary_source_url
+                .as_deref()
+                .filter(|url| is_http_url(url))
+                .map_or(0, |_| 1);
+            if source_count < self.min_sources {
+                let reason = format!(
+                    "Only {} verifiable source(s); {} required",
+                    source_count, self.min_sources
+                );
+                rejected_stories.push((item, reason));
                 continue;
             }
 
@@ -93,9 +105,14 @@ impl NewsFactChecker {
     }
 }
 
+fn is_http_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::news_desk::AnimationCategory;
 
     #[test]
     fn test_fact_check_filtering() {
@@ -134,5 +151,33 @@ mod tests {
         let report = checker.verify_candidates(stories);
         assert_eq!(report.passed_stories.len(), 1);
         assert_eq!(report.rejected_stories.len(), 1);
+    }
+
+    #[test]
+    fn test_two_source_requirement() {
+        let checker = NewsFactChecker::new(2, true);
+        let mut single = VerifiedNewsItem {
+            id: "a".into(),
+            title: "Single Source".into(),
+            category: AnimationCategory::Anime,
+            primary_source_url: "https://studio.com".into(),
+            secondary_source_url: None,
+            announcement_date: "2026-10-17".into(),
+            studio_or_organization: "Studio X".into(),
+            factual_summary: "Confirmed".into(),
+            editorial_angle: "Exciting".into(),
+            is_verified: true,
+            is_rumor: false,
+            estimated_duration_mins: 3.0,
+        };
+        let mut corroborated = single.clone();
+        corroborated.id = "b".into();
+        corroborated.title = "Corroborated".into();
+        corroborated.secondary_source_url = Some("https://press.example.com".into());
+        single.secondary_source_url = Some("not-a-url".into());
+
+        let report = checker.verify_candidates(vec![single, corroborated]);
+        assert_eq!(report.passed_stories.len(), 1);
+        assert_eq!(report.passed_stories[0].id, "b");
     }
 }

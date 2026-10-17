@@ -38,9 +38,7 @@ pub struct VerifiedNewsItem {
     pub estimated_duration_mins: f64,
 }
 
-pub struct AnimationNewsDesk {
-    client: reqwest::Client,
-}
+pub struct AnimationNewsDesk;
 
 impl Default for AnimationNewsDesk {
     fn default() -> Self {
@@ -50,12 +48,7 @@ impl Default for AnimationNewsDesk {
 
 impl AnimationNewsDesk {
     pub fn new() -> Self {
-        Self {
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(10))
-                .build()
-                .unwrap_or_default(),
-        }
+        Self
     }
 
     /// Fetches verified developing animation news stories across global industry categories.

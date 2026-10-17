@@ -1,8 +1,8 @@
-# Atlas Studio 3D Office & MetaHuman Simulation
+# Clearly Drawn Studios HQ — 3D Office & MetaHuman Simulation
 
 ## Overview
 
-The Atlas Studio 3D Virtual Spectator simulation provides a real-time, 24/7 digital twin of the 38 autonomous agents collaborating inside Atlas Studio. Built on Unreal Engine 5.8 with DirectX 12 SM6, Lumen dynamic global illumination, and native MetaHuman characters, the simulation renders an immersive isometric studio office synchronized directly with the local SQLite WAL message bus and agent state.
+The Clearly Drawn Studios 3D Virtual Spectator simulation provides a real-time, 24/7 digital twin of the 38 autonomous agents collaborating inside Clearly Drawn Studios. Built on Unreal Engine 5.8 with DirectX 12 SM6, Lumen dynamic global illumination, and native MetaHuman characters, the simulation renders an immersive isometric studio office synchronized directly with the local SQLite WAL message bus and agent state.
 
 ---
 

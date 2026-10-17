@@ -1,8 +1,8 @@
 @echo off
 setlocal
-title Atlas Studio - Unreal Engine 5.8 3D Virtual Spectator View
+title Clearly Drawn Studios - Unreal Engine 5.8 3D Virtual Spectator View
 echo =====================================================================
-echo  Atlas Studio - 1-Click Virtual Spectator's View Window
+echo  Clearly Drawn Studios - 1-Click Virtual Spectator's View Window
 echo  Engine: Unreal Engine 5.8 (DirectX 12 SM6 / Lumen / MetaHumans)
 echo  Project: AtlasStudioOffice.uproject
 echo  Mode: Standalone Virtual Spectator View (-game)

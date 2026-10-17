@@ -44,7 +44,7 @@ use atlas_storyboard::{
 
 #[derive(Parser)]
 #[command(name = "atlas")]
-#[command(about = "ATLAS STUDIO — autonomous YouTube educational filmmaking")]
+#[command(about = "Clearly Drawn Studios — ATLAS autonomous animation newsroom and production engine")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -617,8 +617,8 @@ async fn cmd_doctor(json: bool) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("ATLAS STUDIO — System Probe");
-        println!("===========================");
+        println!("{} — System Probe", atlas_core::COMPANY_NAME);
+        println!("{}", "=".repeat(atlas_core::COMPANY_NAME.len() + 15));
         for r in &results {
             match &r.status {
                 atlas_core::ToolStatus::Available { version, path } => {
@@ -828,7 +828,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     let profile = format.profile();
     let render_project_id = format!("{}_{}", project.video_id, profile.slug);
 
-    println!("═══ ATLAS STUDIO Vertical Slice ═══");
+    println!("═══ {} Vertical Slice ═══", atlas_core::COMPANY_NAME);
     println!("Project: {} — {}", project.video_id, project.topic.title);
     println!(
         "Format: {} ({}x{}, {} shots)",
@@ -1206,15 +1206,15 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     )
     .await;
     let title = match format {
-        VideoFormat::Long => format!("{} | ATLAS STUDIO", project.topic.title),
+        VideoFormat::Long => format!("{} | {}", project.topic.title, atlas_core::COMPANY_NAME),
         VideoFormat::Short => format!("{} | #Shorts", project.topic.title),
     };
     let metadata = serde_json::json!({
         "title": title,
-        "description": "A concise whiteboard explanation produced by ATLAS STUDIO. Narration and visuals were generated with AI-assisted production tools. Educational demonstration; sources should be reviewed before reuse.",
+        "description": format!("A concise whiteboard explanation produced by {}. Narration and visuals were generated with AI-assisted production tools. Educational demonstration; sources should be reviewed before reuse.", atlas_core::COMPANY_NAME),
         "transcript": script,
         "contains_synthetic_media": true,
-        "credits": ["ATLAS STUDIO", "Blender", "Kokoro TTS", "FFmpeg"],
+        "credits": [atlas_core::COMPANY_NAME, "Blender", "Kokoro TTS", "FFmpeg"],
         "broll_attribution": broll,
         "format": profile.slug,
         "width": profile.width,
@@ -2291,7 +2291,7 @@ impl FreesoundClient {
 }
 
 async fn cmd_freesound(store: &Store, action: FreesoundAction) -> anyhow::Result<()> {
-    let client = FreesoundClient::new(&store.data_dir());
+    let client = FreesoundClient::new(store.data_dir());
     match action {
         FreesoundAction::Status => {
             println!("Freesound.org Integration Status");
@@ -3874,7 +3874,7 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
             let analytics = AnalyticsStore::new(store);
             let metrics = analytics.list_metrics(50)?;
             let baseline = compute_channel_baseline(&metrics);
-            println!("ATLAS STUDIO — Analytics Dashboard");
+            println!("{} — Analytics Dashboard", atlas_core::COMPANY_NAME);
             println!("==================================");
             println!("Videos tracked: {}", metrics.len());
             println!(
@@ -3916,7 +3916,7 @@ async fn cmd_memory(action: MemoryAction) -> anyhow::Result<()> {
             if json {
                 println!("{}", serde_json::to_string_pretty(&status)?);
             } else {
-                println!("ATLAS STUDIO — Dual-Memory Stack Status");
+                println!("{} — Dual-Memory Stack Status", atlas_core::COMPANY_NAME);
                 println!("=====================================");
                 println!("1. Short-Term Memory: Shared Context MCP");
                 println!("   Endpoint: {}", status.shared_context.endpoint);
@@ -4309,7 +4309,7 @@ async fn cmd_news(action: NewsAction) -> anyhow::Result<()> {
                     asset_id: "ue_newsroom_stage".into(),
                     sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
                     media_type: MediaType::OriginalUnrealFootage,
-                    creator_or_holder: "Clearly Drawn News Virtual Studio".into(),
+                    creator_or_holder: atlas_core::COMPANY_NAME.into(),
                     source_url: None,
                     acquisition_timestamp: Utc::now(),
                     license_type: "Epic Games UE5 License".into(),
