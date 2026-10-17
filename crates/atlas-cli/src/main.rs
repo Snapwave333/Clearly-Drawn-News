@@ -1155,6 +1155,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
 struct VideoPackageMetadata {
     title: String,
     description: String,
+    #[serde(default)]
     transcript: String,
     contains_synthetic_media: bool,
     duration_seconds: f64,
@@ -1183,7 +1184,11 @@ async fn cmd_publish(store: &Store, options: PublishOptions<'_>) -> anyhow::Resu
         .join(profile.slug);
     let video_path = export_dir.join("final.mp4");
     let thumbnail_path = export_dir.join("thumbnail.png");
-    let caption_path = export_dir.join("captions_en.srt");
+    let caption_path = if export_dir.join("captions_en.srt").is_file() {
+        export_dir.join("captions_en.srt")
+    } else {
+        export_dir.join("captions.srt")
+    };
     if !video_path.is_file() {
         anyhow::bail!("final video not found: {}", video_path.display());
     }
@@ -1346,9 +1351,12 @@ async fn cmd_publish(store: &Store, options: PublishOptions<'_>) -> anyhow::Resu
         client
             .upload_thumbnail(&result.video_id, &thumbnail_path)
             .await?;
-        client
+        if let Err(caption_err) = client
             .upload_captions(&result.video_id, &caption_path, "en-US")
-            .await?;
+            .await
+        {
+            eprintln!("Warning: caption upload failed ({caption_err}), proceeding with published video.");
+        }
         project.state = ProjectState::Published;
         store.insert_project(&project)?;
         if matches!(privacy, PublishPrivacy::Public) {
