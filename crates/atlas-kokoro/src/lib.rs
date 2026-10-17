@@ -2,6 +2,7 @@ use atlas_core::{AtlasError, AtlasResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use sha2::{Digest, Sha256};
 use tokio::process::Command;
 use tracing::{info, warn};
 
@@ -97,11 +98,66 @@ impl KokoroPipeline {
         let output_dir = self.workspace_dir.join("audio").join("segments");
         tokio::fs::create_dir_all(&output_dir).await?;
 
-        let output_file = output_dir.join(format!("{}.wav", segment.segment_id));
+        let cache_key = self.segment_cache_key(segment);
+        let output_file = output_dir.join(format!("{cache_key}.wav"));
+        let cached = match output_file.is_file() {
+            true => self
+                .probe_audio(&output_file)
+                .await
+                .ok()
+                .filter(|metadata| metadata.duration_seconds > 0.0),
+            false => None,
+        };
+        let metadata = match cached {
+            Some(metadata) => {
+                info!("Reusing cached narration for segment {}", segment.segment_id);
+                metadata
+            }
+            None => {
+                self.run_kokoro(segment, &output_dir, &cache_key, &output_file)
+                    .await?;
+                self.probe_audio(&output_file).await?
+            }
+        };
 
-        let input_file = output_dir.join(format!("{}.txt", segment.segment_id));
+        let word_timestamps = self
+            .generate_word_timestamps(segment, metadata.duration_seconds)
+            .await?;
+
+        Ok(AudioSegment {
+            segment_id: segment.segment_id.clone(),
+            file_path: output_file,
+            duration_seconds: metadata.duration_seconds,
+            sample_rate: metadata.sample_rate,
+            channels: metadata.channels,
+            word_timestamps,
+        })
+    }
+
+    fn segment_cache_key(&self, segment: &NarrationSegment) -> String {
+        let mut hasher = Sha256::new();
+        for part in [
+            segment.text.as_str(),
+            segment.voice.as_str(),
+            &segment.speed.to_string(),
+            self.voice_config.language.as_str(),
+        ] {
+            hasher.update(part.as_bytes());
+            hasher.update([0]);
+        }
+        hex::encode(&hasher.finalize()[..16])
+    }
+
+    async fn run_kokoro(
+        &self,
+        segment: &NarrationSegment,
+        output_dir: &Path,
+        cache_key: &str,
+        output_file: &Path,
+    ) -> AtlasResult<()> {
+        let partial_file = output_dir.join(format!("{cache_key}.partial.wav"));
+        let input_file = output_dir.join(format!("{cache_key}.txt"));
         tokio::fs::write(&input_file, &segment.text).await?;
-
         let model_dir = directories::BaseDirs::new()
             .map(|dirs| dirs.home_dir().join(".kokoro"))
             .ok_or_else(|| {
@@ -118,7 +174,7 @@ impl KokoroPipeline {
 
         let args = vec![
             input_file.to_string_lossy().to_string(),
-            output_file.to_string_lossy().to_string(),
+            partial_file.to_string_lossy().to_string(),
             "--speed".to_string(),
             segment.speed.to_string(),
             "--lang".to_string(),
@@ -157,27 +213,15 @@ impl KokoroPipeline {
             )));
         }
 
-        if !output_file.is_file() {
+        let _ = tokio::fs::remove_file(&input_file).await;
+        if !partial_file.is_file() {
             return Err(AtlasError::Render(format!(
                 "Kokoro completed without creating {}",
-                output_file.display()
+                partial_file.display()
             )));
         }
-
-        let metadata = self.probe_audio(&output_file).await?;
-
-        let word_timestamps = self
-            .generate_word_timestamps(segment, metadata.duration_seconds)
-            .await?;
-
-        Ok(AudioSegment {
-            segment_id: segment.segment_id.clone(),
-            file_path: output_file,
-            duration_seconds: metadata.duration_seconds,
-            sample_rate: metadata.sample_rate,
-            channels: metadata.channels,
-            word_timestamps,
-        })
+        tokio::fs::rename(&partial_file, output_file).await?;
+        Ok(())
     }
 
     /// Synthesize all segments for a narration track.
@@ -418,6 +462,23 @@ pub fn split_script_into_segments(script: &str, voice_id: &str) -> Vec<Narration
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn segment_cache_key_tracks_synthesis_inputs() {
+        let pipeline = KokoroPipeline::new("kokoro-tts", VoiceConfig::default(), "/tmp/atlas");
+        let segment = split_script_into_segments("Hello world.", "af_heart").remove(0);
+        let mut renumbered = segment.clone();
+        renumbered.segment_id = "seg_999".into();
+        let mut faster = segment.clone();
+        faster.speed = 1.2;
+        let mut other_voice = segment.clone();
+        other_voice.voice = "am_adam".into();
+
+        let key = pipeline.segment_cache_key(&segment);
+        assert_eq!(key, pipeline.segment_cache_key(&renumbered));
+        assert_ne!(key, pipeline.segment_cache_key(&faster));
+        assert_ne!(key, pipeline.segment_cache_key(&other_voice));
+    }
+
     #[test]
     fn splits_script_into_segments() {
         let script = "Hello world. This is a test. How are you?";

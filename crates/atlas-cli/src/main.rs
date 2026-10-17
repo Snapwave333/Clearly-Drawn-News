@@ -906,7 +906,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
         .map(|beat| beat.broll_query().to_string())
         .collect::<Vec<_>>();
     let (narration, broll) = tokio::join!(
-        kokoro_pipeline.synthesize_track(segments.clone(), project.video_id.clone()),
+        kokoro_pipeline.synthesize_track(segments.clone(), render_project_id.clone()),
         import_broll(&project.video_id, format, &data_dir, &broll_queries),
     );
     let narration = narration?;
@@ -2646,6 +2646,14 @@ async fn import_broll(
     data_dir: &Path,
     queries: &[String],
 ) -> Vec<ImportedMedia> {
+    let output_dir = data_dir
+        .join("media")
+        .join(video_id)
+        .join(format.profile().slug);
+    if let Some(cached) = cached_broll(&output_dir) {
+        println!("   ✓ Reusing {} cached B-roll assets", cached.len());
+        return cached;
+    }
     let Some(base_dirs) = BaseDirs::new() else {
         eprintln!("B-roll skipped: unable to locate the user profile");
         return Vec::new();
@@ -2670,10 +2678,6 @@ async fn import_broll(
         VideoFormat::Long => MediaOrientation::Landscape,
         VideoFormat::Short => MediaOrientation::Portrait,
     };
-    let output_dir = data_dir
-        .join("media")
-        .join(video_id)
-        .join(format.profile().slug);
     let image_query = queries
         .first()
         .map(String::as_str)
@@ -2696,6 +2700,13 @@ async fn import_broll(
         let _ = std::fs::write(output_dir.join("attribution.json"), json);
     }
     imported
+}
+
+fn cached_broll(output_dir: &Path) -> Option<Vec<ImportedMedia>> {
+    let bytes = std::fs::read(output_dir.join("attribution.json")).ok()?;
+    let media = serde_json::from_slice::<Vec<ImportedMedia>>(&bytes).ok()?;
+    let complete = media.len() == 2 && media.iter().all(|item| item.file_path.is_file());
+    complete.then_some(media)
 }
 
 async fn import_media_with_retry(
@@ -4744,6 +4755,31 @@ mod tests {
         assert_eq!(names, ["fast", "slow", "last"]);
         assert_eq!(report.slowest.as_deref(), Some("slow"));
         assert!(report.total_seconds >= report.stages[1].seconds);
+    }
+
+    #[test]
+    fn cached_broll_requires_complete_package() {
+        let dir = std::env::temp_dir().join(format!("atlas_broll_{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(cached_broll(&dir).is_none());
+
+        let media = |kind, name: &str| ImportedMedia {
+            provider: "pixabay".into(),
+            provider_id: name.into(),
+            kind,
+            file_path: dir.join(name),
+            source_url: "https://pixabay.com".into(),
+            creator: "creator".into(),
+            creator_url: "https://pixabay.com/users/creator".into(),
+        };
+        let items = vec![media(MediaKind::Image, "a.jpg"), media(MediaKind::Video, "b.mp4")];
+        std::fs::write(dir.join("attribution.json"), serde_json::to_vec(&items).unwrap()).unwrap();
+        std::fs::write(dir.join("a.jpg"), b"img").unwrap();
+        assert!(cached_broll(&dir).is_none());
+
+        std::fs::write(dir.join("b.mp4"), b"vid").unwrap();
+        assert_eq!(cached_broll(&dir).map(|cached| cached.len()), Some(2));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

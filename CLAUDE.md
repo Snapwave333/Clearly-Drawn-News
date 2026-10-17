@@ -48,6 +48,8 @@ atlas-studio/
 | `ATLAS_RENDER_JOBS=2 atlas produce --topic <id>` | Render up to N Blender shots in parallel (default 1) |
 | `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
 | `stage_timings.json` | Written next to each `final.mp4`; per-stage seconds plus the slowest stage |
+| `audio/segments/<hash>.wav` | Narration cache keyed by text, voice, speed, and language; delete to force re-synthesis |
+| `media/<id>/<format>/attribution.json` | B-roll cache; reused when both image and video files are present |
 | `atlas publish --topic <id> --platform tiktok` | Publish whiteboard Short directly to TikTok (@focogaming) |
 | `atlas publish --topic <id> --platform both` | Publish multi-platform (YouTube + TikTok) |
 | `atlas tiktok info --user focogaming` | Inspect TikTok account connection via Upload-Post |
