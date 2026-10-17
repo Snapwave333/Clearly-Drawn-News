@@ -2,7 +2,7 @@ use atlas_core::{
     AgentMessage, FeedbackItem, Project, ProjectState, PublishMode, PublishPlan, Topic,
     TrendSource, redact_config,
 };
-use atlas_doctor::{has_minimal_pipeline, probe_all};
+use atlas_doctor::{has_minimal_pipeline, missing_pipeline_tools, probe_all};
 use atlas_opencode::OpenCodeClient;
 use atlas_store::Store;
 use chrono::Utc;
@@ -836,6 +836,8 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     );
     println!();
 
+    let mut timer = StageTimer::new();
+    timer.begin("storyboard");
     println!("📝 Stage 1: Generating storyboard from script...");
     project.state = ProjectState::Scripting;
     store.insert_project(&project)?;
@@ -878,6 +880,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     }
     println!("   Script: {} chars", script.len());
 
+    timer.begin("narration_and_broll");
     println!("🎙️  Stage 2: Synthesizing narration and importing B-roll in parallel...");
     project.state = ProjectState::AudioBuild;
     store.insert_project(&project)?;
@@ -914,6 +917,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     println!("   ✓ Timed narration: {}", combined_audio.display());
     println!("   ✓ {} attributed media assets available", broll.len());
 
+    timer.begin("shot_planning");
     println!("🎬 Stage 3: Creating lip-synced shot specifications...");
     project.state = ProjectState::Storyboarding;
     store.insert_project(&project)?;
@@ -974,6 +978,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
         .map_err(|error| anyhow::anyhow!("Pre-render plan QA: {error}"))?;
     println!("   ✓ Planned runtime {:.1}s passes {} QA", total_timeline_duration, profile.slug);
 
+    timer.begin("render_and_score");
     let render_parallelism = std::env::var("ATLAS_RENDER_JOBS")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -1031,6 +1036,7 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     );
     render_result?;
 
+    timer.begin("assembly_and_qa");
     println!("🔧 Stage 5: Assembling final video with FFmpeg...");
     project.state = ProjectState::EditAndMix;
     store.insert_project(&project)?;
@@ -1239,9 +1245,16 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
         output_size
     );
 
+    timer.begin("package");
     println!("✅ Stage 6: Quality check & package...");
     project.state = ProjectState::ReleaseQa;
     store.insert_project(&project)?;
+
+    let timings = timer.finish();
+    std::fs::write(
+        export_dir.join("stage_timings.json"),
+        serde_json::to_vec_pretty(&timings)?,
+    )?;
 
     println!();
     println!("═══ Production Complete ═══");
@@ -1252,6 +1265,12 @@ async fn cmd_produce(store: &Store, options: ProduceOptions<'_>) -> anyhow::Resu
     );
     println!("Audio:   {}", combined_audio.display());
     println!("Captions: {}", caption_path.display());
+    println!();
+    println!("Stage timings ({:.1}s total):", timings.total_seconds);
+    for stage in &timings.stages {
+        let marker = if timings.slowest.as_deref() == Some(stage.stage) { "  ← slowest" } else { "" };
+        println!("  {:22} {:>8.1}s{}", stage.stage, stage.seconds, marker);
+    }
     println!();
     println!("Next steps:");
     println!("  atlas analytics fetch {} --sample", project.video_id);
@@ -2047,6 +2066,65 @@ async fn add_vector_thumbnail_title(path: &Path, title: &str, width: u32, height
             && error.kind() != std::io::ErrorKind::NotFound
         {
             eprintln!("Creative CLI temporary cleanup failed: {error}");
+        }
+    }
+}
+
+struct StageTimer {
+    started: std::time::Instant,
+    current: Option<(&'static str, std::time::Instant)>,
+    completed: Vec<StageTiming>,
+}
+
+#[derive(Serialize)]
+struct StageTiming {
+    stage: &'static str,
+    seconds: f64,
+}
+
+#[derive(Serialize)]
+struct StageTimingReport {
+    recorded_at: chrono::DateTime<Utc>,
+    total_seconds: f64,
+    slowest: Option<String>,
+    stages: Vec<StageTiming>,
+}
+
+impl StageTimer {
+    fn new() -> Self {
+        Self {
+            started: std::time::Instant::now(),
+            current: None,
+            completed: Vec::new(),
+        }
+    }
+
+    fn begin(&mut self, stage: &'static str) {
+        self.end_current();
+        self.current = Some((stage, std::time::Instant::now()));
+    }
+
+    fn end_current(&mut self) {
+        if let Some((stage, started)) = self.current.take() {
+            self.completed.push(StageTiming {
+                stage,
+                seconds: started.elapsed().as_secs_f64(),
+            });
+        }
+    }
+
+    fn finish(mut self) -> StageTimingReport {
+        self.end_current();
+        let slowest = self
+            .completed
+            .iter()
+            .max_by(|a, b| a.seconds.total_cmp(&b.seconds))
+            .map(|timing| timing.stage.to_string());
+        StageTimingReport {
+            recorded_at: Utc::now(),
+            total_seconds: self.started.elapsed().as_secs_f64(),
+            slowest,
+            stages: self.completed,
         }
     }
 }
@@ -3573,6 +3651,18 @@ async fn run_daemon_cycle(
                 if failures.is_blocked(&failure_key, now) {
                     continue;
                 }
+                let missing = missing_pipeline_tools(&probe_all().await);
+                if !missing.is_empty() {
+                    let names = missing
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    eprintln!(
+                        "Production paused: required tools unavailable ({names}); run `atlas doctor`"
+                    );
+                    return Ok(());
+                }
                 let produced = cmd_produce(
                     store,
                     ProduceOptions {
@@ -4640,6 +4730,20 @@ mod tests {
 
         assert!(ledger.clear(&key));
         assert!(!ledger.is_blocked(&key, now));
+    }
+
+    #[test]
+    fn stage_timer_reports_every_stage_and_slowest() {
+        let mut timer = StageTimer::new();
+        timer.begin("fast");
+        timer.begin("slow");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        timer.begin("last");
+        let report = timer.finish();
+        let names = report.stages.iter().map(|stage| stage.stage).collect::<Vec<_>>();
+        assert_eq!(names, ["fast", "slow", "last"]);
+        assert_eq!(report.slowest.as_deref(), Some("slow"));
+        assert!(report.total_seconds >= report.stages[1].seconds);
     }
 
     #[test]

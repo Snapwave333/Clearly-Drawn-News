@@ -5,33 +5,52 @@ use tokio::process::Command;
 
 /// Probes all known ATLAS dependencies and returns their status.
 pub async fn probe_all() -> Vec<ToolProbeResult> {
-    let probes = vec![
-        probe_blender().await,
-        probe_unreal().await,
-        probe_ffmpeg().await,
-        probe_ffprobe().await,
-        probe_vectorcraft().await,
-        probe_photocraft().await,
-        probe_effectcraft().await,
-        probe_kokoro().await,
-    ];
-    probes
+    let (blender, unreal, ffmpeg, ffprobe, vectorcraft, photocraft, effectcraft, kokoro) = tokio::join!(
+        probe_blender(),
+        probe_unreal(),
+        probe_ffmpeg(),
+        probe_ffprobe(),
+        probe_vectorcraft(),
+        probe_photocraft(),
+        probe_effectcraft(),
+        probe_kokoro(),
+    );
+    vec![
+        blender,
+        unreal,
+        ffmpeg,
+        ffprobe,
+        vectorcraft,
+        photocraft,
+        effectcraft,
+        kokoro,
+    ]
 }
+
+pub fn missing_pipeline_tools(results: &[ToolProbeResult]) -> Vec<ToolKind> {
+    REQUIRED_PIPELINE_TOOLS
+        .iter()
+        .filter(|kind| {
+            !results
+                .iter()
+                .any(|r| &r.kind == *kind && r.status.is_available())
+        })
+        .cloned()
+        .collect()
+}
+
+const REQUIRED_PIPELINE_TOOLS: [ToolKind; 4] = [
+    ToolKind::Blender,
+    ToolKind::Ffmpeg,
+    ToolKind::Ffprobe,
+    ToolKind::Kokoro,
+];
+
+const VERSION_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Returns true if the minimal viable pipeline can run (Blender + FFmpeg + OpenCode).
 pub fn has_minimal_pipeline(results: &[ToolProbeResult]) -> bool {
-    [
-        ToolKind::Blender,
-        ToolKind::Ffmpeg,
-        ToolKind::Ffprobe,
-        ToolKind::Kokoro,
-    ]
-    .iter()
-    .all(|kind| {
-        results
-            .iter()
-            .any(|r| &r.kind == kind && r.status.is_available())
-    })
+    missing_pipeline_tools(results).is_empty()
 }
 
 async fn run_version(args: &[&str], path_hint: Option<&str>) -> Option<(String, String)> {
@@ -40,13 +59,15 @@ async fn run_version(args: &[&str], path_hint: Option<&str>) -> Option<(String, 
             .ok()
             .map(|p| p.to_string_lossy().into_owned())
     })?;
-    let output = Command::new(&exe)
+    let probe = Command::new(&exe)
         .args(&args[1..])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
-        .output()
+        .output();
+    let output = tokio::time::timeout(VERSION_PROBE_TIMEOUT, probe)
         .await
+        .ok()?
         .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
     let err = String::from_utf8_lossy(&output.stderr);
@@ -262,7 +283,7 @@ pub async fn probe_kokoro() -> ToolProbeResult {
     }
     match run_version(&["kokoro-tts", "--help"], None).await {
         Some((version, path)) => available(ToolKind::Kokoro, version, path),
-        None => optional_unavailable(
+        None => unavailable(
             ToolKind::Kokoro,
             "kokoro not in PATH or tools/kokoro; narration synthesis unavailable",
         ),
@@ -310,5 +331,26 @@ pub async fn probe_tool(kind: ToolKind) -> ToolProbeResult {
         ToolKind::Kokoro => probe_kokoro().await,
         ToolKind::Ffmpeg => probe_ffmpeg().await,
         ToolKind::Ffprobe => probe_ffprobe().await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_tools_lists_only_unavailable_requirements() {
+        let results = vec![
+            available(ToolKind::Blender, "5.1", "/usr/bin/blender"),
+            available(ToolKind::Ffmpeg, "7.1", "/usr/bin/ffmpeg"),
+            unavailable(ToolKind::Ffprobe, "missing"),
+            optional_unavailable(ToolKind::Kokoro, "missing"),
+            optional_unavailable(ToolKind::UnrealEditor, "missing"),
+        ];
+        assert_eq!(
+            missing_pipeline_tools(&results),
+            vec![ToolKind::Ffprobe, ToolKind::Kokoro]
+        );
+        assert!(!has_minimal_pipeline(&results));
     }
 }
