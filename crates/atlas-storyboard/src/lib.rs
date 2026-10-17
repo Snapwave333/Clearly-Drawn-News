@@ -137,7 +137,10 @@ impl DirectorClient {
         let model = std::env::var("ATLAS_DIRECTOR_MODEL")
             .unwrap_or_else(|_| "meta/llama-3.2-11b-vision-instruct".into());
         Some(Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .unwrap_or_default(),
             endpoint,
             api_key,
             model,
