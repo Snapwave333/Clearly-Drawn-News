@@ -60,6 +60,7 @@ atlas-studio/
 | `atlas cache stats` | Disk usage of narration, render, B-roll, and vector caches |
 | `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched); the daemon runs this weekly with 30-day retention |
 | `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
+| `ATLAS_NEWS_DAILY_HOUR=14 atlas daemon start` | Daemon also produces one Clearly Drawn News episode per UTC day after that hour, gated on Telegram approval when `TELEGRAM_BOT_TOKEN` is set (`TELEGRAM_CHAT_ID` optional), or unattended only with `ATLAS_NEWS_AUTO_APPROVE=1`; never runs without one of those. Failures back off via the production failure ledger; `daemon/news_last_run` holds the last run date |
 | `stage_timings.json` | Written next to each `final.mp4`; per-stage seconds plus the slowest stage |
 | `audio/segments/<hash>.wav` | Narration cache keyed by text, voice, speed, and language; delete to force re-synthesis |
 | `media/<id>/<format>/attribution.json` | B-roll cache; reused when both image and video files are present |

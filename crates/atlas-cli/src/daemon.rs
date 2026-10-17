@@ -90,6 +90,88 @@ impl ProductionFailureLedger {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NewsApproval {
+    Telegram,
+    AutoApproved,
+}
+
+fn news_schedule_hour(lookup: impl Fn(&str) -> Option<String>) -> Option<u32> {
+    lookup("ATLAS_NEWS_DAILY_HOUR")
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .filter(|hour| *hour < 24)
+}
+
+fn news_approval(lookup: impl Fn(&str) -> Option<String>) -> Option<NewsApproval> {
+    let set = |name: &str| lookup(name).is_some_and(|value| !value.trim().is_empty());
+    if set("TELEGRAM_BOT_TOKEN") {
+        Some(NewsApproval::Telegram)
+    } else if lookup("ATLAS_NEWS_AUTO_APPROVE").is_some_and(|value| value.trim() == "1") {
+        Some(NewsApproval::AutoApproved)
+    } else {
+        None
+    }
+}
+
+fn news_due(last_run: Option<chrono::NaiveDate>, now: chrono::DateTime<Utc>, hour: u32) -> bool {
+    use chrono::Timelike;
+    now.hour() >= hour && last_run != Some(now.date_naive())
+}
+
+fn last_news_run(marker: &Path) -> Option<chrono::NaiveDate> {
+    std::fs::read_to_string(marker)
+        .ok()
+        .and_then(|value| chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok())
+}
+
+async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<Utc>) -> anyhow::Result<()> {
+    let env = |name: &str| std::env::var(name).ok();
+    let Some(hour) = news_schedule_hour(env) else {
+        return Ok(());
+    };
+    let marker = daemon_dir.join("news_last_run");
+    if !news_due(last_news_run(&marker), now, hour) {
+        return Ok(());
+    }
+    let failures_path = daemon_dir.join("production_failures.json");
+    let mut failures = ProductionFailureLedger::load(&failures_path);
+    let key = format!("news:{}", now.date_naive());
+    if failures.is_blocked(&key, now) {
+        return Ok(());
+    }
+    let Some(approval) = news_approval(env) else {
+        eprintln!(
+            "Daily Clearly Drawn News is due but has no approval path: set TELEGRAM_BOT_TOKEN for editorial approval, or ATLAS_NEWS_AUTO_APPROVE=1 to run without it."
+        );
+        std::fs::write(&marker, now.date_naive().to_string())?;
+        return Ok(());
+    };
+    println!("Daily Clearly Drawn News is due ({approval:?}); producing today's episode.");
+    let produced = news::cmd_news(
+        store,
+        NewsAction::Produce {
+            token: None,
+            chat_id: env("TELEGRAM_CHAT_ID").and_then(|value| value.trim().parse().ok()),
+            skip_telegram_wait: approval == NewsApproval::AutoApproved,
+        },
+    )
+    .await;
+    match produced {
+        Ok(()) => {
+            std::fs::write(&marker, now.date_naive().to_string())?;
+            if failures.clear(&key) {
+                failures.save(&failures_path)?;
+            }
+        }
+        Err(error) => {
+            let attempts = failures.record_failure(&key, &error.to_string(), now);
+            failures.save(&failures_path)?;
+            eprintln!("Daily news attempt {attempts}/{MAX_PRODUCTION_ATTEMPTS} failed; backing off: {error}");
+        }
+    }
+    Ok(())
+}
+
 pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::Result<()> {
     let daemon_dir = store.data_dir().join("daemon");
     let pause_path = daemon_dir.join("paused");
@@ -105,6 +187,12 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
                 std::fs::remove_file(&pause_path)?;
             }
             println!("ATLAS continuous publisher started for YouTube and TikTok.");
+            let env = |name: &str| std::env::var(name).ok();
+            match (news_schedule_hour(env), news_approval(env)) {
+                (Some(hour), Some(approval)) => println!("Daily Clearly Drawn News scheduled at {hour:02}:00 UTC ({approval:?})."),
+                (Some(hour), None) => println!("Daily Clearly Drawn News scheduled at {hour:02}:00 UTC but has no approval path yet."),
+                (None, _) => println!("Daily Clearly Drawn News is off (set ATLAS_NEWS_DAILY_HOUR to enable)."),
+            }
             loop {
                 if pause_path.is_file() {
                     println!("ATLAS continuous publisher paused.");
@@ -112,6 +200,9 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
                 }
                 if let Err(error) = run_daemon_cycle(store, privacy, &tiktok_user).await {
                     eprintln!("Daemon cycle failed safely: {error}");
+                }
+                if let Err(error) = run_daily_news(store, &daemon_dir, Utc::now()).await {
+                    eprintln!("Daily news step failed safely: {error}");
                 }
                 match auto_prune_if_due(store.data_dir(), &daemon_dir, std::time::SystemTime::now()) {
                     Ok(Some((removed, freed))) if removed > 0 => println!(
@@ -447,6 +538,34 @@ pub(crate) fn cleanup_completed_daemon_package(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn at(stamp: &str) -> chrono::DateTime<Utc> {
+        chrono::DateTime::parse_from_rfc3339(stamp).unwrap().with_timezone(&Utc)
+    }
+
+    #[test]
+    fn daily_news_is_due_once_after_the_scheduled_hour() {
+        let today = at("2026-10-17T15:05:00Z");
+        assert!(!news_due(None, at("2026-10-17T13:59:00Z"), 14));
+        assert!(news_due(None, today, 14));
+        assert!(!news_due(Some(today.date_naive()), today, 14));
+        assert!(news_due(Some(today.date_naive()), at("2026-10-18T14:00:00Z"), 14));
+    }
+
+    #[test]
+    fn daily_news_needs_a_schedule_and_an_approval_path() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| v.to_string())
+        };
+        assert_eq!(news_schedule_hour(env(&[])), None);
+        assert_eq!(news_schedule_hour(env(&[("ATLAS_NEWS_DAILY_HOUR", "14")])), Some(14));
+        assert_eq!(news_schedule_hour(env(&[("ATLAS_NEWS_DAILY_HOUR", "25")])), None);
+        assert_eq!(news_approval(env(&[])), None);
+        assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", " ")])), None);
+        assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", "1:x"), ("ATLAS_NEWS_AUTO_APPROVE", "1")])), Some(NewsApproval::Telegram));
+        assert_eq!(news_approval(env(&[("ATLAS_NEWS_AUTO_APPROVE", "1")])), Some(NewsApproval::AutoApproved));
+        assert_eq!(news_approval(env(&[("ATLAS_NEWS_AUTO_APPROVE", "yes")])), None);
+    }
 
     #[test]
     fn auto_prune_runs_at_most_weekly() {
