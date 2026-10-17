@@ -16,6 +16,7 @@ mod broll;
 mod cache;
 mod daemon;
 mod news;
+mod news_health;
 mod news_voice;
 mod production;
 
@@ -304,6 +305,11 @@ enum NewsAction {
         token: Option<String>,
         #[arg(long)]
         chat_id: Option<i64>,
+    },
+    #[command(about = "Show feed reliability and fact-check pass rates across recent wire runs")]
+    Health {
+        #[arg(long, default_value_t = 20)]
+        runs: usize,
     },
     /// Run copyright pre-render compliance checks and statutory fair use analysis.
     Copyright,

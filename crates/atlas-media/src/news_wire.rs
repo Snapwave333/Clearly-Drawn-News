@@ -320,22 +320,35 @@ pub fn build_wire(
     stories
 }
 
-pub async fn fetch_feeds(client: &reqwest::Client) -> (Vec<FeedEntry>, Vec<String>) {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FeedStatus {
+    pub source: String,
+    pub entries: usize,
+    pub error: Option<String>,
+}
+
+pub async fn fetch_feeds(client: &reqwest::Client) -> (Vec<FeedEntry>, Vec<FeedStatus>) {
     let mut tasks = tokio::task::JoinSet::new();
     for source in FEEDS {
         let client = client.clone();
-        tasks.spawn(async move { fetch_feed(&client, &source).await });
+        tasks.spawn(async move { (source.name, fetch_feed(&client, &source).await) });
     }
     let mut entries = Vec::new();
-    let mut errors = Vec::new();
+    let mut statuses = Vec::new();
     while let Some(joined) = tasks.join_next().await {
-        match joined {
-            Ok(Ok(mut items)) => entries.append(&mut items),
-            Ok(Err(error)) => errors.push(error),
-            Err(error) => errors.push(error.to_string()),
+        let Ok((source, result)) = joined else {
+            continue;
+        };
+        match result {
+            Ok(mut items) => {
+                statuses.push(FeedStatus { source: source.into(), entries: items.len(), error: None });
+                entries.append(&mut items);
+            }
+            Err(error) => statuses.push(FeedStatus { source: source.into(), entries: 0, error: Some(error) }),
         }
     }
-    (entries, errors)
+    statuses.sort_by(|a, b| a.source.cmp(&b.source));
+    (entries, statuses)
 }
 
 async fn fetch_feed(client: &reqwest::Client, source: &FeedSource) -> Result<Vec<FeedEntry>, String> {

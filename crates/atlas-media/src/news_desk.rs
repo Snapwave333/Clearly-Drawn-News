@@ -49,7 +49,7 @@ pub enum WireOrigin {
 pub struct NewsWire {
     pub origin: WireOrigin,
     pub items: Vec<VerifiedNewsItem>,
-    pub feed_errors: Vec<String>,
+    pub feeds: Vec<crate::news_wire::FeedStatus>,
 }
 
 pub struct AnimationNewsDesk {
@@ -78,19 +78,19 @@ impl AnimationNewsDesk {
     }
 
     pub async fn fetch_wire(&self) -> NewsWire {
-        let (entries, feed_errors) = crate::news_wire::fetch_feeds(&self.client).await;
+        let (entries, feeds) = crate::news_wire::fetch_feeds(&self.client).await;
         let items = crate::news_wire::build_wire(entries, chrono::Utc::now(), self.max_age_days, self.max_stories);
         if items.is_empty() {
             return NewsWire {
                 origin: WireOrigin::CuratedFallback,
                 items: self.fetch_curated_wire().await,
-                feed_errors,
+                feeds,
             };
         }
         NewsWire {
             origin: WireOrigin::LiveFeeds,
             items,
-            feed_errors,
+            feeds,
         }
     }
 

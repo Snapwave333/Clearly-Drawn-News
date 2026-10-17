@@ -33,11 +33,9 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
     match action {
         NewsAction::Research => {
             println!("\n[1/3] Ingesting developing animation industry wire...");
-            let wire = load_wire(&news_desk).await.items;
-            println!("  Found {} candidate industry stories.", wire.len());
+            let (_, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "research").await;
 
-            println!("\n[2/3] Running Fact-Checking & Corroboration Engine...");
-            let report = fact_checker.verify_candidates(wire);
+            println!("\n[2/3] Fact-Checking & Corroboration Engine results:");
             println!("  Passed:   {} verified stories", report.passed_stories.len());
             println!("  Rejected: {} unverified/duplicate items", report.rejected_stories.len());
             for (story, reason) in &report.rejected_stories {
@@ -61,9 +59,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             );
         }
         NewsAction::Slate => {
-            let wire = load_wire(&news_desk).await;
-            let origin = wire.origin;
-            let report = fact_checker.verify_candidates(wire.items);
+            let (origin, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "slate").await;
             let (episode_id, _) = next_episode(&news_dir);
             let title = episode_title(&episode_id, &report);
             println!("\nWriting the two-anchor broadcast script from {} verified stories...", report.passed_stories.len());
@@ -95,7 +91,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
         }
         NewsAction::Telegram { token, chat_id } => {
             let mut gate = TelegramApprovalGate::new(token, chat_id).map_err(anyhow::Error::msg)?;
-            let report = fact_checker.verify_candidates(load_wire(&news_desk).await.items);
+            let (_, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "telegram").await;
             let (episode_id, episode_number) = next_episode(&news_dir);
 
             println!("\nConnecting to Telegram Bot API...");
@@ -116,6 +112,9 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 .await
                 .map_err(anyhow::Error::msg)?;
             println!("Received Telegram Approval Gate Decision: {:?}", decision);
+        }
+        NewsAction::Health { runs } => {
+            news_health::print_health(&news_dir, runs.max(1));
         }
         NewsAction::Copyright => {
             println!("\nRunning Dedicated Copyright Compliance Agent Scanner...");
@@ -151,9 +150,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             timer.begin("research");
             println!("\n[PHASE 1: RESEARCH & FACT-CHECK]");
-            let wire = load_wire(&news_desk).await;
-            let wire_origin = wire.origin;
-            let report = fact_checker.verify_candidates(wire.items);
+            let (wire_origin, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "produce").await;
             if report.passed_stories.is_empty() {
                 anyhow::bail!("Production halted: no stories passed fact-checking");
             }
@@ -408,10 +405,27 @@ async fn draft_script(
     (drafted.script, provenance)
 }
 
+async fn checked_wire(
+    news_desk: &AnimationNewsDesk,
+    fact_checker: &NewsFactChecker,
+    news_dir: &Path,
+    command: &str,
+) -> (WireOrigin, FactCheckReport) {
+    let wire = load_wire(news_desk).await;
+    println!("  Found {} candidate industry stories.", wire.items.len());
+    let report = fact_checker.verify_candidates(wire.items);
+    if let Err(error) = news_health::record(news_dir, command, wire.origin, &wire.feeds, &report) {
+        eprintln!("  Wire health log not updated: {error}");
+    }
+    (wire.origin, report)
+}
+
 async fn load_wire(news_desk: &AnimationNewsDesk) -> NewsWire {
     let wire = news_desk.fetch_wire().await;
-    for error in &wire.feed_errors {
-        eprintln!("  Feed unavailable: {error}");
+    for feed in &wire.feeds {
+        if let Some(error) = &feed.error {
+            eprintln!("  Feed unavailable: {error}");
+        }
     }
     match wire.origin {
         WireOrigin::LiveFeeds => println!("  Wire source: live feeds ({} stories)", wire.items.len()),
