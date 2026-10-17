@@ -352,15 +352,15 @@ mod tests {
 
     #[test]
     fn enforces_format_and_daily_caps() {
-        let ledger = PublishLedger {
-            items: vec![
-                item("long", PublishedFormat::Long, 10),
-                item("short", PublishedFormat::Short, 5),
-            ],
-        };
+        let policy = PublishCadencePolicy::default();
+        let mut items = Vec::new();
+        for i in 0..policy.max_long_per_24_hours {
+            items.push(item(&format!("long_{i}"), PublishedFormat::Long, (i as i64) + 1));
+        }
+        let ledger = PublishLedger { items };
         assert!(matches!(
             ledger.decide(
-                &PublishCadencePolicy::default(),
+                &policy,
                 PublishedFormat::Long,
                 "new",
                 Utc::now()
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn enforces_tiktok_duplicate_and_caps() {
-        let mut tiktok_item = item("tiktok1", PublishedFormat::Short, 2);
+        let mut tiktok_item = item("tiktok1", PublishedFormat::Short, 1);
         tiktok_item.platform = "tiktok".into();
         tiktok_item.tiktok_post_id = Some("post_123".into());
 

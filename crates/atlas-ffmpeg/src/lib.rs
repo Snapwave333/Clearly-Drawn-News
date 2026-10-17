@@ -234,6 +234,22 @@ impl FfmpegAssembler {
             ));
         }
 
+        // Strict 16:9 widescreen validation (reject portrait / vertical aspect ratios)
+        if edl.height > edl.width {
+            return Err(AtlasError::Render(format!(
+                "Portrait aspect ratio detected ({}x{}). Clearly Drawn News strictly requires native 16:9 widescreen.",
+                edl.width, edl.height
+            )));
+        }
+        let aspect = edl.width as f64 / edl.height as f64;
+        let diff = (aspect - (16.0 / 9.0)).abs();
+        if diff > 0.05 {
+            return Err(AtlasError::Render(format!(
+                "Non-16:9 aspect ratio detected (ratio: {:.3}). Must be 16:9 (e.g., 3840x2160 or 1920x1080).",
+                aspect
+            )));
+        }
+
         let mut filters = Vec::new();
         let mut video_inputs = Vec::new();
         let mut audio_inputs = Vec::new();

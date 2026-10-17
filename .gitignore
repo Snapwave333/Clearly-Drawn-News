@@ -10,6 +10,8 @@ Cargo.lock
 
 # Credentials & secrets
 youtube_credentials.json
+youtube_token.json
+local.properties
 upload_post_credentials.json
 tiktok_credentials.json
 *.pem

@@ -312,3 +312,93 @@ pub struct Artifact {
     pub path: String,
     pub metadata: serde_json::Value,
 }
+
+/// Clearly Drawn News Show Identity
+pub const SHOW_TITLE: &str = "Clearly Drawn News";
+pub const CHANNEL_NAME: &str = "Clearly Drawn";
+pub const SHOW_TAGLINE: &str = "Animation news with personality.";
+
+/// Broadcast format strictly enforcing native 16:9 widescreen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BroadcastFormat {
+    /// 3840 x 2160 (4K UHD)
+    Uhd4K,
+    /// 1920 x 1080 (Full HD fallback)
+    Fhd1080p,
+}
+
+impl BroadcastFormat {
+    pub fn dimensions(self) -> (u32, u32) {
+        match self {
+            Self::Uhd4K => (3840, 2160),
+            Self::Fhd1080p => (1920, 1080),
+        }
+    }
+
+    pub fn fps(self) -> u32 {
+        30
+    }
+}
+
+/// Enforced Episode Duration Policy: 15 to 30 minutes of actual finished content.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct EpisodeDurationPolicy {
+    pub min_seconds: f64,
+    pub max_seconds: f64,
+    pub target_seconds: f64,
+}
+
+impl Default for EpisodeDurationPolicy {
+    fn default() -> Self {
+        Self {
+            min_seconds: 900.0,
+            max_seconds: 1800.0,
+            target_seconds: 1320.0,
+        }
+    }
+}
+
+impl EpisodeDurationPolicy {
+    pub fn is_valid(&self, duration_seconds: f64) -> bool {
+        duration_seconds >= self.min_seconds && duration_seconds <= self.max_seconds
+    }
+
+    pub fn validate(&self, duration_seconds: f64) -> Result<(), String> {
+        if duration_seconds < self.min_seconds {
+            Err(format!(
+                "Episode duration {:.2}s is below the 15-minute minimum (900s required)",
+                duration_seconds
+            ))
+        } else if duration_seconds > self.max_seconds {
+            Err(format!(
+                "Episode duration {:.2}s exceeds the 30-minute maximum (1800s maximum)",
+                duration_seconds
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// 17-stage state machine for Clearly Drawn News production lifecycle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NewsProductionStage {
+    Research,
+    SourceVerification,
+    EditorialStorySelection,
+    TelegramApprovalPending,
+    TelegramApproved,
+    ProducerActivation,
+    LongFormScriptGeneration,
+    ScriptFactAudit,
+    ComedyAndDialoguePolish,
+    VoicePerformanceGeneration,
+    MetaHumanAnimation,
+    UnrealEngineStudioFilming,
+    GraphicsAndAssetIntegration,
+    FinalEditorialAssembly,
+    AudioMixAndMastering,
+    TechnicalAndEditorialQa,
+    Published,
+}

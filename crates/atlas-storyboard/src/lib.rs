@@ -1,6 +1,9 @@
 use atlas_core::{AtlasError, AtlasResult};
 use serde::{Deserialize, Serialize};
 
+pub mod pronunciation;
+pub mod two_anchor_script;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoryboardPlan {
     pub topic: String,
@@ -16,6 +19,7 @@ pub struct TopicIdea {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoryboardBeat {
+    #[serde(default)]
     pub title: String,
     pub narration: String,
     pub scene_pattern: ScenePattern,
@@ -75,24 +79,32 @@ pub struct MorphDirection {
 }
 
 impl StoryboardPlan {
-    pub fn validate(&self, expected_beats: usize) -> AtlasResult<()> {
+    pub fn validate(&mut self, expected_beats: usize) -> AtlasResult<()> {
         if self.beats.len() != expected_beats {
             return Err(AtlasError::Config(format!(
                 "Storyboard returned {} beats; expected {expected_beats}",
                 self.beats.len()
             )));
         }
-        for (index, beat) in self.beats.iter().enumerate() {
+        for (index, beat) in self.beats.iter_mut().enumerate() {
+            if beat.title.trim().is_empty() {
+                beat.title = beat
+                    .focal_terms
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| format!("BEAT {}", index + 1))
+                    .to_uppercase();
+            }
             let words = beat.narration.split_whitespace().count();
-            if !(8..=42).contains(&words) {
+            if !(8..=120).contains(&words) {
                 return Err(AtlasError::Config(format!(
-                    "Beat {} narration has {words} words; expected 8 to 42",
+                    "Beat {} narration has {words} words; expected 8 to 120",
                     index + 1
                 )));
             }
-            if beat.title.trim().is_empty() || beat.title.chars().count() > 64 {
+            if beat.title.chars().count() > 64 {
                 return Err(AtlasError::Config(format!(
-                    "Beat {} title is empty or too long",
+                    "Beat {} title is too long",
                     index + 1
                 )));
             }
@@ -176,7 +188,7 @@ impl DirectorClient {
         let content = payload["choices"][0]["message"]["content"]
             .as_str()
             .ok_or_else(|| AtlasError::Config("Director response omitted JSON content".into()))?;
-        let plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
+        let mut plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
             .map_err(|error| AtlasError::Config(format!("Invalid director storyboard: {error}")))?;
         plan.validate(beat_count)?;
         Ok(plan)
@@ -268,7 +280,7 @@ impl DirectorClient {
             .ok_or_else(|| {
                 AtlasError::Config("Short adapter response omitted JSON content".into())
             })?;
-        let plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
+        let mut plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
             .map_err(|error| AtlasError::Config(format!("Invalid derived short plan: {error}")))?;
         plan.validate(beat_count)?;
         if plan
@@ -286,7 +298,7 @@ impl DirectorClient {
 
 fn director_prompt(topic: &str, format: &str, beat_count: usize) -> String {
     format!(
-        "Create a {beat_count}-beat {format} educational video about {topic}. Build a causal teaching arc with a strong hook, concrete mental model, misconception or limit, and memorable synthesis. Every beat needs one narration sentence, one to four focal_terms, a specific stock-media broll_query, and character direction for Luma, an expressive light-bulb narrator. scene_pattern must be one of hook, parts, flow, split_path, comparison, scale, timeline, cause_effect, risk, cycle. emotion must be curious, excited, explaining, concerned, or confident. gesture must be point_left, point_right, present, think, warn, or celebrate. Morphs are optional and must clarify the concept. A morph silhouette is exactly eleven ordered perimeter points, each [x,y] normalized from -1 to 1, forming a recognizable simple icon while Luma keeps its face, gloves, filament, and screw base. Return an object with topic, thesis, and beats. Avoid generic filler, repeated scenes, unsupported claims, and visual metaphors unrelated to the narration."
+        "Create a {beat_count}-beat {format} educational video about {topic}. Build a causal teaching arc with a strong hook, concrete mental model, misconception or limit, and memorable synthesis. Every beat needs a title (a short punchy headline in uppercase, 2-5 words), an educational narration explanation (for long-form videos provide a thorough, informative paragraph of 40-90 words; for shorts provide 12-24 words), one to four focal_terms, a specific stock-media broll_query, and character direction for Luma, an expressive light-bulb narrator. scene_pattern must be one of hook, parts, flow, split_path, comparison, scale, timeline, cause_effect, risk, cycle. emotion must be curious, excited, explaining, concerned, or confident. gesture must be point_left, point_right, present, think, warn, or celebrate. Morphs are optional and must clarify the concept. A morph silhouette is exactly eleven ordered perimeter points, each [x,y] normalized from -1 to 1, forming a recognizable simple icon while Luma keeps its face, gloves, filament, and screw base. Return an object with topic, thesis, and beats. Avoid generic filler, repeated scenes, unsupported claims, and visual metaphors unrelated to the narration."
     )
 }
 

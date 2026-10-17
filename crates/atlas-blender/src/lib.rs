@@ -224,9 +224,10 @@ impl BlenderPipeline {
             script.push_str(&element_script(element)?);
         }
         if let Some(mascot) = &spec.mascot {
-            script.push_str(&mascot_script(mascot, spec.duration_frames, width < height));
+            script.push_str(&mascot_script(mascot, spec.duration_frames, width < height, &spec.scene_template));
         }
-        script.push_str(&camera_script(&spec.camera));
+        script.push_str(&camera_script(&spec.camera, spec.duration_frames));
+        script.push_str("ease_curves()\n");
         script.push_str("bpy.ops.render.render(animation=True)\n");
         Ok(script)
     }
@@ -316,7 +317,25 @@ scene.render.image_settings.color_depth = '8'
 scene.render.film_transparent = False
 scene.render.filepath = os.path.join({output_dir}, '')
 scene.view_settings.look = 'AgX - Medium High Contrast'
-scene.world.color = (0.955, 0.945, 0.91)
+scene.world.color = (0.97, 0.97, 0.96)
+if hasattr(scene, 'eevee') and hasattr(scene.eevee, 'use_raytracing'):
+    scene.eevee.use_raytracing = True
+
+def ease_curves():
+    for action in bpy.data.actions:
+        all_fcurves = []
+        if hasattr(action, 'fcurves'):
+            all_fcurves.extend(action.fcurves)
+        if hasattr(action, 'layers'):
+            for layer in action.layers:
+                for strip in getattr(layer, 'strips', []):
+                    for bag in getattr(strip, 'channelbags', []):
+                        if hasattr(bag, 'fcurves'):
+                            all_fcurves.extend(bag.fcurves)
+        for fcurve in all_fcurves:
+            for kf in fcurve.keyframe_points:
+                kf.interpolation = 'BEZIER'
+                kf.easing = 'EASE_OUT'
 
 def material(name, color):
     value = bpy.data.materials.get(name)
@@ -346,10 +365,12 @@ def reveal(obj, frame):
     obj.hide_render = False
     obj.keyframe_insert(data_path='hide_render', frame=frame)
     original_scale = obj.scale.copy()
-    obj.scale = original_scale * 0.86
+    obj.scale = original_scale * 0.72
     obj.keyframe_insert(data_path='scale', frame=frame)
+    obj.scale = original_scale * 1.06
+    obj.keyframe_insert(data_path='scale', frame=min(scene.frame_end, frame + 6))
     obj.scale = original_scale
-    obj.keyframe_insert(data_path='scale', frame=min(scene.frame_end, frame + 8))
+    obj.keyframe_insert(data_path='scale', frame=min(scene.frame_end, frame + 10))
 
 def add_text(name, body, location, size, frame, color=INK):
     data = bpy.data.curves.new(name + '_data', 'FONT')
@@ -431,6 +452,37 @@ def add_arrow(name, start, end, frame, color=ORANGE):
     reveal(head, frame)
     return head
 
+def add_vector_art(name, svg_path, location, scale, frame):
+    if not os.path.isfile(svg_path):
+        return None
+    try:
+        img = bpy.data.images.load(svg_path, check_existing=True)
+        mat = bpy.data.materials.new(name + '_mat')
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        nodes.clear()
+        out = nodes.new('ShaderNodeOutputMaterial')
+        emit = nodes.new('ShaderNodeEmission')
+        tex = nodes.new('ShaderNodeTexImage')
+        tex.image = img
+        mat.node_tree.links.new(tex.outputs['Color'], emit.inputs['Color'])
+        mat.node_tree.links.new(emit.outputs['Emission'], out.inputs['Surface'])
+        bpy.ops.mesh.primitive_plane_add(size=1.0, location=location)
+        plane = bpy.context.object
+        plane.name = name
+        plane.scale = scale
+        plane.data.materials.append(mat)
+        reveal(plane, frame)
+        import math
+        for f in range(frame, scene.frame_end + 1, 15):
+            p = (f / 30.0) * math.pi
+            plane.location.y = location[1] + math.sin(p) * 0.04
+            plane.keyframe_insert(data_path='location', frame=f)
+        return plane
+    except Exception as e:
+        print('Vector art import note:', e)
+        return None
+
 add_box('whiteboard_background', (0.0, 0.0, -1.0), (8.0, 5.0, 0.05), 1, PAPER)
 
 "#,
@@ -481,7 +533,8 @@ fn scene_script(spec: &ShotSpec, portrait: bool) -> String {
             end.saturating_sub(20)
         );
     }
-    match spec.scene_template.as_str() {
+    let template = spec.scene_template.to_ascii_lowercase();
+    match template.as_str() {
         "battery_hook" => format!(
             "add_box('phone', ({left}, 0.0, 0.1), (0.75, 1.25, 0.08), 12, INK)\nadd_box('screen', ({left}, 0.0, 0.2), (0.6, 1.05, 0.04), 18, PAPER)\ncharge = add_box('charge', ({left}, -0.15, 0.3), (0.42, 0.62, 0.03), 24, ORANGE)\ncharge.scale.y = 0.62\ncharge.keyframe_insert(data_path='scale', frame=24)\ncharge.scale.y = 0.08\ncharge.keyframe_insert(data_path='scale', frame={})\nadd_text('hook_question', 'WHERE DID THE ENERGY GO?', ({right}, 0.35, 0.2), 0.48, 30, INK)\nadd_text('hook_answer', 'It changed where ions prefer to be.', ({right}, -0.45, 0.2), 0.3, 70, BLUE)\n",
             end.saturating_sub(18)
@@ -520,7 +573,30 @@ fn scene_script(spec: &ShotSpec, portrait: bool) -> String {
         "battery_summary" => format!(
             "add_circle('cycle_left', ({left}, 0.0, 0.15), 0.7, 20, BLUE)\nadd_circle('cycle_right', ({right}, 0.0, 0.15), 0.7, 25, INK)\nadd_arrow('cycle_top', ({left} + 0.7, 0.45, 0.2), ({right} - 0.7, 0.45, 0.2), 35, ORANGE)\nadd_arrow('cycle_bottom', ({right} - 0.7, -0.45, 0.2), ({left} + 0.7, -0.45, 0.2), 55, BLUE)\nadd_text('charge_word', 'CHARGE', (0.0, 0.9, 0.2), 0.3, 40, ORANGE)\nadd_text('use_word', 'USE', (0.0, -0.9, 0.2), 0.3, 60, BLUE)\n"
         ),
-        _ => String::new(),
+        s if s.contains("hook") => format!(
+            "add_circle('inquiry_focus', ({left}, 0.0, 0.1), 0.85, 12, BLUE)\nadd_circle('inquiry_core', ({left}, 0.0, 0.15), 0.45, 18, ORANGE)\nadd_text('focus_label', 'OBSERVE THE PHENOMENON', ({right}, 0.35, 0.2), 0.38, 26, INK)\nadd_text('focus_sub', 'Underlying physical mechanism at work', ({right}, -0.35, 0.2), 0.26, 45, BLUE)\n"
+        ),
+        s if s.contains("anatomy") || s.contains("part") => format!(
+            "add_box('module_a', ({left}, 0.0, 0.1), (0.7, 1.1, 0.06), 16, BLUE)\nadd_box('module_b', (0.0, 0.0, 0.15), (0.2, 1.2, 0.06), 24, ORANGE)\nadd_box('module_c', ({right}, 0.0, 0.1), (0.7, 1.1, 0.06), 32, INK)\nadd_text('label_a', 'INPUT MODULE', ({left}, {bottom}, 0.2), 0.28, 40, BLUE)\nadd_text('label_b', 'INTERFACE', (0.0, {top}, 0.2), 0.25, 48, ORANGE)\nadd_text('label_c', 'REACTION MODULE', ({right}, {bottom}, 0.2), 0.28, 56, INK)\n"
+        ),
+        s if s.contains("flow") || s.contains("transport") || s.contains("charg") => {
+            particle_flow_script(left, right, true, end, "DYNAMIC TRANSPORT MECHANISM")
+        },
+        s if s.contains("split") || s.contains("compar") => format!(
+            "add_line('split_upper', [({left}, 0.0, 0.1), (0.0, {top} * 0.6, 0.1), ({right}, {top} * 0.6, 0.1)], 18, BLUE, 0.05)\nadd_line('split_lower', [({left}, 0.0, 0.1), (0.0, {bottom} * 0.6, 0.1), ({right}, {bottom} * 0.6, 0.1)], 26, ORANGE, 0.05)\nadd_text('path_upper', 'PATHWAY A: SPONTANEOUS', ({right}, {top} * 0.6 + 0.35, 0.2), 0.28, 36, BLUE)\nadd_text('path_lower', 'PATHWAY B: CONTROLLED', ({right}, {bottom} * 0.6 - 0.35, 0.2), 0.28, 44, ORANGE)\n"
+        ),
+        s if s.contains("vort") || s.contains("wave") || s.contains("vibrat") => format!(
+            "add_line('oscillation_wave', [({left}, 0.0, 0.1), ({left}*0.5, 0.6, 0.1), (0.0, -0.6, 0.1), ({right}*0.5, 0.6, 0.1), ({right}, 0.0, 0.1)], 16, BLUE, 0.06)\nadd_circle('vortex_core', (0.0, 0.0, 0.2), 0.4, 28, ORANGE)\nadd_text('wave_label', 'FLUID-STRUCTURE RESONANCE', (0.0, {top}, 0.2), 0.36, 36, INK)\nadd_text('wave_sub', 'Periodic shedding drives cyclic displacement', (0.0, {bottom}, 0.2), 0.26, 60, BLUE)\n"
+        ),
+        s if s.contains("risk") || s.contains("fail") || s.contains("limit") || s.contains("safe") => format!(
+            "add_box('barrier_zone', (0.0, 0.0, 0.15), (0.16, 1.3, 0.06), 18, ORANGE)\nadd_text('limit_title', 'OPERATING THRESHOLD & SAFETY MARGIN', (0.0, {top}, 0.2), 0.32, 28, INK)\nadd_arrow('stress_arrow', ({left}, 0.0, 0.2), (-0.3, 0.0, 0.2), 40, BLUE)\nadd_text('limit_desc', 'Excess loads induce permanent boundary deformation', (0.0, {bottom}, 0.2), 0.26, 65, ORANGE)\n"
+        ),
+        s if s.contains("cycle") || s.contains("summary") => format!(
+            "add_circle('cycle_orbit', (0.0, 0.0, 0.05), 1.1, 16, BLUE)\nadd_arrow('arrow_cw_top', (-0.6, 0.8, 0.2), (0.6, 0.8, 0.2), 26, ORANGE)\nadd_arrow('arrow_cw_bot', (0.6, -0.8, 0.2), (-0.6, -0.8, 0.2), 34, BLUE)\nadd_text('cycle_core', 'REGENERATIVE CYCLE', (0.0, 0.0, 0.2), 0.34, 42, INK)\nadd_text('cycle_foot', 'Conservation of energy across continuous states', (0.0, {bottom}, 0.2), 0.26, 60, BLUE)\n"
+        ),
+        _ => format!(
+            "add_box('system_frame', (0.0, 0.0, 0.05), (2.2, 1.3, 0.04), 16, BLUE)\nadd_text('universal_concept', 'FUNDAMENTAL MECHANISM', (0.0, {top}, 0.2), 0.36, 26, INK)\nadd_arrow('action_vector', ({left}, 0.0, 0.2), ({right}, 0.0, 0.2), 36, ORANGE)\nadd_text('universal_result', 'Deterministic physical relationship governs state', (0.0, {bottom}, 0.2), 0.26, 52, BLUE)\n"
+        ),
     }
 }
 
@@ -545,7 +621,12 @@ fn particle_flow_script(left: f32, right: f32, charging: bool, end: u32, label: 
     script
 }
 
-fn mascot_script(mascot: &MascotSpec, duration_frames: u32, portrait: bool) -> String {
+fn mascot_script(
+    mascot: &MascotSpec,
+    duration_frames: u32,
+    portrait: bool,
+    scene_template: &str,
+) -> String {
     let x = if portrait { 0.0 } else { 4.3 };
     let y = if portrait { -3.0 } else { -0.45 };
     let side = match mascot.gesture {
@@ -571,36 +652,425 @@ fn mascot_script(mascot: &MascotSpec, duration_frames: u32, portrait: bool) -> S
             cue.frame.max(1).min(duration_frames)
         ));
     }
-    let pose_frame = duration_frames / 4;
-    let settle_frame = duration_frames / 2;
-    let blink_frame = duration_frames / 3;
-    let blink_open_frame = blink_frame + 4;
-    let morph_start = duration_frames * 5 / 10;
-    let morph_peak = duration_frames * 6 / 10;
-    let morph_return = duration_frames * 8 / 10;
-    let morph_end = duration_frames * 9 / 10;
-    let morph_script = mascot.morph.as_ref().map_or_else(String::new, |morph| {
-        if morph.silhouette.len() != 11 {
-            return String::new();
+
+    // 5-Phase Universal Mascot Morphing & Metamorphosis Timing
+    let f_ant = (duration_frames as f32 * 0.16).max(4.0) as u32;
+    let f_launch = (duration_frames as f32 * 0.30).max(f_ant as f32 + 4.0) as u32;
+    let f_peak = (duration_frames as f32 * 0.46).max(f_launch as f32 + 6.0) as u32;
+    let f_settle = (duration_frames as f32 * 0.54).max(f_peak as f32 + 3.0) as u32;
+    let f_settle_mid = f_settle + 8;
+    let f_demo = (duration_frames as f32 * 0.76).max(f_settle as f32 + 6.0) as u32;
+    let f_recoil = (duration_frames as f32 * 0.88).max(f_demo as f32 + 4.0) as u32;
+    let f_end = duration_frames.saturating_sub(2).max(f_recoil + 2);
+
+    let blink1 = (duration_frames as f32 * 0.22) as u32;
+    let blink1_open = blink1 + 4;
+    let blink2 = (duration_frames as f32 * 0.84) as u32;
+    let blink2_open = blink2 + 4;
+
+    // Archetype selection for concept-driven metamorphosis
+    let template = scene_template.to_ascii_lowercase();
+    let archetype_points: Vec<[f32; 2]> = if template.contains("vort")
+        || template.contains("wave")
+        || template.contains("vibrat")
+        || template.contains("sound")
+    {
+        // Sinusoidal Vortex Helix
+        vec![
+            [-0.9, -0.6],
+            [-0.7, 0.4],
+            [-0.4, 0.9],
+            [-0.1, 0.2],
+            [0.1, -0.7],
+            [0.3, -0.2],
+            [0.5, 0.8],
+            [0.8, 0.3],
+            [0.6, -0.5],
+            [0.1, -0.9],
+            [-0.5, -0.8],
+        ]
+    } else if template.contains("flow")
+        || template.contains("transport")
+        || template.contains("charg")
+        || template.contains("circuit")
+        || template.contains("wire")
+        || template.contains("electron")
+    {
+        // Directional Conduit Arrow & Nozzle
+        vec![
+            [-0.9, -0.25],
+            [-0.9, 0.25],
+            [-0.1, 0.25],
+            [-0.1, 0.85],
+            [0.95, 0.0],
+            [-0.1, -0.85],
+            [-0.1, -0.25],
+            [-0.4, -0.25],
+            [-0.4, 0.0],
+            [-0.6, 0.0],
+            [-0.6, -0.25],
+        ]
+    } else if template.contains("anatomy")
+        || template.contains("part")
+        || template.contains("cell")
+        || template.contains("battery")
+        || template.contains("anode")
+        || template.contains("cathod")
+    {
+        // Dual-Chamber Galvanic / Modular Cell Architecture
+        vec![
+            [-0.85, -0.8],
+            [-0.85, 0.8],
+            [-0.12, 0.8],
+            [-0.08, 0.15],
+            [-0.08, -0.15],
+            [-0.12, -0.8],
+            [0.85, -0.8],
+            [0.85, 0.8],
+            [0.12, 0.8],
+            [0.08, 0.15],
+            [0.12, -0.8],
+        ]
+    } else if template.contains("hook")
+        || template.contains("inquiry")
+        || template.contains("lens")
+        || template.contains("question")
+        || template.contains("micro")
+    {
+        // High-Precision Magnifier / Focus Inspection Resonator
+        vec![
+            [-0.6, 0.2],
+            [-0.75, 0.6],
+            [-0.45, 0.95],
+            [0.0, 1.05],
+            [0.45, 0.95],
+            [0.75, 0.6],
+            [0.6, 0.2],
+            [0.25, -0.1],
+            [0.75, -0.85],
+            [0.55, -0.95],
+            [-0.25, -0.1],
+        ]
+    } else if template.contains("risk")
+        || template.contains("fail")
+        || template.contains("limit")
+        || template.contains("stress")
+        || template.contains("barrier")
+        || template.contains("safe")
+    {
+        // Structural Deflection Shield / Stress Barrier
+        vec![
+            [0.0, 1.0],
+            [0.75, 0.7],
+            [0.85, 0.1],
+            [0.65, -0.5],
+            [0.0, -1.0],
+            [-0.65, -0.5],
+            [-0.85, 0.1],
+            [-0.75, 0.7],
+            [-0.35, 0.4],
+            [0.0, 0.6],
+            [0.35, 0.4],
+        ]
+    } else if template.contains("cycle")
+        || template.contains("orbit")
+        || template.contains("regenerat")
+        || template.contains("summary")
+    {
+        // Interconnected Continuous Toroidal Dynamo Loop
+        vec![
+            [-0.8, 0.0],
+            [-0.6, 0.7],
+            [-0.15, 0.4],
+            [0.15, -0.4],
+            [0.6, -0.7],
+            [0.8, 0.0],
+            [0.6, 0.7],
+            [0.15, 0.4],
+            [-0.15, -0.4],
+            [-0.6, -0.7],
+            [-0.4, 0.0],
+        ]
+    } else {
+        // Universal Metamorphic Faceted Core
+        vec![
+            [0.0, 1.1],
+            [0.55, 0.85],
+            [0.95, 0.3],
+            [0.8, -0.4],
+            [0.4, -0.95],
+            [-0.4, -0.95],
+            [-0.8, -0.4],
+            [-0.95, 0.3],
+            [-0.55, 0.85],
+            [-0.2, 0.2],
+            [0.2, 0.2],
+        ]
+    };
+
+    let morph_points_str = if let Some(morph) = &mascot.morph {
+        if morph.silhouette.len() == 11 {
+            morph
+                .silhouette
+                .iter()
+                .map(|[px, py]| {
+                    let target_x = x + px.clamp(-1.0, 1.0) * 0.72;
+                    let target_y = y + 0.68 + py.clamp(-1.0, 1.0) * 0.68;
+                    format!("({target_x}, {target_y}, 0.56)")
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            archetype_points
+                .iter()
+                .map(|[px, py]| {
+                    let target_x = x + px * 0.72;
+                    let target_y = y + 0.68 + py * 0.68;
+                    format!("({target_x}, {target_y}, 0.56)")
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
         }
-        let points = morph
-            .silhouette
+    } else {
+        archetype_points
             .iter()
             .map(|[px, py]| {
-                let target_x = x + px.clamp(-1.0, 1.0) * 0.68;
-                let target_y = y + 0.68 + py.clamp(-1.0, 1.0) * 0.62;
+                let target_x = x + px * 0.72;
+                let target_y = y + 0.68 + py * 0.68;
                 format!("({target_x}, {target_y}, 0.56)")
             })
             .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            "body.shape_key_add(name='Basis')\nmorph_key = body.shape_key_add(name='IdeaMorph')\nmorph_points = [{points}]\nfor vertex, target in zip(morph_key.data, morph_points):\n    vertex.co = target\nmorph_key.value = 0.0\nmorph_key.keyframe_insert(data_path='value', frame={morph_start})\nmorph_key.value = 1.0\nmorph_key.keyframe_insert(data_path='value', frame={morph_peak})\nmorph_key.keyframe_insert(data_path='value', frame={morph_return})\nmorph_key.value = 0.0\nmorph_key.keyframe_insert(data_path='value', frame={morph_end})\n"
-        )
-    });
-    let rig_script = format!(
-        "root = bpy.data.objects.new('luma_rig', None)\nbpy.context.collection.objects.link(root)\nglow = add_circle('luma_glow', ({x}, {y} + 0.72, 0.48), 0.9, 1, YELLOW)\nbody = add_polygon('luma_glass', [({x} - 0.38, {y} + 0.08), ({x} - 0.55, {y} + 0.3), ({x} - 0.67, {y} + 0.62), ({x} - 0.61, {y} + 0.93), ({x} - 0.38, {y} + 1.18), ({x}, {y} + 1.3), ({x} + 0.38, {y} + 1.18), ({x} + 0.61, {y} + 0.93), ({x} + 0.67, {y} + 0.62), ({x} + 0.55, {y} + 0.3), ({x} + 0.38, {y} + 0.08)], 0.56, 1, YELLOW)\nfilament = add_line('luma_filament', [({x} - 0.22, {y} + 0.2, 0.62), ({x} - 0.1, {y} + 0.42, 0.62), ({x}, {y} + 0.3, 0.62), ({x} + 0.1, {y} + 0.42, 0.62), ({x} + 0.22, {y} + 0.2, 0.62)], 2, ORANGE, 0.035)\nbase_top = add_box('luma_base_top', ({x}, {y} - 0.02, 0.58), (0.4, 0.09, 0.05), 2, INK)\nbase_mid = add_box('luma_base_mid', ({x}, {y} - 0.2, 0.58), (0.34, 0.08, 0.05), 3, INK)\nbase_tip = add_box('luma_base_tip', ({x}, {y} - 0.36, 0.58), (0.25, 0.07, 0.05), 4, INK)\nleft_white = add_circle('luma_left_eye_white', ({x} - 0.22, {y} + 0.78, 0.7), 0.19, 4, WHITE)\nleft_white.scale.x = 0.78\nright_white = add_circle('luma_right_eye_white', ({x} + 0.22, {y} + 0.78, 0.7), 0.19, 4, WHITE)\nright_white.scale.x = 0.78\nleft_eye = add_circle('luma_left_pupil', ({x} - 0.19, {y} + 0.76, 0.75), {eye_scale}, 5, INK)\nright_eye = add_circle('luma_right_pupil', ({x} + 0.25, {y} + 0.76, 0.75), {eye_scale}, 5, INK)\nleft_brow = add_line('luma_left_brow', [({x} - 0.36, {y} + 1.02, 0.76), ({x} - 0.09, {y} + 1.06, 0.76)], 6, INK, 0.035)\nright_brow = add_line('luma_right_brow', [({x} + 0.09, {y} + 1.06, 0.76), ({x} + 0.36, {y} + 1.02, 0.76)], 6, INK, 0.035)\nmouth = add_circle('luma_mouth', ({x}, {y} + 0.49, 0.75), 0.2, 5, INK)\nmouth.scale = (0.22, 0.035, 0.03)\nactive_arm = add_line('luma_arm_active', [({x} + ({side} * 0.5), {y} + 0.28, 0.6), ({x} + ({side} * 0.78), {y} - 0.05, 0.6)], 8, INK, 0.055)\nrest_arm = add_line('luma_arm_rest', [({x} - ({side} * 0.5), {y} + 0.28, 0.6), ({x} - ({side} * 0.82), {y} - 0.12, 0.6)], 8, INK, 0.055)\nactive_glove = add_circle('luma_active_glove', ({x} + ({side} * 0.8), {y} - 0.08, 0.66), 0.18, 8, WHITE)\nrest_glove = add_circle('luma_rest_glove', ({x} - ({side} * 0.84), {y} - 0.15, 0.66), 0.18, 8, WHITE)\nleft_leg = add_line('luma_leg_left', [({x} - 0.16, {y} - 0.43, 0.6), ({x} - 0.34, {y} - 0.78, 0.6)], 8, INK, 0.06)\nright_leg = add_line('luma_leg_right', [({x} + 0.16, {y} - 0.43, 0.6), ({x} + 0.34, {y} - 0.78, 0.6)], 8, INK, 0.06)\nleft_shoe = add_circle('luma_left_shoe', ({x} - 0.4, {y} - 0.84, 0.65), 0.2, 9, INK)\nleft_shoe.scale.y = 0.52\nright_shoe = add_circle('luma_right_shoe', ({x} + 0.4, {y} - 0.84, 0.65), 0.2, 9, INK)\nright_shoe.scale.y = 0.52\nrig_parts = [glow, body, filament, base_top, base_mid, base_tip, left_white, right_white, left_eye, right_eye, left_brow, right_brow, mouth, active_arm, rest_arm, active_glove, rest_glove, left_leg, right_leg, left_shoe, right_shoe]\nfor part in rig_parts:\n    part.parent = root\nactive_hand = active_arm.data.splines[0].points[1]\nactive_hand.co = ({x} + ({side} * 0.78), {y} - 0.05, 0.6, 1.0)\nactive_hand.keyframe_insert(data_path='co', frame=8)\nactive_hand.co = ({x} + ({side} * 1.2), {y} + 0.88, 0.6, 1.0)\nactive_hand.keyframe_insert(data_path='co', frame={pose_frame})\nactive_hand.co = ({x} + ({side} * 1.02), {y} + 0.66, 0.6, 1.0)\nactive_hand.keyframe_insert(data_path='co', frame={settle_frame})\nactive_glove.location = ({x} + ({side} * 0.8), {y} - 0.08, 0.66)\nactive_glove.keyframe_insert(data_path='location', frame=8)\nactive_glove.location = ({x} + ({side} * 1.22), {y} + 0.85, 0.66)\nactive_glove.keyframe_insert(data_path='location', frame={pose_frame})\nactive_glove.location = ({x} + ({side} * 1.04), {y} + 0.63, 0.66)\nactive_glove.keyframe_insert(data_path='location', frame={settle_frame})\nroot.location = (0.0, 0.0, 0.0)\nroot.rotation_euler.z = -0.04 * {side}\nroot.keyframe_insert(data_path='location', frame=1)\nroot.keyframe_insert(data_path='rotation_euler', frame=1)\nroot.location.y = 0.1\nroot.rotation_euler.z = 0.035 * {side}\nroot.keyframe_insert(data_path='location', frame={pose_frame})\nroot.keyframe_insert(data_path='rotation_euler', frame={pose_frame})\nroot.location.y = 0.0\nroot.rotation_euler.z = 0.0\nroot.keyframe_insert(data_path='location', frame={duration_frames})\nroot.keyframe_insert(data_path='rotation_euler', frame={duration_frames})\nleft_white.scale.y = 1.0\nleft_white.keyframe_insert(data_path='scale', frame=1)\nleft_white.scale.y = 0.06\nleft_white.keyframe_insert(data_path='scale', frame={blink_frame})\nleft_white.scale.y = 1.0\nleft_white.keyframe_insert(data_path='scale', frame={blink_open_frame})\nright_white.scale.y = 1.0\nright_white.keyframe_insert(data_path='scale', frame=1)\nright_white.scale.y = 0.06\nright_white.keyframe_insert(data_path='scale', frame={blink_frame})\nright_white.scale.y = 1.0\nright_white.keyframe_insert(data_path='scale', frame={blink_open_frame})\n{cues}"
+            .join(", ")
+    };
+
+    let morph_script = format!(
+        r#"body.shape_key_add(name='Basis')
+morph_key = body.shape_key_add(name='IdeaMorph')
+morph_points = [{morph_points_str}]
+for vertex, target in zip(morph_key.data, morph_points):
+    vertex.co = target
+morph_key.value = 0.0
+morph_key.keyframe_insert(data_path='value', frame=1)
+morph_key.value = 0.0
+morph_key.keyframe_insert(data_path='value', frame={f_ant})
+morph_key.value = 0.32
+morph_key.keyframe_insert(data_path='value', frame={f_launch})
+morph_key.value = 1.12
+morph_key.keyframe_insert(data_path='value', frame={f_peak})
+morph_key.value = 1.0
+morph_key.keyframe_insert(data_path='value', frame={f_settle})
+morph_key.value = 1.0
+morph_key.keyframe_insert(data_path='value', frame={f_demo})
+morph_key.value = -0.08
+morph_key.keyframe_insert(data_path='value', frame={f_recoil})
+morph_key.value = 0.0
+morph_key.keyframe_insert(data_path='value', frame={f_end})
+"#
     );
-    format!("{rig_script}{morph_script}")
+
+    let rig_script = format!(
+        r#"root = bpy.data.objects.new('luma_rig', None)
+bpy.context.collection.objects.link(root)
+glow = add_circle('luma_glow', ({x}, {y} + 0.72, 0.48), 0.95, 1, YELLOW)
+body = add_polygon('luma_glass', [({x} - 0.38, {y} + 0.08), ({x} - 0.55, {y} + 0.3), ({x} - 0.67, {y} + 0.62), ({x} - 0.61, {y} + 0.93), ({x} - 0.38, {y} + 1.18), ({x}, {y} + 1.3), ({x} + 0.38, {y} + 1.18), ({x} + 0.61, {y} + 0.93), ({x} + 0.67, {y} + 0.62), ({x} + 0.55, {y} + 0.3), ({x} + 0.38, {y} + 0.08)], 0.56, 1, YELLOW)
+internal_core = add_circle('luma_internal_core', ({x}, {y} + 0.68, 0.59), 0.34, 1, ORANGE)
+orbit_node = add_circle('luma_orbit_node', ({x} + 0.52, {y} + 0.68, 0.7), 0.12, 1, BLUE)
+filament = add_line('luma_filament', [({x} - 0.22, {y} + 0.2, 0.62), ({x} - 0.1, {y} + 0.42, 0.62), ({x}, {y} + 0.3, 0.62), ({x} + 0.1, {y} + 0.42, 0.62), ({x} + 0.22, {y} + 0.2, 0.62)], 2, ORANGE, 0.035)
+base_top = add_box('luma_base_top', ({x}, {y} - 0.02, 0.58), (0.4, 0.09, 0.05), 2, INK)
+base_mid = add_box('luma_base_mid', ({x}, {y} - 0.2, 0.58), (0.34, 0.08, 0.05), 3, INK)
+base_tip = add_box('luma_base_tip', ({x}, {y} - 0.36, 0.58), (0.25, 0.07, 0.05), 4, INK)
+left_white = add_circle('luma_left_eye_white', ({x} - 0.22, {y} + 0.78, 0.7), 0.19, 4, WHITE)
+left_white.scale.x = 0.78
+right_white = add_circle('luma_right_eye_white', ({x} + 0.22, {y} + 0.78, 0.7), 0.19, 4, WHITE)
+right_white.scale.x = 0.78
+left_eye = add_circle('luma_left_pupil', ({x} - 0.19, {y} + 0.76, 0.75), {eye_scale}, 5, INK)
+right_eye = add_circle('luma_right_pupil', ({x} + 0.25, {y} + 0.76, 0.75), {eye_scale}, 5, INK)
+left_brow = add_line('luma_left_brow', [({x} - 0.36, {y} + 1.02, 0.76), ({x} - 0.09, {y} + 1.06, 0.76)], 6, INK, 0.035)
+right_brow = add_line('luma_right_brow', [({x} + 0.09, {y} + 1.06, 0.76), ({x} + 0.36, {y} + 1.02, 0.76)], 6, INK, 0.035)
+mouth = add_circle('luma_mouth', ({x}, {y} + 0.49, 0.75), 0.2, 5, INK)
+mouth.scale = (0.22, 0.035, 0.03)
+active_arm = add_line('luma_arm_active', [({x} + ({side} * 0.5), {y} + 0.28, 0.6), ({x} + ({side} * 0.78), {y} - 0.05, 0.6)], 8, INK, 0.055)
+rest_arm = add_line('luma_arm_rest', [({x} - ({side} * 0.5), {y} + 0.28, 0.6), ({x} - ({side} * 0.82), {y} - 0.12, 0.6)], 8, INK, 0.055)
+active_glove = add_circle('luma_active_glove', ({x} + ({side} * 0.8), {y} - 0.08, 0.66), 0.18, 8, WHITE)
+rest_glove = add_circle('luma_rest_glove', ({x} - ({side} * 0.84), {y} - 0.15, 0.66), 0.18, 8, WHITE)
+left_leg = add_line('luma_leg_left', [({x} - 0.16, {y} - 0.43, 0.6), ({x} - 0.34, {y} - 0.78, 0.6)], 8, INK, 0.06)
+right_leg = add_line('luma_leg_right', [({x} + 0.16, {y} - 0.43, 0.6), ({x} + 0.34, {y} - 0.78, 0.6)], 8, INK, 0.06)
+left_shoe = add_circle('luma_left_shoe', ({x} - 0.4, {y} - 0.84, 0.65), 0.2, 9, INK)
+left_shoe.scale.y = 0.52
+right_shoe = add_circle('luma_right_shoe', ({x} + 0.4, {y} - 0.84, 0.65), 0.2, 9, INK)
+right_shoe.scale.y = 0.52
+
+rig_parts = [glow, body, internal_core, orbit_node, filament, base_top, base_mid, base_tip, left_white, right_white, left_eye, right_eye, left_brow, right_brow, mouth, active_arm, rest_arm, active_glove, rest_glove, left_leg, right_leg, left_shoe, right_shoe]
+for part in rig_parts:
+    part.parent = root
+
+# Multilayered Nested Internal Mechanism Animation
+internal_core.scale = (0.01, 0.01, 0.01)
+internal_core.keyframe_insert(data_path='scale', frame=1)
+internal_core.keyframe_insert(data_path='scale', frame={f_launch})
+internal_core.scale = (1.18, 1.18, 1.18)
+internal_core.keyframe_insert(data_path='scale', frame={f_peak})
+internal_core.scale = (1.0, 1.0, 1.0)
+internal_core.keyframe_insert(data_path='scale', frame={f_settle})
+internal_core.keyframe_insert(data_path='scale', frame={f_demo})
+internal_core.scale = (0.01, 0.01, 0.01)
+internal_core.keyframe_insert(data_path='scale', frame={f_recoil})
+
+internal_core.rotation_euler.z = 0.0
+internal_core.keyframe_insert(data_path='rotation_euler', frame=1)
+internal_core.keyframe_insert(data_path='rotation_euler', frame={f_launch})
+internal_core.rotation_euler.z = 6.283
+internal_core.keyframe_insert(data_path='rotation_euler', frame={f_settle})
+internal_core.rotation_euler.z = 12.566
+internal_core.keyframe_insert(data_path='rotation_euler', frame={f_demo})
+
+# Orbiting Micro-Particle / Flux Dynamics
+orbit_node.scale = (0.01, 0.01, 0.01)
+orbit_node.keyframe_insert(data_path='scale', frame=1)
+orbit_node.keyframe_insert(data_path='scale', frame={f_launch})
+orbit_node.scale = (1.0, 1.0, 1.0)
+orbit_node.keyframe_insert(data_path='scale', frame={f_settle})
+orbit_node.keyframe_insert(data_path='scale', frame={f_demo})
+orbit_node.scale = (0.01, 0.01, 0.01)
+orbit_node.keyframe_insert(data_path='scale', frame={f_recoil})
+
+orbit_node.location = ({x} + 0.52, {y} + 0.68, 0.7)
+orbit_node.keyframe_insert(data_path='location', frame={f_launch})
+orbit_node.location = ({x}, {y} + 1.12, 0.7)
+orbit_node.keyframe_insert(data_path='location', frame={f_peak})
+orbit_node.location = ({x} - 0.52, {y} + 0.68, 0.7)
+orbit_node.keyframe_insert(data_path='location', frame={f_settle})
+orbit_node.location = ({x}, {y} + 0.24, 0.7)
+orbit_node.keyframe_insert(data_path='location', frame={f_settle_mid})
+orbit_node.location = ({x} + 0.52, {y} + 0.68, 0.7)
+orbit_node.keyframe_insert(data_path='location', frame={f_demo})
+
+# Secondary Action: Active Hand Manipulating Scene
+active_hand = active_arm.data.splines[0].points[1]
+active_hand.co = ({x} + ({side} * 0.78), {y} - 0.05, 0.6, 1.0)
+active_hand.keyframe_insert(data_path='co', frame=1)
+active_hand.co = ({x} + ({side} * 0.62), {y} - 0.18, 0.6, 1.0)
+active_hand.keyframe_insert(data_path='co', frame={f_ant})
+active_hand.co = ({x} + ({side} * 1.28), {y} + 0.94, 0.6, 1.0)
+active_hand.keyframe_insert(data_path='co', frame={f_peak})
+active_hand.co = ({x} + ({side} * 1.08), {y} + 0.72, 0.6, 1.0)
+active_hand.keyframe_insert(data_path='co', frame={f_settle})
+active_hand.co = ({x} + ({side} * 0.82), {y} - 0.02, 0.6, 1.0)
+active_hand.keyframe_insert(data_path='co', frame={f_end})
+
+active_glove.location = ({x} + ({side} * 0.8), {y} - 0.08, 0.66)
+active_glove.keyframe_insert(data_path='location', frame=1)
+active_glove.location = ({x} + ({side} * 0.64), {y} - 0.20, 0.66)
+active_glove.keyframe_insert(data_path='location', frame={f_ant})
+active_glove.location = ({x} + ({side} * 1.30), {y} + 0.92, 0.66)
+active_glove.keyframe_insert(data_path='location', frame={f_peak})
+active_glove.location = ({x} + ({side} * 1.10), {y} + 0.70, 0.66)
+active_glove.keyframe_insert(data_path='location', frame={f_settle})
+active_glove.location = ({x} + ({side} * 0.84), {y} - 0.05, 0.66)
+active_glove.keyframe_insert(data_path='location', frame={f_end})
+
+# Primary Cartoon Physics: Volume-Preserving Squash & Stretch
+root.scale = (1.0, 1.0, 1.0)
+root.location = (0.0, 0.0, 0.0)
+root.rotation_euler.z = -0.04 * {side}
+root.keyframe_insert(data_path='scale', frame=1)
+root.keyframe_insert(data_path='location', frame=1)
+root.keyframe_insert(data_path='rotation_euler', frame=1)
+
+# Phase 1: Anticipation Squash
+root.scale = (1.14, 0.86, 1.14)
+root.location.y = -0.08
+root.rotation_euler.z = -0.08 * {side}
+root.keyframe_insert(data_path='scale', frame={f_ant})
+root.keyframe_insert(data_path='location', frame={f_ant})
+root.keyframe_insert(data_path='rotation_euler', frame={f_ant})
+
+# Phase 2: Launch Stretch
+root.scale = (0.88, 1.20, 0.88)
+root.location.y = 0.16
+root.rotation_euler.z = 0.06 * {side}
+root.keyframe_insert(data_path='scale', frame={f_launch})
+root.keyframe_insert(data_path='location', frame={f_launch})
+root.keyframe_insert(data_path='rotation_euler', frame={f_launch})
+
+# Phase 3 & 4: Settle & Demonstration
+root.scale = (1.0, 1.0, 1.0)
+root.location.y = 0.0
+root.rotation_euler.z = 0.02 * {side}
+root.keyframe_insert(data_path='scale', frame={f_settle})
+root.keyframe_insert(data_path='location', frame={f_settle})
+root.keyframe_insert(data_path='rotation_euler', frame={f_settle})
+
+root.keyframe_insert(data_path='scale', frame={f_demo})
+root.keyframe_insert(data_path='location', frame={f_demo})
+root.keyframe_insert(data_path='rotation_euler', frame={f_demo})
+
+# Phase 5: Reconstruction Recoil & Settle
+root.scale = (1.08, 0.94, 1.08)
+root.location.y = -0.04
+root.keyframe_insert(data_path='scale', frame={f_recoil})
+root.keyframe_insert(data_path='location', frame={f_recoil})
+
+root.scale = (1.0, 1.0, 1.0)
+root.location.y = 0.0
+root.rotation_euler.z = 0.0
+root.keyframe_insert(data_path='scale', frame={f_end})
+root.keyframe_insert(data_path='location', frame={f_end})
+root.keyframe_insert(data_path='rotation_euler', frame={f_end})
+
+# Expressive Facial Performance: Double Blinks & Emotion
+left_white.scale.y = 1.0
+left_white.keyframe_insert(data_path='scale', frame=1)
+left_white.scale.y = 0.06
+left_white.keyframe_insert(data_path='scale', frame={blink1})
+left_white.scale.y = 1.0
+left_white.keyframe_insert(data_path='scale', frame={blink1_open})
+left_white.scale.y = 0.06
+left_white.keyframe_insert(data_path='scale', frame={blink2})
+left_white.scale.y = 1.0
+left_white.keyframe_insert(data_path='scale', frame={blink2_open})
+
+right_white.scale.y = 1.0
+right_white.keyframe_insert(data_path='scale', frame=1)
+right_white.scale.y = 0.06
+right_white.keyframe_insert(data_path='scale', frame={blink1})
+right_white.scale.y = 1.0
+right_white.keyframe_insert(data_path='scale', frame={blink1_open})
+right_white.scale.y = 0.06
+right_white.keyframe_insert(data_path='scale', frame={blink2})
+right_white.scale.y = 1.0
+right_white.keyframe_insert(data_path='scale', frame={blink2_open})
+
+# Knowing smile at completion
+mouth.scale = (0.24, 0.09, 0.03)
+mouth.keyframe_insert(data_path='scale', frame={f_end})
+{cues}"#
+    );
+
+    format!("{rig_script}\n{morph_script}")
+}
+
+fn camera_script(camera: &CameraSpec, duration_frames: u32) -> String {
+    let ortho_scale = camera.ortho_scale.unwrap_or(7.0);
+    let start_scale = ortho_scale * 1.04;
+    let end_scale = ortho_scale * 0.97;
+    format!(
+        r#"bpy.ops.object.camera_add(location=({}, {}, {}), rotation=({}, {}, {}))
+camera = bpy.context.object
+camera.data.type = 'ORTHO'
+camera.data.ortho_scale = {start_scale}
+camera.data.keyframe_insert(data_path='ortho_scale', frame=1)
+camera.data.ortho_scale = {end_scale}
+camera.data.keyframe_insert(data_path='ortho_scale', frame={duration_frames})
+scene.camera = camera
+"#,
+        camera.location[0],
+        camera.location[1],
+        camera.location[2],
+        camera.rotation[0],
+        camera.rotation[1],
+        camera.rotation[2]
+    )
 }
 
 fn element_script(element: &VisualElement) -> AtlasResult<String> {
@@ -668,12 +1138,24 @@ fn element_script(element: &VisualElement) -> AtlasResult<String> {
         | VisualElementType::CrossSection
         | VisualElementType::Graph => {
             let [sx, sy, sz] = element.transform.scale;
-            Ok(format!(
-                "add_box({name}, ({x}, {y}, {z}), ({}, {}, {}), {frame}, BLUE)\n",
-                sx.max(0.1),
-                sy.max(0.1),
-                sz.max(0.05)
-            ))
+            if let Some(svg_path) = element.properties.get("svg_path").and_then(serde_json::Value::as_str) {
+                let py_path = py_string(svg_path);
+                Ok(format!(
+                    "if not add_vector_art({name}, {py_path}, ({x}, {y}, {z}), ({}, {}, 1.0), {frame}):\n    add_box({name}, ({x}, {y}, {z}), ({}, {}, {}), {frame}, BLUE)\n",
+                    sx.max(0.2),
+                    sy.max(0.2),
+                    sx.max(0.1),
+                    sy.max(0.1),
+                    sz.max(0.05)
+                ))
+            } else {
+                Ok(format!(
+                    "add_box({name}, ({x}, {y}, {z}), ({}, {}, {}), {frame}, BLUE)\n",
+                    sx.max(0.1),
+                    sy.max(0.1),
+                    sz.max(0.05)
+                ))
+            }
         }
     }
 }
@@ -696,20 +1178,6 @@ fn vector_property(properties: &serde_json::Value, key: &str, fallback: [f32; 3]
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(fallback[2] as f64),
     ]
-}
-
-fn camera_script(camera: &CameraSpec) -> String {
-    let ortho_scale = camera.ortho_scale.unwrap_or(7.0);
-    format!(
-        "bpy.ops.object.camera_add(location=({}, {}, {}), rotation=({}, {}, {}))\ncamera = bpy.context.object\ncamera.data.type = 'ORTHO'\ncamera.data.ortho_scale = {}\nscene.camera = camera\n",
-        camera.location[0],
-        camera.location[1],
-        camera.location[2],
-        camera.rotation[0],
-        camera.rotation[1],
-        camera.rotation[2],
-        ortho_scale
-    )
 }
 
 fn py_string(value: &str) -> String {

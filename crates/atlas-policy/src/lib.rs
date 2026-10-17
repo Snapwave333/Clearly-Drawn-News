@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
+pub mod copyright;
+pub mod telegram;
+
 pub const POLICY_SOURCES: [(&str, &str); 5] = [
     (
         "community_guidelines",
