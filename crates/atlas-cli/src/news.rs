@@ -3,7 +3,8 @@ use atlas_analytics::{YouTubeAnalyticsClient, YouTubeUploadMetadata, load_youtub
 use atlas_core::{EpisodeDurationPolicy, NewsProductionStage, SHOW_TAGLINE, SHOW_TITLE};
 use atlas_ffmpeg::broadcast::{
     AudioPiece, BroadcastRenderer, BroadcastSegment, BroadcastSpec, CaptionCue, CueSpeaker,
-    LoudnessReport, MediaProbe, SpeakerWindow, chapter_time, write_srt,
+    LoudnessReport, MediaProbe, ShortCue, ShortSpec, SpeakerWindow, VideoEncoder, chapter_time,
+    write_srt,
 };
 use atlas_kokoro::{KokoroPipeline, NarrationSegment, VoiceConfig};
 use atlas_media::fact_checker::{FactCheckReport, NewsFactChecker};
@@ -37,8 +38,24 @@ pub struct ResearchOptions {
     min_sources: usize,
     #[arg(long, default_value_t = 5)]
     max_stories: usize,
+    #[arg(long, default_value_t = 22.0)]
+    target_minutes: f64,
     #[arg(long)]
     feeds_file: Option<PathBuf>,
+}
+
+impl ResearchOptions {
+    fn policy(&self) -> anyhow::Result<EpisodeDurationPolicy> {
+        let policy = EpisodeDurationPolicy::default();
+        let target = self.target_minutes * 60.0;
+        if !policy.is_valid(target) {
+            bail!("--target-minutes must be between 15 and 30");
+        }
+        Ok(EpisodeDurationPolicy {
+            target_seconds: target,
+            ..policy
+        })
+    }
 }
 
 #[derive(Args, Clone, Debug)]
@@ -64,6 +81,49 @@ impl NewsPrivacy {
             Self::Private => "private",
             Self::Unlisted => "unlisted",
             Self::Public => "public",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum NewsResolution {
+    Uhd,
+    Fhd,
+}
+
+impl NewsResolution {
+    fn dimensions(self) -> (u32, u32) {
+        match self {
+            Self::Uhd => (3840, 2160),
+            Self::Fhd => (1920, 1080),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum NewsEncoder {
+    X264,
+    X265,
+    NvencH264,
+    NvencHevc,
+}
+
+impl NewsEncoder {
+    fn encoder(self) -> VideoEncoder {
+        match self {
+            Self::X264 => VideoEncoder::X264,
+            Self::X265 => VideoEncoder::X265,
+            Self::NvencH264 => VideoEncoder::NvencH264,
+            Self::NvencHevc => VideoEncoder::NvencHevc,
+        }
+    }
+
+    fn ffmpeg_name(self) -> &'static str {
+        match self {
+            Self::X264 => "libx264",
+            Self::X265 => "libx265",
+            Self::NvencH264 => "h264_nvenc",
+            Self::NvencHevc => "hevc_nvenc",
         }
     }
 }
@@ -99,8 +159,10 @@ pub enum NewsAction {
         skip_telegram: bool,
         #[arg(long)]
         episode: Option<String>,
-        #[arg(long)]
-        uhd: bool,
+        #[arg(long, value_enum, default_value_t = NewsResolution::Uhd)]
+        resolution: NewsResolution,
+        #[arg(long, value_enum, default_value_t = NewsEncoder::X264)]
+        encoder: NewsEncoder,
         #[arg(long)]
         studio_plate: Option<PathBuf>,
         #[arg(long)]
@@ -109,12 +171,16 @@ pub enum NewsAction {
         publish: bool,
         #[arg(long, value_enum, default_value_t = NewsPrivacy::Private)]
         privacy: NewsPrivacy,
+        #[arg(long)]
+        shorts: bool,
     },
     Publish {
         #[arg(long)]
         episode: String,
         #[arg(long, value_enum, default_value_t = NewsPrivacy::Private)]
         privacy: NewsPrivacy,
+        #[arg(long)]
+        shorts: bool,
     },
 }
 
@@ -155,6 +221,17 @@ struct QaReport {
     checks: Vec<(String, bool, String)>,
     probe: MediaProbe,
     loudness: LoudnessReport,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct ShortRecord {
+    segment_number: usize,
+    file: String,
+    title: String,
+    description: String,
+    duration: f64,
+    youtube_video_id: Option<String>,
+    url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -293,14 +370,14 @@ fn select(report: &FactCheckReport, max_stories: usize, excluded: &[String]) -> 
     (stories, bulletins)
 }
 
-fn proposal(episode_id: &str, number: u32, stories: &[NewsStory], bulletins: &[NewsStory]) -> EpisodeSlateProposal {
+fn proposal(episode_id: &str, number: u32, stories: &[NewsStory], bulletins: &[NewsStory], target_secs: f64) -> EpisodeSlateProposal {
     let writer = TwoAnchorScriptWriter::new();
-    let budget = writer.story_word_budget(stories.len(), bulletins.len(), EpisodeDurationPolicy::default().target_seconds);
+    let budget = writer.story_word_budget(stories.len(), bulletins.len(), target_secs);
     let per_story_mins = budget as f64 / WORDS_PER_SECOND / 60.0;
     EpisodeSlateProposal {
         episode_id: episode_id.to_string(),
         episode_number: number,
-        target_duration_mins: EpisodeDurationPolicy::default().target_seconds / 60.0,
+        target_duration_mins: target_secs / 60.0,
         stories: stories
             .iter()
             .map(|s| ProposedNewsStory {
@@ -357,7 +434,7 @@ async fn approval_loop(
     for _round in 0..6 {
         let (stories, bulletins) = select(&report, options.max_stories, &excluded);
         ensure_enough(&stories)?;
-        let slate = proposal(episode_id, number, &stories, &bulletins);
+        let slate = proposal(episode_id, number, &stories, &bulletins, options.policy()?.target_seconds);
         print_slate(&slate);
         gate.send_slate(&slate).await.map_err(|e| anyhow!(e))?;
         println!("  Slate sent to Telegram; waiting up to {} min for a decision...", telegram.approval_timeout_mins);
@@ -442,12 +519,12 @@ async fn write_script(
     episode: &mut Episode,
     stories: &[NewsStory],
     bulletins: &[NewsStory],
+    policy: &EpisodeDurationPolicy,
 ) -> anyhow::Result<MasterEpisodeScript> {
     let director = NewsScriptDirector::from_env().ok_or_else(|| {
         anyhow!("script generation needs an LLM: set NVIDIA_API_KEY (or ATLAS_DIRECTOR_API_KEY with ATLAS_DIRECTOR_URL for any OpenAI-compatible endpoint)")
     })?;
     let writer = TwoAnchorScriptWriter::new();
-    let policy = EpisodeDurationPolicy::default();
     let briefs: Vec<ScriptStoryBrief> = stories.iter().map(brief).collect();
     let bulletin_briefs: Vec<BulletinBrief> = bulletins
         .iter()
@@ -462,12 +539,29 @@ async fn write_script(
         "RUN",
         format!("{} story segments, ~{budget} words each, model {}", briefs.len(), director.model()),
     );
-    let mut segments = vec![writer.cold_open(episode.number, &briefs, bulletin_briefs.len())];
+    let mut stories_written = Vec::new();
     for (i, b) in briefs.iter().enumerate() {
         let segment = director.write_story_segment(&writer, i + 2, b, budget).await?;
-        println!("    Segment {:02}: {} ({} words)", segment.segment_number, segment.headline, segment.word_count());
-        segments.push(segment);
+        println!(
+            "    Segment {:02}: {} ({} words, short: {})",
+            segment.segment_number,
+            segment.headline,
+            segment.word_count(),
+            segment.short.as_ref().map(|s| s.title.as_str()).unwrap_or("-")
+        );
+        stories_written.push(segment);
     }
+    let story_count = stories_written.len();
+    for i in 0..story_count.saturating_sub(1) {
+        let next = stories_written[i + 1].headline.clone();
+        writer.append_tease(&mut stories_written[i], &next, i);
+    }
+    let lead_hook = stories_written.first().and_then(|s| {
+        let hook = s.short.as_ref().map(|c| c.hook.clone()).unwrap_or_else(|| s.lines[0].spoken_text.clone());
+        (hook.split_whitespace().count() <= 30).then_some(hook)
+    });
+    let mut segments = vec![writer.cold_open(episode.number, &briefs, bulletin_briefs.len(), lead_hook.as_deref())];
+    segments.extend(stories_written);
     let mut next = briefs.len() + 2;
     if let Some(rapid) = writer.rapid_headlines(next, &bulletin_briefs) {
         segments.push(rapid);
@@ -629,6 +723,7 @@ fn build_timeline(script: &MasterEpisodeScript, durations: &[f64]) -> Timeline {
             start,
             end: t,
             card_seconds: SEGMENT_CARD_SECONDS,
+            notes: String::new(),
         });
     }
     t += durations.get(cursor).copied().unwrap_or(0.0);
@@ -637,6 +732,28 @@ fn build_timeline(script: &MasterEpisodeScript, durations: &[f64]) -> Timeline {
         speakers,
         captions,
         duration: t,
+    }
+}
+
+fn fill_wall_notes(timeline: &mut Timeline, script: &MasterEpisodeScript, selection: &Selection) {
+    let headlines: Vec<String> = selection.stories.iter().map(|s| s.title.clone()).collect();
+    for (slot, segment) in timeline.segments.iter_mut().zip(&script.segments) {
+        slot.notes = match &segment.story_id {
+            Some(id) => selection
+                .stories
+                .iter()
+                .find(|s| &s.id == id)
+                .map(|s| s.summary.clone())
+                .unwrap_or_default(),
+            None if segment.segment_title == "Cold Open" => format!("Today: {}", headlines.join("  ·  ")),
+            None if segment.segment_title == "Rapid-Fire Headlines" => selection
+                .bulletins
+                .iter()
+                .map(|b| format!("• {}", b.title))
+                .collect::<Vec<_>>()
+                .join("  "),
+            None => "Every story in this episode is sourced; links are in the description. Anchors are AI-generated voices.".into(),
+        };
     }
 }
 
@@ -727,13 +844,13 @@ fn metadata(script: &MasterEpisodeScript, timeline: &Timeline, stories: &[NewsSt
     }
 }
 
-fn qa(probe: &MediaProbe, loudness: &LoudnessReport, width: u32, height: u32) -> QaReport {
+fn qa(probe: &MediaProbe, loudness: &LoudnessReport, width: u32, height: u32, codec: &str) -> QaReport {
     let policy = EpisodeDurationPolicy::default();
     let checks = vec![
         ("duration_15_to_30_min".to_string(), policy.is_valid(probe.duration), format!("{:.1}s", probe.duration)),
         ("resolution_16x9".into(), probe.width == width && probe.height == height, format!("{}x{}", probe.width, probe.height)),
         ("frame_rate_30".into(), (probe.fps - 30.0).abs() < 0.05, format!("{:.2} fps", probe.fps)),
-        ("video_h264".into(), probe.video_codec == "h264", probe.video_codec.clone()),
+        (format!("video_{codec}"), probe.video_codec == codec, probe.video_codec.clone()),
         ("audio_aac_stereo".into(), probe.audio_codec == "aac" && probe.audio_channels == 2, format!("{} {}ch", probe.audio_codec, probe.audio_channels)),
         (
             "loudness_minus14_lufs".into(),
@@ -775,7 +892,7 @@ pub async fn run(data_dir: &Path, action: NewsAction) -> anyhow::Result<()> {
             let report = research(&desk, &options).await?;
             let (stories, bulletins) = select(&report, options.max_stories, &[]);
             let number = peek_episode_number(data_dir);
-            let slate = proposal(&format!("EP-{number:03}"), number, &stories, &bulletins);
+            let slate = proposal(&format!("EP-{number:03}"), number, &stories, &bulletins, options.policy()?.target_seconds);
             print_slate(&slate);
             ensure_enough(&stories)?;
             write_json(&news_dir(data_dir).join("slates").join("latest.json"), &slate)?;
@@ -810,20 +927,22 @@ pub async fn run(data_dir: &Path, action: NewsAction) -> anyhow::Result<()> {
                 Some(problem) => bail!("rights scan failed: {problem}"),
             }
         }
-        NewsAction::Publish { episode, privacy } => {
+        NewsAction::Publish { episode, privacy, shorts } => {
             let episode = open_episode(data_dir, &episode)?;
-            publish(data_dir, &episode, privacy).await?;
+            publish(data_dir, &episode, privacy, shorts).await?;
         }
         NewsAction::Produce {
             research: options,
             telegram,
             skip_telegram,
             episode,
-            uhd,
+            resolution,
+            encoder,
             studio_plate,
             music,
             publish: should_publish,
             privacy,
+            shorts,
         } => {
             produce(
                 data_dir,
@@ -832,11 +951,13 @@ pub async fn run(data_dir: &Path, action: NewsAction) -> anyhow::Result<()> {
                     telegram,
                     skip_telegram,
                     episode,
-                    uhd,
+                    resolution,
+                    encoder,
                     studio_plate,
                     music,
                     publish: should_publish,
                     privacy,
+                    shorts,
                 },
             )
             .await?;
@@ -850,17 +971,22 @@ struct ProduceArgs {
     telegram: TelegramOptions,
     skip_telegram: bool,
     episode: Option<String>,
-    uhd: bool,
+    resolution: NewsResolution,
+    encoder: NewsEncoder,
     studio_plate: Option<PathBuf>,
     music: Option<PathBuf>,
     publish: bool,
     privacy: NewsPrivacy,
+    shorts: bool,
 }
 
 async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
-    let policy = EpisodeDurationPolicy::default();
+    let policy = args.options.policy()?;
     let renderer = BroadcastRenderer::new(tool("ATLAS_FFMPEG", "ffmpeg"), tool("ATLAS_FFPROBE", "ffprobe"));
     let fonts = resolve_fonts()?;
+    if !renderer.has_encoder(args.encoder.ffmpeg_name()).await {
+        bail!("this ffmpeg build has no {} encoder; pick another --encoder", args.encoder.ffmpeg_name());
+    }
     for path in args.studio_plate.iter().chain(args.music.iter()) {
         if !path.is_file() {
             bail!("{} does not exist", path.display());
@@ -912,7 +1038,7 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
                 None => {
                     let (stories, bulletins) = select(&report, args.options.max_stories, &[]);
                     ensure_enough(&stories)?;
-                    print_slate(&proposal(&episode.id, episode.number, &stories, &bulletins));
+                    print_slate(&proposal(&episode.id, episode.number, &stories, &bulletins, policy.target_seconds));
                     (stories, bulletins, "operator (--skip-telegram)".to_string())
                 }
             };
@@ -941,7 +1067,7 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
             println!("  Reusing existing script.json");
             script
         }
-        _ => write_script(&mut episode, &selection.stories, &selection.bulletins).await?,
+        _ => write_script(&mut episode, &selection.stories, &selection.bulletins, &policy).await?,
     };
     episode.stage(
         NewsProductionStage::ComedyAndDialoguePolish,
@@ -959,6 +1085,8 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
     let dialogue = work.join("dialogue.wav");
     let durations = renderer.concat_dialogue(&build_pieces(&script, &voices), &work, &dialogue).await?;
     let timeline = build_timeline(&script, &durations);
+    let mut timeline = timeline;
+    fill_wall_notes(&mut timeline, &script, &selection);
     if let Err(problem) = policy.validate(timeline.duration) {
         episode.stage(NewsProductionStage::FinalEditorialAssembly, "FAIL", problem.clone());
         bail!("voiced episode length is out of policy: {problem}. Adjust ATLAS_NEWS_TTS_SPEED or --max-stories and resume with --episode {}", episode.id);
@@ -984,7 +1112,8 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
     );
 
     println!("\n[6] STUDIO RENDER");
-    let (width, height) = if args.uhd { (3840, 2160) } else { (1920, 1080) };
+    let (width, height) = args.resolution.dimensions();
+    println!("  {width}x{height} @ 30 fps, encoder {}", args.encoder.ffmpeg_name());
     match &args.studio_plate {
         Some(plate) => episode.stage(NewsProductionStage::UnrealEngineStudioFilming, "PASS", format!("studio plate {}", plate.display())),
         None => episode.stage(NewsProductionStage::UnrealEngineStudioFilming, "SKIP", "no --studio-plate; using the built-in broadcast graphics studio"),
@@ -1014,6 +1143,7 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
             font_regular: fonts.0.clone(),
             font_bold: fonts.1.clone(),
             background_plate: args.studio_plate.clone(),
+            encoder: args.encoder.encoder(),
             work_dir: work.clone(),
             output: output.clone(),
         })
@@ -1035,7 +1165,7 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
     println!("\n[7] TECHNICAL & EDITORIAL QA");
     let probe = renderer.probe(&output).await?;
     let final_loudness = renderer.measure_loudness(&output).await?;
-    let report = qa(&probe, &final_loudness, width, height);
+    let report = qa(&probe, &final_loudness, width, height, args.encoder.encoder().codec_name());
     write_json(&episode.dir.join("qa_report.json"), &report)?;
     for (name, ok, detail) in &report.checks {
         println!("  {} {name}: {detail}", if *ok { "PASS" } else { "FAIL" });
@@ -1046,12 +1176,20 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
     }
     episode.stage(NewsProductionStage::TechnicalAndEditorialQa, "PASS", format!("{:.1} min, {} bytes", probe.duration / 60.0, probe.size_bytes));
 
+    println!("\n[8] SHORTS");
+    let shorts = make_shorts(&renderer, &episode, &script, &timeline, &master, &fonts, args.encoder.encoder()).await?;
+    episode.stage(
+        NewsProductionStage::TechnicalAndEditorialQa,
+        "PASS",
+        format!("{} vertical Shorts cut from the episode", shorts.len()),
+    );
+
     println!("\n══════════════════════════════════════════════════════════════════");
     println!("  {} READY: {}", episode.id, output.display());
     println!("══════════════════════════════════════════════════════════════════");
 
     let published = if args.publish {
-        Some(publish(data_dir, &episode, args.privacy).await?)
+        Some(publish(data_dir, &episode, args.privacy, args.shorts).await?)
     } else {
         println!("  Not published (pass --publish, or run `atlas news publish --episode {}`)", episode.id);
         None
@@ -1078,7 +1216,140 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn publish(data_dir: &Path, episode: &Episode, privacy: NewsPrivacy) -> anyhow::Result<PublishRecord> {
+async fn make_shorts(
+    renderer: &BroadcastRenderer,
+    episode: &Episode,
+    script: &MasterEpisodeScript,
+    timeline: &Timeline,
+    master: &Path,
+    fonts: &(PathBuf, PathBuf),
+    encoder: VideoEncoder,
+) -> anyhow::Result<Vec<ShortRecord>> {
+    let dir = episode.dir.join("shorts");
+    std::fs::create_dir_all(&dir)?;
+    let mut records = Vec::new();
+    let mut offset = 0;
+    for segment in &script.segments {
+        let base = offset;
+        offset += segment.lines.len();
+        let Some(clip) = &segment.short else { continue };
+        let mut end_line = clip.end_line.min(segment.lines.len().saturating_sub(1));
+        let start = timeline.captions[base + clip.start_line].start - 0.1;
+        while end_line > clip.start_line && timeline.captions[base + end_line].end + 0.5 - start > 59.0 {
+            end_line -= 1;
+        }
+        let end = timeline.captions[base + end_line].end + 0.5;
+        let duration = end - start;
+        if !(15.0..=59.5).contains(&duration) {
+            println!("  ! Segment {:02}: clip is {duration:.1}s, outside 15-59s; skipped", segment.segment_number);
+            continue;
+        }
+        let cues: Vec<ShortCue> = (clip.start_line..=end_line)
+            .map(|i| {
+                let caption = &timeline.captions[base + i];
+                let speaker = match segment.lines[i].speaker {
+                    AnchorRole::Enthusiast => CueSpeaker::Marcus,
+                    AnchorRole::Counterpart => CueSpeaker::Elena,
+                    AnchorRole::Duo => CueSpeaker::Both,
+                };
+                ShortCue {
+                    start: caption.start - start,
+                    end: caption.end - start,
+                    speaker,
+                    text: segment.lines[i].spoken_text.clone(),
+                }
+            })
+            .collect();
+        let file = format!("short_{:02}.mp4", segment.segment_number);
+        let work = episode.dir.join("work").join(format!("short_{:02}", segment.segment_number));
+        std::fs::create_dir_all(&work)?;
+        renderer
+            .render_short(&ShortSpec {
+                show_title: SHOW_TITLE.into(),
+                title: clip.title.clone(),
+                category: segment.segment_category.clone(),
+                attribution: segment.attribution.clone(),
+                audio: master.to_path_buf(),
+                clip_start: start,
+                duration,
+                cues,
+                font_regular: fonts.0.clone(),
+                font_bold: fonts.1.clone(),
+                encoder,
+                work_dir: work,
+                output: dir.join(&file),
+            })
+            .await?;
+        let probe = renderer.probe(&dir.join(&file)).await?;
+        let ok = probe.width == 1080 && probe.height == 1920 && probe.duration <= 60.0 && probe.video_codec == encoder.codec_name();
+        if !ok {
+            bail!("Short {file} failed QA: {}x{} {:.1}s {}", probe.width, probe.height, probe.duration, probe.video_codec);
+        }
+        let mut title = format!("{} #Shorts", clip.title);
+        if title.chars().count() > 100 {
+            title = format!("{} #Shorts", clip.title.chars().take(90).collect::<String>());
+        }
+        let description = format!(
+            "{}\n\nFrom {SHOW_TITLE} episode {}. Full episode: {{FULL_EPISODE_URL}}\n\n{}\n\nAnchors are AI-generated voices; script written with AI assistance from the linked reporting. Altered or synthetic content.\n#animation #animationnews #shorts",
+            clip.hook,
+            episode.number,
+            segment.attribution
+        );
+        println!("  {file}: {:.1}s \"{}\"", probe.duration, clip.title);
+        records.push(ShortRecord {
+            segment_number: segment.segment_number,
+            file,
+            title,
+            description,
+            duration: probe.duration,
+            youtube_video_id: None,
+            url: None,
+        });
+    }
+    write_json(&dir.join("shorts.json"), &records)?;
+    Ok(records)
+}
+
+async fn publish(data_dir: &Path, episode: &Episode, privacy: NewsPrivacy, shorts: bool) -> anyhow::Result<PublishRecord> {
+    let record = publish_episode(data_dir, episode, privacy).await?;
+    if shorts {
+        publish_shorts(episode, privacy, &record.url).await?;
+    }
+    Ok(record)
+}
+
+async fn publish_shorts(episode: &Episode, privacy: NewsPrivacy, episode_url: &str) -> anyhow::Result<()> {
+    let path = episode.dir.join("shorts").join("shorts.json");
+    let mut records: Vec<ShortRecord> = read_json(&path)?;
+    let credentials = load_youtube_credentials("youtube_credentials.json").await?;
+    let client = YouTubeAnalyticsClient::new(credentials);
+    for index in 0..records.len() {
+        if records[index].youtube_video_id.is_some() {
+            continue;
+        }
+        let record = records[index].clone();
+        let result = client
+            .upload_video(
+                &episode.dir.join("shorts").join(&record.file),
+                &YouTubeUploadMetadata {
+                    title: record.title.clone(),
+                    description: record.description.replace("{FULL_EPISODE_URL}", episode_url),
+                    tags: vec!["animation news".into(), "shorts".into(), SHOW_TITLE.into()],
+                    privacy_status: privacy.as_str().into(),
+                    category_id: "1".into(),
+                    contains_synthetic_media: true,
+                },
+            )
+            .await?;
+        println!("  Short uploaded: {} -> {}", record.file, result.url);
+        records[index].youtube_video_id = Some(result.video_id);
+        records[index].url = Some(result.url);
+        write_json(&path, &records)?;
+    }
+    Ok(())
+}
+
+async fn publish_episode(data_dir: &Path, episode: &Episode, privacy: NewsPrivacy) -> anyhow::Result<PublishRecord> {
     let record_path = episode.dir.join("publish.json");
     if let Ok(existing) = read_json::<PublishRecord>(&record_path) {
         println!("  {} was already uploaded: {}", episode.id, existing.url);
@@ -1183,7 +1454,7 @@ mod tests {
             RawLine { speaker: "Marcus".into(), text: "One.".into(), expression: None },
             RawLine { speaker: "Elena".into(), text: "Two.".into(), expression: None },
         ];
-        let script = writer.assemble("t", "d", 1320.0, vec![writer.story_segment(2, &b, &raw, 10.0).unwrap()]);
+        let script = writer.assemble("t", "d", 1320.0, vec![writer.story_segment(2, &b, &raw, None, 10.0).unwrap()]);
         let voices = vec![vec![PathBuf::from("a.wav")], vec![PathBuf::from("b.wav")]];
         let pieces = build_pieces(&script, &voices);
         assert_eq!(pieces.len(), 6);
@@ -1207,7 +1478,7 @@ mod tests {
             size_bytes: 1,
         };
         let loud = LoudnessReport { integrated_lufs: -14.1, true_peak_dbtp: -1.6, loudness_range_lu: 4.0 };
-        let report = qa(&probe, &loud, 1920, 1080);
+        let report = qa(&probe, &loud, 1920, 1080, "h264");
         assert!(!report.passed);
         assert_eq!(report.checks.iter().filter(|c| !c.1).count(), 1);
     }

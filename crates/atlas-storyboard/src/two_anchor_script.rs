@@ -76,6 +76,16 @@ pub struct NewsSegmentScript {
     pub target_duration_secs: f64,
     pub actual_duration_secs: f64,
     pub lines: Vec<ScriptDialogueLine>,
+    #[serde(default)]
+    pub short: Option<ShortClip>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ShortClip {
+    pub start_line: usize,
+    pub end_line: usize,
+    pub title: String,
+    pub hook: String,
 }
 
 impl NewsSegmentScript {
@@ -137,6 +147,48 @@ pub struct RawLine {
     #[serde(default)]
     pub expression: Option<String>,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RawShort {
+    pub start: usize,
+    pub end: usize,
+    pub title: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RawReply {
+    pub lines: Vec<RawLine>,
+    #[serde(default)]
+    pub short: Option<RawShort>,
+}
+
+pub const SHORT_MIN_WORDS: usize = 90;
+pub const SHORT_MAX_WORDS: usize = 150;
+
+const CONTEXT_OPENERS: &[&str] = &[
+    "and", "but", "so", "that", "that's", "this", "it", "it's", "he", "she", "they", "exactly",
+    "right", "yeah", "yes", "well", "also", "plus", "which", "those", "these", "true", "agreed",
+    "absolutely", "totally", "okay", "ok", "oh",
+];
+
+const BANNED_PHRASES: &[&str] = &[
+    "let's dive in",
+    "dive into",
+    "deep dive",
+    "in today's video",
+    "game-changer",
+    "game changer",
+    "buckle up",
+    "without further ado",
+    "smash that like",
+    "stay tuned",
+    "in conclusion",
+    "it's worth noting",
+    "the landscape of",
+    "a testament to",
+    "tapestry",
+    "delve",
+];
 
 pub fn estimate_seconds(text: &str) -> f64 {
     text.split_whitespace().count() as f64 / WORDS_PER_SECOND + LINE_PAUSE_SECONDS
@@ -236,7 +288,20 @@ impl TwoAnchorScriptWriter {
             target_duration_secs: meta.target,
             actual_duration_secs: actual,
             lines,
+            short: None,
         }
+    }
+
+    pub fn append_tease(&self, segment: &mut NewsSegmentScript, next_headline: &str, variant: usize) {
+        let headline = next_headline.trim_end_matches(['.', '!', '?']);
+        let (speaker, text) = match variant % 3 {
+            0 => (AnchorRole::Counterpart, format!("Still ahead: {headline}.")),
+            1 => (AnchorRole::Enthusiast, format!("Stick around, because next up: {headline}.")),
+            _ => (AnchorRole::Counterpart, format!("Coming up after this: {headline}.")),
+        };
+        let line = self.line(speaker, &text, "Tease", segment.lines.len());
+        segment.actual_duration_secs += line.estimated_seconds;
+        segment.lines.push(line);
     }
 
     pub fn story_word_budget(&self, story_count: usize, bulletin_count: usize, target_secs: f64) -> usize {
@@ -247,35 +312,57 @@ impl TwoAnchorScriptWriter {
         ((per_story_secs - 12.0 * LINE_PAUSE_SECONDS) * WORDS_PER_SECOND).clamp(280.0, 1100.0) as usize
     }
 
-    pub fn cold_open(&self, episode_number: u32, stories: &[ScriptStoryBrief], bulletin_count: usize) -> NewsSegmentScript {
-        let headlines: Vec<&str> = stories.iter().take(3).map(|s| s.headline.as_str()).collect();
+    pub fn cold_open(
+        &self,
+        episode_number: u32,
+        stories: &[ScriptStoryBrief],
+        bulletin_count: usize,
+        lead_hook: Option<&str>,
+    ) -> NewsSegmentScript {
+        let skip = usize::from(lead_hook.is_some());
+        let headlines: Vec<&str> = stories.iter().skip(skip).take(3).map(|s| s.headline.as_str()).collect();
         let teaser = match headlines.len() {
             0 => "a packed rundown from across the animation world".to_string(),
             1 => headlines[0].to_string(),
             2 => format!("{}, and {}", headlines[0], headlines[1]),
             _ => format!("{}; {}; and {}", headlines[0], headlines[1], headlines[2]),
         };
-        let remaining = stories.len().saturating_sub(3) + bulletin_count;
-        let mut lines = vec![
-            self.line(
+        let remaining = stories.len().saturating_sub(3 + skip) + bulletin_count;
+        let mut lines = Vec::new();
+        if let Some(hook) = lead_hook {
+            lines.push(self.line(AnchorRole::Enthusiast, hook, "Hook", 0));
+            lines.push(self.line(
+                AnchorRole::Counterpart,
+                &format!("That's our lead. Welcome to {SHOW_TITLE}, episode {episode_number}. I'm Elena."),
+                "SharpDirect",
+                1,
+            ));
+            lines.push(self.line(
+                AnchorRole::Enthusiast,
+                &format!("I'm Marcus. Also on today's desk: {teaser}."),
+                "WarmConfident",
+                2,
+            ));
+        } else {
+            lines.push(self.line(
                 AnchorRole::Enthusiast,
                 &format!("Welcome to {SHOW_TITLE}, episode {episode_number}. I'm Marcus."),
                 "WarmConfident",
                 0,
-            ),
-            self.line(
+            ));
+            lines.push(self.line(
                 AnchorRole::Counterpart,
                 &format!("And I'm Elena. On today's desk: {teaser}."),
                 "SharpDirect",
                 1,
-            ),
-        ];
+            ));
+        }
         if remaining > 0 {
             lines.push(self.line(
                 AnchorRole::Enthusiast,
                 &format!("Plus {remaining} more stories in our rapid-fire round. Every story today is sourced, and the links are in the description."),
                 "Excited",
-                2,
+                lines.len(),
             ));
         }
         lines.push(self.line(
@@ -363,17 +450,21 @@ impl TwoAnchorScriptWriter {
         number: usize,
         brief: &ScriptStoryBrief,
         raw_lines: &[RawLine],
+        raw_short: Option<&RawShort>,
         target_secs: f64,
     ) -> AtlasResult<NewsSegmentScript> {
         let mut lines = Vec::new();
+        let mut kept: Vec<Option<usize>> = Vec::with_capacity(raw_lines.len());
         for (index, raw) in raw_lines.iter().enumerate() {
             let speaker = AnchorRole::parse(&raw.speaker).ok_or_else(|| {
                 AtlasError::Config(format!("Unknown speaker \"{}\" in story script", raw.speaker))
             })?;
             let text = raw.text.trim();
             if text.is_empty() {
+                kept.push(None);
                 continue;
             }
+            kept.push(Some(lines.len()));
             lines.push(self.line(
                 speaker,
                 text,
@@ -381,8 +472,18 @@ impl TwoAnchorScriptWriter {
                 index,
             ));
         }
+        let short = raw_short.and_then(|r| {
+            let start = kept.get(r.start).copied().flatten()?;
+            let end = kept.get(r.end).copied().flatten()?;
+            (start <= end).then(|| ShortClip {
+                start_line: start,
+                end_line: end,
+                title: r.title.trim().to_string(),
+                hook: lines[start].spoken_text.clone(),
+            })
+        });
         let attribution = format!("Sources: {}", brief.outlets.join(" · "));
-        Ok(self.segment(
+        let mut segment = self.segment(
             number,
             SegmentMeta {
                 title: &brief.headline,
@@ -393,7 +494,9 @@ impl TwoAnchorScriptWriter {
                 target: target_secs,
             },
             lines,
-        ))
+        );
+        segment.short = short;
+        Ok(segment)
     }
 
     pub fn assemble(&self, episode_title: &str, episode_date: &str, target_secs: f64, segments: Vec<NewsSegmentScript>) -> MasterEpisodeScript {
@@ -442,7 +545,56 @@ pub fn validate_story_lines(lines: &[ScriptDialogueLine], target_words: usize, f
             long.speaker.first_name()
         ));
     }
+    if let Some(first) = lines.first()
+        && first.spoken_text.split_whitespace().count() > 30
+    {
+        issues.push("The first line is the hook: make it one punchy sentence of at most 30 words.".into());
+    }
+    for line in lines {
+        let lower = line.spoken_text.to_lowercase();
+        if let Some(phrase) = BANNED_PHRASES.iter().find(|p| lower.contains(*p)) {
+            issues.push(format!("Remove the stock phrase \"{phrase}\"; say something specific instead."));
+        }
+    }
     issues.extend(audit_facts(lines, fact_sheet));
+    issues
+}
+
+pub fn validate_short(lines: &[ScriptDialogueLine], short: Option<&ShortClip>, fact_sheet: &str) -> Vec<String> {
+    let Some(short) = short else {
+        return vec!["Include the \"short\" object marking the best self-contained clip.".into()];
+    };
+    let mut issues = Vec::new();
+    if short.end_line >= lines.len() || short.start_line > short.end_line {
+        return vec![format!("The short range {}..{} is outside the {} lines.", short.start_line, short.end_line, lines.len())];
+    }
+    let span = &lines[short.start_line..=short.end_line];
+    let words: usize = span.iter().map(|l| l.spoken_text.split_whitespace().count()).sum();
+    if !(SHORT_MIN_WORDS..=SHORT_MAX_WORDS).contains(&words) {
+        issues.push(format!(
+            "The short spans {words} words; choose consecutive lines totalling {SHORT_MIN_WORDS} to {SHORT_MAX_WORDS} words (about 35 to 58 seconds)."
+        ));
+    }
+    let first_word = short
+        .hook
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .trim_matches(|c: char| !c.is_alphanumeric() && c != '\'')
+        .to_lowercase();
+    if CONTEXT_OPENERS.contains(&first_word.as_str()) {
+        issues.push(format!(
+            "The short starts with \"{first_word}\", which needs earlier context; start it on a line that works for a viewer who saw nothing before."
+        ));
+    }
+    let title_len = short.title.chars().count();
+    if !(10..=70).contains(&title_len) {
+        issues.push("The short title must be 10 to 70 characters.".into());
+    }
+    let known: HashSet<String> = number_tokens(fact_sheet).into_iter().collect();
+    if number_tokens(&short.title).iter().any(|n| !known.contains(n)) {
+        issues.push("The short title uses a figure that is not in the fact sheet.".into());
+    }
     issues
 }
 
@@ -497,15 +649,15 @@ impl NewsScriptDirector {
                     continue;
                 }
             };
-            let raw = match parse_lines(&content) {
-                Ok(raw) => raw,
+            let reply = match parse_reply(&content) {
+                Ok(reply) => reply,
                 Err(error) => {
                     last_error = error.clone();
                     feedback = vec![format!("Your previous reply was not valid JSON in the required shape: {error}")];
                     continue;
                 }
             };
-            let segment = match writer.story_segment(number, brief, &raw, target_secs) {
+            let segment = match writer.story_segment(number, brief, &reply.lines, reply.short.as_ref(), target_secs) {
                 Ok(segment) => segment,
                 Err(error) => {
                     last_error = error.to_string();
@@ -513,7 +665,8 @@ impl NewsScriptDirector {
                     continue;
                 }
             };
-            let issues = validate_story_lines(&segment.lines, target_words, &brief.fact_sheet);
+            let mut issues = validate_story_lines(&segment.lines, target_words, &brief.fact_sheet);
+            issues.extend(validate_short(&segment.lines, segment.short.as_ref(), &brief.fact_sheet));
             if issues.is_empty() {
                 return Ok(segment);
             }
@@ -559,13 +712,15 @@ impl NewsScriptDirector {
     }
 }
 
-const SYSTEM_PROMPT: &str = "You are the head writer of Clearly Drawn News, a daily two-anchor animation news show. Marcus is the Enthusiast: energetic, warm, an animation-history nerd who loves craft details. Elena is the Sharp Counterpart: witty, deadpan, skeptical, and focused on what is actually confirmed. You write natural spoken dialogue for text-to-speech. You never invent facts, dates, numbers, names, quotes, or claims that are not in the provided fact sheet. When the sources leave something unknown, the anchors say it is not yet confirmed. Return valid JSON only.";
+const SYSTEM_PROMPT: &str = "You are the head writer of Clearly Drawn News, a daily two-anchor animation news show built for retention on YouTube. Marcus is the Enthusiast: energetic, warm, an animation-history nerd who notices craft details like layouts, timing, compositing and staff. Elena is the Sharp Counterpart: witty, deadpan, skeptical, and focused on what is actually confirmed versus hoped for. Their chemistry comes from friendly disagreement, not agreement. You write natural spoken dialogue for text-to-speech: contractions, short punchy sentences mixed with longer ones, no tongue-twisters, no parentheses. You never invent facts, dates, numbers, names, quotes, or claims that are not in the provided fact sheet. When the sources leave something unknown, the anchors say it is not yet confirmed. Return valid JSON only.";
 
 fn story_prompt(brief: &ScriptStoryBrief, target_words: usize, feedback: &[String]) -> String {
     let mut prompt = format!(
-        "Write the dialogue for one story segment.\n\nFACT SHEET (the only facts you may use):\n{}\n\nREQUIREMENTS:\n- About {target_words} spoken words in total, in 8 to 24 alternating lines between Marcus and Elena.\n- Open by stating the news plainly and attributing it to the reporting outlet(s): {}.\n- Explain why it matters for animation fans and for the craft or industry, using only the fact sheet; you may add widely known, non-controversial background about the franchise or studio but no new claims about this news.\n- Include light banter that fits the characters, but keep at least 80% of the words on the story.\n- Do not quote more than ten consecutive words from any source; paraphrase.\n- Write numbers as digits only when they appear in the fact sheet.\n- No stage directions, no markdown, no emojis, no speaker names inside the text.\n\nReturn JSON exactly in this shape: {{\"lines\": [{{\"speaker\": \"Marcus\" or \"Elena\", \"text\": \"...\", \"expression\": \"one or two words\"}}]}}",
-        brief.fact_sheet,
-        brief.outlets.join(", ")
+        "Write the dialogue for one story segment.\n\nFACT SHEET (the only facts you may use):\n{facts}\n\nSTRUCTURE (in this order):\n1. HOOK: line 1 is one punchy sentence of at most 30 words that states the news with a curiosity gap. It must make sense to someone who saw nothing before it.\n2. THE NEWS: what happened, plainly, attributed to {outlets}.\n3. WHY IT MATTERS: for fans, and for the craft or the industry.\n4. CRAFT ANGLE: Marcus brings one specific, widely known, non-controversial background detail about the studio, staff or franchise. Never present background as part of this news.\n5. REALITY CHECK: Elena separates what is confirmed from what is not.\n6. THE DISAGREEMENT: a short, good-natured clash of takes that viewers will want to weigh in on.\n7. PAYOFF: end with a direct question to viewers that invites a comment.\n\nRULES:\n- About {target_words} spoken words in total, in 10 to 26 alternating lines. Vary line length: some lines under 10 words, a few up to 60.\n- Keep at least 80% of the words on the story; banter must be about the story.\n- Do not quote more than ten consecutive words from any source; paraphrase.\n- Write numbers as digits only when they appear in the fact sheet.\n- No stock filler (for example: let's dive in, game-changer, buckle up, stay tuned, a testament to).\n- No stage directions, markdown, emojis, hashtags or speaker names inside the text.\n\nSHORT CLIP: also pick the best self-contained clip for a vertical Short: consecutive lines totalling {min_short} to {max_short} words (about 35 to 58 seconds) that start on a line that works with zero context (not on And, But, So, That, It, Exactly, Yeah and so on), contain a complete idea, and end on a strong line. Give it a title of 10 to 70 characters that is accurate, specific and not clickbait.\n\nReturn JSON exactly in this shape: {{\"lines\": [{{\"speaker\": \"Marcus\" or \"Elena\", \"text\": \"...\", \"expression\": \"one or two words\"}}], \"short\": {{\"start\": first line index (0-based), \"end\": last line index (inclusive), \"title\": \"...\"}}}}",
+        facts = brief.fact_sheet,
+        outlets = brief.outlets.join(", "),
+        min_short = SHORT_MIN_WORDS,
+        max_short = SHORT_MAX_WORDS,
     );
     if !feedback.is_empty() {
         prompt.push_str("\n\nYOUR PREVIOUS DRAFT WAS REJECTED. Fix all of these problems:\n- ");
@@ -574,7 +729,7 @@ fn story_prompt(brief: &ScriptStoryBrief, target_words: usize, feedback: &[Strin
     prompt
 }
 
-pub fn parse_lines(content: &str) -> Result<Vec<RawLine>, String> {
+pub fn parse_reply(content: &str) -> Result<RawReply, String> {
     let trimmed = content.trim();
     let body = trimmed
         .strip_prefix("```json")
@@ -584,16 +739,21 @@ pub fn parse_lines(content: &str) -> Result<Vec<RawLine>, String> {
         .unwrap_or(trimmed);
     let start = body.find(['{', '[']).ok_or("no JSON object found")?;
     let value: serde_json::Value = serde_json::from_str(&body[start..]).map_err(|e| e.to_string())?;
-    let array = value
-        .get("lines")
-        .cloned()
-        .or_else(|| value.is_array().then(|| value.clone()))
-        .ok_or("missing \"lines\" array")?;
-    let lines: Vec<RawLine> = serde_json::from_value(array).map_err(|e| e.to_string())?;
-    if lines.is_empty() {
+    let reply = if value.is_array() {
+        RawReply {
+            lines: serde_json::from_value(value).map_err(|e| e.to_string())?,
+            short: None,
+        }
+    } else {
+        if value.get("lines").is_none() {
+            return Err("missing \"lines\" array".into());
+        }
+        serde_json::from_value(value).map_err(|e| e.to_string())?
+    };
+    if reply.lines.is_empty() {
         return Err("\"lines\" is empty".into());
     }
-    Ok(lines)
+    Ok(reply)
 }
 
 #[cfg(test)]
@@ -615,8 +775,8 @@ mod tests {
     fn builds_story_segment_from_llm_lines_and_audits_numbers() {
         let writer = TwoAnchorScriptWriter::new();
         let json = r#"{"lines":[{"speaker":"Marcus","text":"MAPPA says the season lands in July 2027."},{"speaker":"Elena","text":"With 12 episodes, and nothing else confirmed."},{"speaker":"Marcus","text":"It sold 40 million copies!"}]}"#;
-        let raw = parse_lines(json).unwrap();
-        let segment = writer.story_segment(2, &brief(), &raw, 200.0).unwrap();
+        let reply = parse_reply(json).unwrap();
+        let segment = writer.story_segment(2, &brief(), &reply.lines, reply.short.as_ref(), 200.0).unwrap();
         assert_eq!(segment.lines.len(), 3);
         assert_eq!(segment.lines[0].camera_cut, StudioCameraCut::WideTwoShot);
         let issues = validate_story_lines(&segment.lines, 40, &brief().fact_sheet);
@@ -628,13 +788,65 @@ mod tests {
     #[test]
     fn fixed_segments_use_real_headlines() {
         let writer = TwoAnchorScriptWriter::new();
-        let open = writer.cold_open(7, &[brief()], 2);
+        let open = writer.cold_open(7, &[brief()], 2, None);
         assert!(open.lines[1].spoken_text.contains("Chainsaw Man"));
+        let hooked = writer.cold_open(7, &[brief(), brief()], 0, Some("MAPPA just put a date on it."));
+        assert_eq!(hooked.lines[0].spoken_text, "MAPPA just put a date on it.");
+        assert!(hooked.lines[1].spoken_text.contains("episode 7"));
         let rapid = writer
             .rapid_headlines(5, &[BulletinBrief { headline: "Pixar dates sequel".into(), outlet: "Cartoon Brew".into() }])
             .unwrap();
         assert_eq!(rapid.lines[1].spoken_text, "Cartoon Brew reports: Pixar dates sequel.");
         assert!(writer.rapid_headlines(5, &[]).is_none());
+    }
+
+    fn long_reply(short_start: usize, first_text: &str) -> String {
+        let filler = "The craft details here are worth slowing down for because the staff list matters a lot.";
+        let mut lines = vec![serde_json::json!({"speaker": "Marcus", "text": first_text})];
+        for i in 0..9 {
+            lines.push(serde_json::json!({"speaker": if i % 2 == 0 { "Elena" } else { "Marcus" }, "text": filler}));
+        }
+        serde_json::json!({"lines": lines, "short": {"start": short_start, "end": short_start + 5, "title": "Chainsaw Man Season 2 has a date"}}).to_string()
+    }
+
+    #[test]
+    fn short_clip_must_be_self_contained_and_sized() {
+        let writer = TwoAnchorScriptWriter::new();
+        let reply = parse_reply(&long_reply(0, "MAPPA just dated Chainsaw Man Season 2 for July 2027, and the details matter.")).unwrap();
+        let segment = writer.story_segment(2, &brief(), &reply.lines, reply.short.as_ref(), 200.0).unwrap();
+        let short = segment.short.as_ref().unwrap();
+        assert_eq!(short.hook, segment.lines[0].spoken_text);
+        assert!(validate_short(&segment.lines, Some(short), &brief().fact_sheet).is_empty());
+
+        let reply = parse_reply(&long_reply(0, "And that is why it matters for the studio this year.")).unwrap();
+        let segment = writer.story_segment(2, &brief(), &reply.lines, reply.short.as_ref(), 200.0).unwrap();
+        let issues = validate_short(&segment.lines, segment.short.as_ref(), &brief().fact_sheet);
+        assert!(issues.iter().any(|i| i.contains("needs earlier context")));
+
+        assert!(validate_short(&segment.lines, None, "")[0].contains("short"));
+    }
+
+    #[test]
+    fn banned_phrases_and_long_hooks_are_rejected() {
+        let writer = TwoAnchorScriptWriter::new();
+        let lines = vec![
+            writer.line(AnchorRole::Enthusiast, &"word ".repeat(35), "x", 0),
+            writer.line(AnchorRole::Counterpart, "Let's dive in to the details.", "x", 1),
+        ];
+        let issues = validate_story_lines(&lines, 40, "");
+        assert!(issues.iter().any(|i| i.contains("hook")));
+        assert!(issues.iter().any(|i| i.contains("let's dive in")));
+    }
+
+    #[test]
+    fn tease_extends_segment_duration() {
+        let writer = TwoAnchorScriptWriter::new();
+        let reply = parse_reply(&long_reply(0, "MAPPA dated it.")).unwrap();
+        let mut segment = writer.story_segment(2, &brief(), &reply.lines, None, 200.0).unwrap();
+        let before = segment.actual_duration_secs;
+        writer.append_tease(&mut segment, "Pixar dates Hoppers 2", 0);
+        assert_eq!(segment.lines.last().unwrap().spoken_text, "Still ahead: Pixar dates Hoppers 2.");
+        assert!(segment.actual_duration_secs > before);
     }
 
     #[test]
