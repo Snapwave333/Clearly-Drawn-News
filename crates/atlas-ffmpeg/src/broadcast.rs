@@ -729,17 +729,21 @@ async fn build_short_graph(spec: &ShortSpec, regular: &str, bold: &str, txt_dir:
         let mut at = cue.start;
         for phrase in phrases {
             let end = (at + (cue.end - cue.start) * phrase.chars().count() as f64 / total as f64).min(cue.end);
-            let file = write(format!("s_cap{index:03}.txt"), wrap_text(&phrase, 16, 2)).await?;
             let color = match cue.speaker {
                 CueSpeaker::Marcus => "0xffe3b8",
                 CueSpeaker::Elena => "0xc8fff8",
                 CueSpeaker::Both => "white",
             };
-            let mut t = text(bold, file, "(w-tw)/2", "1330-th/2", 92.0, color);
-            t.enable = Some(format!("between(t,{at:.2},{end:.2})"));
-            t.line_spacing = 10.0;
-            t.shadow = 0.0;
-            f.push(t.build().replace(":expansion=none", ":borderw=8:bordercolor=black@0.9:expansion=none"));
+            let wrapped = wrap_text(&phrase, 16, 2);
+            let rows: Vec<&str> = wrapped.lines().collect();
+            for (row, line) in rows.iter().enumerate() {
+                let file = write(format!("s_cap{index:03}_{row}.txt"), line.to_string()).await?;
+                let y = 1330.0 - rows.len() as f64 * 55.0 + row as f64 * 110.0;
+                let mut t = text(bold, file, "(w-tw)/2", &format!("{y:.0}"), 92.0, color);
+                t.enable = Some(format!("between(t,{at:.2},{end:.2})"));
+                t.shadow = 0.0;
+                f.push(t.build().replace(":expansion=none", ":borderw=8:bordercolor=black@0.9:expansion=none"));
+            }
             at = end;
             index += 1;
         }
