@@ -102,6 +102,7 @@ impl NewsResolution {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum NewsEncoder {
+    Auto,
     X264,
     X265,
     NvencH264,
@@ -109,9 +110,24 @@ pub enum NewsEncoder {
 }
 
 impl NewsEncoder {
+    async fn resolve(self, renderer: &BroadcastRenderer) -> anyhow::Result<Self> {
+        if !matches!(self, Self::Auto) {
+            if !renderer.encoder_works(self.ffmpeg_name()).await {
+                bail!("the {} encoder is not usable with this ffmpeg build or GPU; pick another --encoder", self.ffmpeg_name());
+            }
+            return Ok(self);
+        }
+        for candidate in [Self::NvencHevc, Self::NvencH264, Self::X264] {
+            if renderer.encoder_works(candidate.ffmpeg_name()).await {
+                return Ok(candidate);
+            }
+        }
+        bail!("no working H.264/HEVC encoder found in this ffmpeg build")
+    }
+
     fn encoder(self) -> VideoEncoder {
         match self {
-            Self::X264 => VideoEncoder::X264,
+            Self::Auto | Self::X264 => VideoEncoder::X264,
             Self::X265 => VideoEncoder::X265,
             Self::NvencH264 => VideoEncoder::NvencH264,
             Self::NvencHevc => VideoEncoder::NvencHevc,
@@ -120,7 +136,7 @@ impl NewsEncoder {
 
     fn ffmpeg_name(self) -> &'static str {
         match self {
-            Self::X264 => "libx264",
+            Self::Auto | Self::X264 => "libx264",
             Self::X265 => "libx265",
             Self::NvencH264 => "h264_nvenc",
             Self::NvencHevc => "hevc_nvenc",
@@ -161,7 +177,7 @@ pub enum NewsAction {
         episode: Option<String>,
         #[arg(long, value_enum, default_value_t = NewsResolution::Uhd)]
         resolution: NewsResolution,
-        #[arg(long, value_enum, default_value_t = NewsEncoder::X264)]
+        #[arg(long, value_enum, default_value_t = NewsEncoder::Auto)]
         encoder: NewsEncoder,
         #[arg(long)]
         studio_plate: Option<PathBuf>,
@@ -984,9 +1000,8 @@ async fn produce(data_dir: &Path, args: ProduceArgs) -> anyhow::Result<()> {
     let policy = args.options.policy()?;
     let renderer = BroadcastRenderer::new(tool("ATLAS_FFMPEG", "ffmpeg"), tool("ATLAS_FFPROBE", "ffprobe"));
     let fonts = resolve_fonts()?;
-    if !renderer.has_encoder(args.encoder.ffmpeg_name()).await {
-        bail!("this ffmpeg build has no {} encoder; pick another --encoder", args.encoder.ffmpeg_name());
-    }
+    let mut args = args;
+    args.encoder = args.encoder.resolve(&renderer).await?;
     for path in args.studio_plate.iter().chain(args.music.iter()) {
         if !path.is_file() {
             bail!("{} does not exist", path.display());

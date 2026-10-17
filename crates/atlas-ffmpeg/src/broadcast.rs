@@ -238,20 +238,19 @@ impl BroadcastRenderer {
             .any(|line| line.split_whitespace().nth(1) == Some(name))
     }
 
-    pub async fn has_encoder(&self, name: &str) -> bool {
-        let Ok(output) = Command::new(&self.ffmpeg)
-            .args(["-hide_banner", "-encoders"])
-            .stdout(Stdio::piped())
+    pub async fn encoder_works(&self, name: &str) -> bool {
+        Command::new(&self.ffmpeg)
+            .args([
+                "-hide_banner", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=0.2",
+                "-frames:v", "3", "-c:v", name, "-f", "null", "-",
+            ])
+            .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(true)
-            .output()
+            .status()
             .await
-        else {
-            return false;
-        };
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .any(|line| line.split_whitespace().nth(1) == Some(name))
+            .map(|s| s.success())
+            .unwrap_or(false)
     }
 
     async fn run_ffmpeg(&self, args: &[String], cwd: Option<&Path>) -> AtlasResult<String> {
