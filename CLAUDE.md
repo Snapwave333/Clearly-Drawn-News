@@ -20,7 +20,7 @@ cd C:\Users\chrom\Desktop\Marker\atlas-studio
 cargo build --release                    # Build optimized binary
 .\target\release\atlas.exe doctor        # Verify tool discovery
 .\target\release\atlas.exe --help        # Show all commands
-cargo test                               # Run all 20 tests
+cargo test                               # Run the workspace test suite
 ```
 
 ## Project Structure
@@ -89,7 +89,7 @@ atlas-studio/
 | `atlas-blender` | `lib.rs` | `BlenderPipeline`, `ShotSpec`, `RenderJob`, Grease Pencil script generation |
 | `atlas-kokoro` | `lib.rs` | `KokoroPipeline`, `NarrationSegment`, `load_youtube_credentials()` |
 | `atlas-ffmpeg` | `lib.rs` | `FfmpegAssembler`, `EditDecisionList`, filter_complex builder |
-| `atlas-cli` | `main.rs` + `production/broll/planning/audio/analytics/memory/daemon/cache/news*.rs` | CLI commands and `cmd_produce()`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs`; beat planning, lip-sync cues, and captions in `planning.rs`; Freesound and AIWaves scoring in `audio.rs`; `analytics.rs` and `memory.rs` commands; newsroom pipeline in `news.rs`, `news_voice.rs`, and `news_health.rs` |
+| `atlas-cli` | `main.rs` + `produce/publish/production/broll/planning/audio/analytics/memory/daemon/cache/news*.rs` | CLI definitions and dispatch in `main.rs`; `cmd_produce()` and thumbnails in `produce.rs`; `cmd_publish()`/`cmd_tiktok()` in `publish.rs`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs`; beat planning, lip-sync cues, and captions in `planning.rs`; Freesound and AIWaves scoring in `audio.rs`; `analytics.rs` and `memory.rs` commands; newsroom pipeline in `news.rs`, `news_voice.rs`, and `news_health.rs` |
 
 ## Development Workflow
 
@@ -149,7 +149,10 @@ cargo build --release    # Optimized (target/release/atlas.exe)
 
 | File | Why |
 |------|-----|
-| `crates/atlas-cli/src/main.rs` | All CLI commands, vertical slice logic |
+| `crates/atlas-cli/src/main.rs` | CLI definitions and command dispatch |
+| `crates/atlas-cli/src/produce.rs` | Whiteboard vertical slice (`cmd_produce`) |
+| `crates/atlas-cli/src/news.rs` | Clearly Drawn News episode pipeline |
+| `.github/workflows/ci.yml` | CI: strict clippy, tests (with FFmpeg), Unreal script checks, office UI build |
 | `crates/atlas-analytics/src/youtube.rs` | YouTube OAuth + Analytics API |
 | `crates/atlas-kokoro/src/lib.rs` | Kokoro TTS + credentials loading |
 | `crates/atlas-blender/src/lib.rs` | Blender script generation |
