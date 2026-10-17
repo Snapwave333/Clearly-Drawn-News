@@ -3,7 +3,7 @@ use atlas_store::Store;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::{compare_to_baseline, compute_channel_baseline, AnalyticsStore, RecommendationEngine};
+use crate::{AnalyticsStore, RecommendationEngine, compare_to_baseline, compute_channel_baseline};
 
 /// Drives a continuous content-improvement loop from analytics data.
 pub struct OptimizationLoop;
@@ -58,7 +58,9 @@ impl OptimizationLoop {
                     issue: rec.issue.clone(),
                     required_change: format!(
                         "{} (expected impact: {} {})",
-                        rec.suggested_action, rec.expected_impact.metric, rec.expected_impact.direction
+                        rec.suggested_action,
+                        rec.expected_impact.metric,
+                        rec.expected_impact.direction
                     ),
                 }],
                 created_at: Utc::now(),
@@ -104,7 +106,9 @@ mod tests {
         let _ = crate::save_sample_metrics(&store, "vid_test", "yt_test").unwrap();
 
         let loop_ = OptimizationLoop::new();
-        let ids = loop_.generate_revision_tasks(&store, "vid_test", 500).unwrap();
+        let ids = loop_
+            .generate_revision_tasks(&store, "vid_test", 500)
+            .unwrap();
         assert!(!ids.is_empty());
     }
 }

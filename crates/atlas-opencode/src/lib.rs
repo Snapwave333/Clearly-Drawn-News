@@ -137,7 +137,10 @@ impl OpenCodeClient {
                     .collect(),
             )
         } else {
-            (self.exe.as_str(), args.iter().map(|s| s.to_string()).collect())
+            (
+                self.exe.as_str(),
+                args.iter().map(|s| s.to_string()).collect(),
+            )
         };
 
         let output = Command::new(program)
@@ -162,12 +165,36 @@ impl OpenCodeClient {
     }
 }
 
+impl Default for OpenCodeClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct NvidiaStatus {
     pub opencode_account: Option<OpenCodeCredential>,
     pub env_fallback_available: bool,
     pub model_count: usize,
     pub sample_models: Vec<String>,
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            while let Some(&next) = chars.peek() {
+                chars.next();
+                if next.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -197,24 +224,4 @@ mod tests {
         assert_eq!(providers.credentials[0].provider, "Nvidia");
         assert_eq!(providers.credentials[0].account, "api");
     }
-}
-
-fn strip_ansi(s: &str) -> String {
-    // Basic ANSI escape stripper.
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\u{1b}' {
-            // skip until letter or end
-            while let Some(&next) = chars.peek() {
-                chars.next();
-                if next.is_ascii_alphabetic() {
-                    break;
-                }
-            }
-        } else {
-            result.push(ch);
-        }
-    }
-    result
 }

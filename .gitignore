@@ -10,6 +10,8 @@ Cargo.lock
 
 # Credentials & secrets
 youtube_credentials.json
+upload_post_credentials.json
+tiktok_credentials.json
 *.pem
 *.key
 
@@ -34,6 +36,13 @@ Thumbs.db
 # Coverage
 coverage/
 *.profraw
+
+# Node
+node_modules/
+dist/
+
+# Artifacts
+artifacts/
 
 # Temp
 tmp/

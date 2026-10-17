@@ -1,5 +1,5 @@
 use atlas_core::{AgentMessage, AtlasConfig, AtlasError, AtlasResult, Project};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -174,7 +174,17 @@ impl Store {
             .map_err(|e| AtlasError::Store(e.to_string()))?;
 
         match row {
-            Some((video_id, topic_json, state_json, channel_profile, visual_thesis, script, research, storyboard, publish_json)) => {
+            Some((
+                video_id,
+                topic_json,
+                state_json,
+                channel_profile,
+                visual_thesis,
+                script,
+                research,
+                storyboard,
+                publish_json,
+            )) => {
                 let topic = serde_json::from_str(&topic_json)?;
                 let state = serde_json::from_str(&state_json)?;
                 let publish = serde_json::from_str(&publish_json)?;
@@ -222,8 +232,17 @@ impl Store {
 
         let mut projects = Vec::new();
         for row in rows {
-            let (video_id, topic_json, state_json, channel_profile, visual_thesis, script, research, storyboard, publish_json) =
-                row.map_err(|e| AtlasError::Store(e.to_string()))?;
+            let (
+                video_id,
+                topic_json,
+                state_json,
+                channel_profile,
+                visual_thesis,
+                script,
+                research,
+                storyboard,
+                publish_json,
+            ) = row.map_err(|e| AtlasError::Store(e.to_string()))?;
             projects.push(Project {
                 video_id,
                 topic: serde_json::from_str(&topic_json)?,

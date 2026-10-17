@@ -26,6 +26,14 @@ impl<'a> AnalyticsStore<'a> {
                     metrics_json TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS platform_metrics (
+                    video_id TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    retrieved_at TEXT NOT NULL,
+                    metrics_json TEXT NOT NULL,
+                    PRIMARY KEY (video_id, platform)
+                );
+
                 CREATE TABLE IF NOT EXISTS retention_curves (
                     video_id TEXT NOT NULL REFERENCES projects(video_id),
                     youtube_video_id TEXT NOT NULL,
@@ -56,6 +64,29 @@ impl<'a> AnalyticsStore<'a> {
             rusqlite::params![metrics.video_id, metrics.youtube_video_id, metrics.retrieved_at.to_rfc3339(), json],
         ).map_err(|e| AtlasError::Store(format!("failed to save metrics: {e}")))?;
 
+        // Also persist in the unified multi-platform store
+        let platform = if metrics.platform.trim().is_empty() {
+            "youtube"
+        } else {
+            metrics.platform.as_str()
+        };
+        self.store
+            .conn()
+            .execute(
+                "INSERT INTO platform_metrics (video_id, platform, retrieved_at, metrics_json)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(video_id, platform) DO UPDATE SET
+                 retrieved_at = excluded.retrieved_at,
+                 metrics_json = excluded.metrics_json",
+                rusqlite::params![
+                    metrics.video_id,
+                    platform,
+                    metrics.retrieved_at.to_rfc3339(),
+                    json
+                ],
+            )
+            .map_err(|e| AtlasError::Store(format!("failed to save platform metrics: {e}")))?;
+
         // Save retention curve separately for efficient querying.
         for point in &metrics.retention_curve {
             self.store.conn().execute(
@@ -80,9 +111,11 @@ impl<'a> AnalyticsStore<'a> {
 
     pub fn load_metrics(&self, video_id: &str) -> AtlasResult<Option<VideoMetrics>> {
         self.ensure_schema()?;
-        let mut stmt = self.store.conn().prepare(
-            "SELECT metrics_json FROM youtube_metrics WHERE video_id = ?1"
-        ).map_err(|e| AtlasError::Store(e.to_string()))?;
+        let mut stmt = self
+            .store
+            .conn()
+            .prepare("SELECT metrics_json FROM youtube_metrics WHERE video_id = ?1")
+            .map_err(|e| AtlasError::Store(e.to_string()))?;
         let json: Option<String> = stmt
             .query_row([video_id], |row| row.get(0))
             .optional()
@@ -93,18 +126,75 @@ impl<'a> AnalyticsStore<'a> {
         }
     }
 
+    pub fn load_platform_metrics(
+        &self,
+        video_id: &str,
+        platform: &str,
+    ) -> AtlasResult<Option<VideoMetrics>> {
+        self.ensure_schema()?;
+        let mut stmt = self
+            .store
+            .conn()
+            .prepare(
+                "SELECT metrics_json FROM platform_metrics WHERE video_id = ?1 AND platform = ?2",
+            )
+            .map_err(|e| AtlasError::Store(e.to_string()))?;
+        let json: Option<String> = stmt
+            .query_row(rusqlite::params![video_id, platform], |row| row.get(0))
+            .optional()
+            .map_err(|e| AtlasError::Store(e.to_string()))?;
+        match json {
+            Some(j) => serde_json::from_str(&j).map_err(|e| AtlasError::Store(e.to_string())),
+            None => {
+                if platform.eq_ignore_ascii_case("youtube") {
+                    self.load_metrics(video_id)
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+
     pub fn list_metrics(&self, limit: usize) -> AtlasResult<Vec<VideoMetrics>> {
         self.ensure_schema()?;
-        let mut stmt = self.store.conn().prepare(
-            "SELECT metrics_json FROM youtube_metrics ORDER BY retrieved_at DESC LIMIT ?1"
-        ).map_err(|e| AtlasError::Store(e.to_string()))?;
+        let mut stmt = self
+            .store
+            .conn()
+            .prepare("SELECT metrics_json FROM youtube_metrics ORDER BY retrieved_at DESC LIMIT ?1")
+            .map_err(|e| AtlasError::Store(e.to_string()))?;
         let rows = stmt
             .query_map([limit], |row| row.get::<_, String>(0))
             .map_err(|e| AtlasError::Store(e.to_string()))?;
         let mut metrics = Vec::new();
         for row in rows {
             let json: String = row.map_err(|e| AtlasError::Store(e.to_string()))?;
-            metrics.push(serde_json::from_str(&json).map_err(|e| AtlasError::Store(e.to_string()))?);
+            metrics
+                .push(serde_json::from_str(&json).map_err(|e| AtlasError::Store(e.to_string()))?);
+        }
+        Ok(metrics)
+    }
+
+    pub fn list_platform_metrics(
+        &self,
+        platform: &str,
+        limit: usize,
+    ) -> AtlasResult<Vec<VideoMetrics>> {
+        self.ensure_schema()?;
+        let mut stmt = self
+            .store
+            .conn()
+            .prepare("SELECT metrics_json FROM platform_metrics WHERE platform = ?1 ORDER BY retrieved_at DESC LIMIT ?2")
+            .map_err(|e| AtlasError::Store(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params![platform, limit], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|e| AtlasError::Store(e.to_string()))?;
+        let mut metrics = Vec::new();
+        for row in rows {
+            let json: String = row.map_err(|e| AtlasError::Store(e.to_string()))?;
+            metrics
+                .push(serde_json::from_str(&json).map_err(|e| AtlasError::Store(e.to_string()))?);
         }
         Ok(metrics)
     }

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e8e2d6" />
+    <title>Atlas Studio Office</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <strong>Atlas Studio Office</strong>
+            <small>Denver operations · 38 Autonomous Agents</small>
+          </div>
+        </div>
+        <nav class="tabs" aria-label="Workspace views">
+          <button class="tab is-active" data-tab="office">3D Office Viewport</button>
+          <button class="tab" data-tab="pulse">Studio Pulse</button>
+          <button class="tab" data-tab="activity">Agent Bus (Real Messages)</button>
+          <button class="tab" data-tab="wardrobe">Staff & Wardrobes</button>
+        </nav>
+        <div class="clock-block">
+          <strong id="denver-time">--:--:--</strong>
+          <span id="denver-date">Denver, CO</span>
+        </div>
+      </header>
+
+      <main>
+        <!-- Tab 1: 3D Office Viewport -->
+        <section class="panel is-active office-panel" data-panel="office">
+          <canvas id="office-canvas" aria-label="Interactive 3D isometric view of the Atlas Studio office"></canvas>
+          <div class="view-hud">
+            <div class="view-title">
+              <span class="live-dot"></span>
+              <div>
+                <strong id="camera-label">Studio overview</strong>
+                <small id="camera-detail">Isometric live view · Denver, CO</small>
+              </div>
+            </div>
+            <div class="view-actions">
+              <button id="launch-unreal" class="unreal-trigger" title="1-Click Launch Unreal Virtual Spectator View Window (Standalone 3D Simulation)">⚡ Virtual Spectator (UE 5.8)</button>
+              <button id="overview-camera" title="Switch to full isometric studio view (O)">Overview</button>
+              <button id="follow-camera" class="is-active" title="Over-the-shoulder GTA third person camera (F)">GTA Follow</button>
+              <button id="prev-agent" title="Previous agent (Q)">← Prev</button>
+              <button id="next-agent" title="Next agent (E or Space)">Next →</button>
+              <button id="trigger-meeting" class="meeting-trigger" title="Simulate / Trigger Hourly Boardroom Meeting">Hourly Meeting</button>
+            </div>
+          </div>
+          <div class="legend">
+            <span><i class="status-work"></i>Working (Office)</span>
+            <span><i class="status-break"></i>Break / Kitchenette</span>
+            <span><i class="status-meeting"></i>Boardroom Sync</span>
+            <span><i class="status-walk"></i>Pathfinding</span>
+          </div>
+          <aside class="agent-card" id="agent-card" aria-live="polite">
+            <button id="close-agent-card" aria-label="Close agent details">×</button>
+            <span id="agent-status">Working</span>
+            <h2 id="agent-name">Agent</h2>
+            <p id="agent-role">Role</p>
+            <dl>
+              <div><dt>Assigned Office</dt><dd id="agent-office">—</dd></div>
+              <div><dt>Today's Wardrobe</dt><dd id="agent-outfit">—</dd></div>
+              <div><dt>Personal Taste</dt><dd id="agent-taste">—</dd></div>
+              <div><dt>Current Activity</dt><dd id="agent-activity">—</dd></div>
+              <div class="agent-bus-block"><dt>Latest Bus Msg</dt><dd id="agent-latest-msg">—</dd></div>
+            </dl>
+          </aside>
+        </section>
+
+        <!-- Tab 2: Studio Pulse -->
+        <section class="panel" data-panel="pulse">
+          <div class="pulse-layout">
+            <div>
+              <p class="kicker">Studio pulse</p>
+              <h1>The whole production floor, live in Denver.</h1>
+              <p class="lede">Continuous 24/7 simulation synchronized to America/Denver Mountain Time. Hourly boardroom standups, break room coffee routines, and zero scripted or fake speech.</p>
+            </div>
+            <div class="pulse-grid">
+              <article><span>Active Agents</span><strong id="agent-total">38</strong></article>
+              <article><span>At Desks</span><strong id="working-total">0</strong></article>
+              <article><span>Kitchenette / Break</span><strong id="break-total">0</strong></article>
+              <article><span>Next Hourly Standup</span><strong id="next-meeting">--:--</strong></article>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 3: Real Agent Bus Activity -->
+        <section class="panel" data-panel="activity">
+          <div class="activity-layout">
+            <div class="activity-heading">
+              <p class="kicker">Agent message bus</p>
+              <h1>Real communication only.</h1>
+              <p class="lede">Every speech bubble rendered in the 3D office comes directly from persisted records in the SQLite database (<code>atlas.db</code>). If the bus is quiet, no fake dialogue is ever spoken.</p>
+              <div class="db-status-badge">
+                <span class="live-dot"></span>
+                <span id="db-status-text">Connected to SQLite database</span>
+              </div>
+            </div>
+            <div id="activity-feed" class="activity-feed"></div>
+          </div>
+        </section>
+
+        <!-- Tab 4: Staff & Wardrobes -->
+        <section class="panel" data-panel="wardrobe">
+          <div class="wardrobe-layout">
+            <div class="wardrobe-heading">
+              <p class="kicker">Denver operations roster</p>
+              <h1>38 Distinct Agents & 7-Day Wardrobes</h1>
+              <p class="lede">Each agent possesses an individual taste, aesthetic profile, custom hairstyle, accessories, and a full week of outfit rotations synced to the current day in Denver, CO.</p>
+            </div>
+            <div id="wardrobe-roster" class="wardrobe-roster"></div>
+          </div>
+        </section>
+      </main>
+
+      <div id="boot-screen">
+        <div class="boot-mark"><span></span><span></span><span></span></div>
+        <strong>Atlas Studio Office</strong>
+        <small>Building 38 executive offices, 4K kitchenette, boardroom, and loading Denver bus...</small>
+      </div>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

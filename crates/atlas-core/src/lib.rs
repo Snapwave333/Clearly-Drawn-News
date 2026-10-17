@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use thiserror::Error;
 
@@ -123,7 +124,9 @@ impl Default for AtlasConfig {
             version: env!("CARGO_PKG_VERSION").to_string(),
             data_dir: "data".to_string(),
             opencode_account_hint: None,
-            preferred_nvidia_model: Some("nvidia/nvidia/llama-3.1-nemotron-70b-instruct".to_string()),
+            preferred_nvidia_model: Some(
+                "nvidia/nvidia/llama-3.1-nemotron-70b-instruct".to_string(),
+            ),
             channel_profile: ChannelProfile::default(),
             render_presets: vec![RenderPreset::default()],
         }
@@ -226,6 +229,23 @@ pub struct PublishPlan {
     pub contains_synthetic_media: Option<bool>,
     pub credits_present: bool,
     pub youtube_video_id: Option<String>,
+    #[serde(default)]
+    pub youtube_video_ids: BTreeMap<String, String>,
+    #[serde(default)]
+    pub tiktok_post_id: Option<String>,
+    #[serde(default)]
+    pub tiktok_post_ids: BTreeMap<String, String>,
+    #[serde(default)]
+    pub tiktok_request_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PublishPlatform {
+    #[default]
+    YouTube,
+    TikTok,
+    Both,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

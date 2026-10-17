@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 /// In-memory message bus with durable persistence to SQLite.
 pub struct AgentBus {
-    store: Arc<Store>,
+    store: Arc<Mutex<Store>>,
     leases: Arc<RwLock<HashMap<String, Lease>>>,
     pending_retries: Arc<Mutex<Vec<RetryTask>>>,
 }
@@ -33,8 +33,18 @@ pub struct RetryTask {
     pub idempotency_key: String,
 }
 
+pub struct ReviewRequest {
+    pub from: String,
+    pub to: String,
+    pub project_id: String,
+    pub task_id: String,
+    pub artifact_ids: Vec<String>,
+    pub feedback: Vec<FeedbackItem>,
+    pub deadline_hours: i64,
+}
+
 impl AgentBus {
-    pub fn new(store: Arc<Store>) -> Self {
+    pub fn new(store: Arc<Mutex<Store>>) -> Self {
         Self {
             store,
             leases: Arc::new(RwLock::new(HashMap::new())),
@@ -44,36 +54,32 @@ impl AgentBus {
 
     /// Send a message, persisting it durably.
     pub async fn send(&self, message: AgentMessage) -> AtlasResult<()> {
-        self.store.insert_message(&message)?;
-        tracing::info!("Bus: {} -> {} [{}]", message.from, message.to, message.message_type);
+        self.store.lock().await.insert_message(&message)?;
+        tracing::info!(
+            "Bus: {} -> {} [{}]",
+            message.from,
+            message.to,
+            message.message_type
+        );
         Ok(())
     }
 
     /// Send a blocking review request. Returns when review passes or fails.
-    pub async fn request_review(
-        &self,
-        from: &str,
-        to: &str,
-        project_id: &str,
-        task_id: &str,
-        artifact_ids: Vec<String>,
-        feedback: Vec<FeedbackItem>,
-        deadline_hours: i64,
-    ) -> AtlasResult<ReviewOutcome> {
+    pub async fn request_review(&self, request: ReviewRequest) -> AtlasResult<ReviewOutcome> {
         let message = AgentMessage {
             schema_version: 1,
             message_id: format!("msg_{}", Uuid::new_v4()),
-            project_id: project_id.to_string(),
-            from: from.to_string(),
-            to: to.to_string(),
+            project_id: request.project_id,
+            from: request.from,
+            to: request.to,
             message_type: "REVIEW_REQUESTED".to_string(),
-            task_id: Some(task_id.to_string()),
-            artifact_ids,
+            task_id: Some(request.task_id),
+            artifact_ids: request.artifact_ids,
             blocking: true,
             priority: "high".to_string(),
-            feedback,
+            feedback: request.feedback,
             created_at: Utc::now(),
-            deadline_at: Some(Utc::now() + Duration::hours(deadline_hours)),
+            deadline_at: Some(Utc::now() + Duration::hours(request.deadline_hours)),
         };
         self.send(message).await?;
 
@@ -83,7 +89,12 @@ impl AgentBus {
     }
 
     /// Worker claims a lease on a task.
-    pub async fn claim_lease(&self, task_id: &str, worker_id: &str, ttl_seconds: i64) -> AtlasResult<bool> {
+    pub async fn claim_lease(
+        &self,
+        task_id: &str,
+        worker_id: &str,
+        ttl_seconds: i64,
+    ) -> AtlasResult<bool> {
         let mut leases = self.leases.write().await;
         let now = Utc::now();
         let expires = now + Duration::seconds(ttl_seconds);
@@ -94,13 +105,16 @@ impl AgentBus {
             }
         }
 
-        leases.insert(task_id.to_string(), Lease {
-            task_id: task_id.to_string(),
-            worker_id: worker_id.to_string(),
-            acquired_at: now,
-            expires_at: expires,
-            heartbeat_at: now,
-        });
+        leases.insert(
+            task_id.to_string(),
+            Lease {
+                task_id: task_id.to_string(),
+                worker_id: worker_id.to_string(),
+                acquired_at: now,
+                expires_at: expires,
+                heartbeat_at: now,
+            },
+        );
         Ok(true)
     }
 
@@ -145,7 +159,12 @@ impl AgentBus {
     }
 
     /// Schedule a message for retry with exponential backoff.
-    pub async fn schedule_retry(&self, message: AgentMessage, attempt: u32, idempotency_key: String) -> AtlasResult<()> {
+    pub async fn schedule_retry(
+        &self,
+        message: AgentMessage,
+        attempt: u32,
+        idempotency_key: String,
+    ) -> AtlasResult<()> {
         let delay = Duration::seconds(2_i64.pow(attempt.min(6)) * 10); // 10s, 20s, 40s, 80s, 160s, 320s, 640s
         let mut retries = self.pending_retries.lock().await;
         retries.push(RetryTask {
@@ -199,7 +218,7 @@ mod tests {
     #[tokio::test]
     async fn lease_claim_and_release() {
         let dir = tempdir().unwrap();
-        let store = Arc::new(Store::open(dir.path()).unwrap());
+        let store = Arc::new(Mutex::new(Store::open(dir.path()).unwrap()));
         let bus = AgentBus::new(store);
 
         assert!(bus.claim_lease("task1", "worker1", 60).await.unwrap());
@@ -211,7 +230,7 @@ mod tests {
     #[tokio::test]
     async fn heartbeat_extends_lease() {
         let dir = tempdir().unwrap();
-        let store = Arc::new(Store::open(dir.path()).unwrap());
+        let store = Arc::new(Mutex::new(Store::open(dir.path()).unwrap()));
         let bus = AgentBus::new(store);
 
         bus.claim_lease("task1", "worker1", 1).await.unwrap(); // 1 second TTL

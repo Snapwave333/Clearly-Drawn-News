@@ -17,7 +17,8 @@ atlas-studio/
 ├── .opencode/           # 38 skills, 10 workflows, 8 schemas (copied from skill pack)
 ├── crates/              # 10 Rust crates in Cargo workspace
 ├── tools/               # Bundled binaries (VectorCraft, PhotoCraft, EffectCraft)
-├── youtube_credentials.json  # Google OAuth (local only, gitignored)
+├── artifacts/first-run/  # Verified first-run video package
+├── youtube_credentials.json  # Ignored now, but present in Git history
 └── Cargo.toml           # Workspace root
 ```
 
@@ -29,26 +30,34 @@ atlas-studio/
 | `atlas config show --redact` | Show config with secrets hidden |
 | `atlas models probe` | List NVIDIA models via OpenCode |
 | `atlas topics create "Title"` | Create new project/topic |
-| `atlas produce --topic <id>` | Run vertical slice (script → MP4) |
+| `atlas produce --topic <id>` | Render real Blender frames, synthesize Kokoro narration, and assemble MP4 |
+| `atlas produce --topic <id> --reuse-rendered` | Reassemble from a verified existing frame cache |
+| `atlas publish --topic <id> --platform tiktok` | Publish whiteboard Short directly to TikTok (@focogaming) |
+| `atlas publish --topic <id> --platform both` | Publish multi-platform (YouTube + TikTok) |
+| `atlas tiktok info --user focogaming` | Inspect TikTok account connection via Upload-Post |
+| `atlas tiktok status --request-id <id>` | Query TikTok upload job processing status |
+| `atlas tiktok upload --topic <id>` | Direct upload rendered Short to TikTok (@focogaming) |
 | `atlas analytics fetch <id> --sample` | Load sample metrics |
 | `atlas analytics recommend <id>` | Generate optimization recommendations |
 | `atlas analytics auth` | Start YouTube OAuth (auto-loads credentials) |
 | `atlas analytics auth-complete --code <CODE>` | Complete OAuth |
+| `.\Launch_Unreal_3D_Office.bat` | 1-Click Launch Standalone Unreal Engine 5.8 Virtual Spectator View Window |
+| `cd office-ui && npm start` | Launch 24/7 Electron Three.js Office Visualizer & Tray app |
 
 ## Crate Overview
 
 | Crate | Module | Responsibility |
 |-------|--------|----------------|
-| `atlas-core` | `lib.rs` | Shared types: `Project`, `AgentMessage`, `ToolKind`, `ToolStatus`, `RenderPreset` |
+| `atlas-core` | `lib.rs` | Shared types: `Project`, `AgentMessage`, `ToolKind`, `ToolStatus`, `RenderPreset`, `PublishPlatform` |
 | `atlas-doctor` | `lib.rs` | `probe_all()`, `has_minimal_pipeline()` |
 | `atlas-opencode` | `lib.rs` | `OpenCodeClient`, `NvidiaStatus`, credential parsing |
 | `atlas-store` | `lib.rs` | `Store::open()`, `insert_project()`, `insert_message()`, `conn()` |
 | `atlas-agent-bus` | `lib.rs` | `AgentBus`, leases, heartbeats, retries |
-| `atlas-analytics` | `lib.rs` + `models/recommend/optimization/youtube.rs` | `VideoMetrics`, `RecommendationEngine`, `OptimizationLoop`, `YouTubeAnalyticsClient` |
+| `atlas-analytics` | `lib.rs` + `models/recommend/optimization/youtube.rs/tiktok.rs` | `VideoMetrics`, `YouTubeAnalyticsClient`, `TikTokClient` (Upload-Post), `PublishLedger` |
 | `atlas-blender` | `lib.rs` | `BlenderPipeline`, `ShotSpec`, `RenderJob`, Grease Pencil script generation |
 | `atlas-kokoro` | `lib.rs` | `KokoroPipeline`, `NarrationSegment`, `load_youtube_credentials()` |
 | `atlas-ffmpeg` | `lib.rs` | `FfmpegAssembler`, `EditDecisionList`, filter_complex builder |
-| `atlas-cli` | `main.rs` | All CLI commands, vertical slice in `cmd_produce()` |
+| `atlas-cli` | `main.rs` | All CLI commands, vertical slice in `cmd_produce()`, multi-platform `cmd_publish()` |
 
 ## Development Workflow
 
@@ -136,3 +145,5 @@ git push
 ```
 
 **Never commit:** `target/`, `youtube_credentials.json`, `*.db`, `*.log`, IDE files
+
+`youtube_credentials.json` exists in the initial Git commit. Rotate the OAuth client and remove the tracked copy only as an explicitly authorized security cleanup.

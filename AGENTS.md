@@ -1,6 +1,6 @@
-# ATLAS STUDIO — Autonomous YouTube Educational Video Production
+# ATLAS STUDIO — Autonomous YouTube Educational Video Production & 3D MetaHuman Office
 
-## Project Status: Milestone 1 Complete (Vertical Slice)
+## Project Status: Milestone 1 Verified Locally; UE 5.8 3D Office Simulation Live
 
 **Last Updated:** 2026-10-16  
 **Branch:** master  
@@ -12,12 +12,12 @@
 
 ```
 atlas-studio/
-├── .opencode/                    # Skill pack (38 skills, 10 workflows, 8 schemas)
-│   ├── config/                   # Agent registry, defaults, editorial rules
-│   ├── skills/                   # 38 agent skills (trend-scout → publisher)
-│   ├── workflows/                # 10 orchestrated workflow guides
+├── .opencode/                    # Skill pack (38 skills, 12 workflows, 8 schemas)
+│   ├── config/                   # Agent registry (38 roles), defaults, editorial rules
+│   ├── skills/                   # 38 agent skills (trend-scout → publisher, tiktok-publisher)
+│   ├── workflows/                # 12 orchestrated workflow guides
 │   ├── schemas/                  # 8 JSON Schema contracts
-│   ├── scripts/                  # Python reference implementations
+│   ├── scripts/                  # Python reference implementations & publishers
 │   └── reference/                # Specs, bibles, API reality docs
 ├── crates/                       # Rust workspace (10 crates)
 │   ├── atlas-core/               # Shared types, errors, schemas
@@ -25,135 +25,162 @@ atlas-studio/
 │   ├── atlas-opencode/           # NVIDIA provider reuse via OpenCode CLI
 │   ├── atlas-store/              # SQLite WAL persistence
 │   ├── atlas-agent-bus/          # Typed message bus with leases, retries
-│   ├── atlas-analytics/          # Retention curves, CTR, optimization loop
+│   ├── atlas-analytics/          # Retention curves, CTR, multi-platform publishing (YouTube + TikTok)
 │   ├── atlas-blender/            # Grease Pencil stroke-reveal render pipeline
 │   ├── atlas-kokoro/             # Sentence-segment TTS with retakes
 │   ├── atlas-ffmpeg/             # EDL → filter_complex → MP4 + captions
 │   └── atlas-cli/                # Unified CLI entrypoint
-├── tools/                        # Bundled binaries (verified SHA256)
-│   ├── vectorcraft/              # v0.11.0
-│   ├── photocraft/               # v0.9.0
-│   └── effectcraft/              # v0.1.1
-├── youtube_credentials.json      # Google OAuth client secret (local only)
+├── office-ui/                    # Electron + Three.js 24/7 Agent Visualizer & 1-Click UE Launcher
+├── docs/                         # System specifications & architecture documentation
+│   ├── CHARACTER_SYSTEM.md       # Luma narrator direction & visual grammar
+│   ├── POLICY_GUARDIAN.md        # Pre-publish community guidelines & automated strike guard
+│   └── OFFICE_SIMULATION.md      # UE 5.8 3D Virtual Spectator & MetaHuman Office specification
+├── tools/                        # Bundled binaries (VectorCraft, PhotoCraft, EffectCraft)
+├── artifacts/first-run/          # Verified first-run video package
+├── Launch_Unreal_3D_Office.bat   # 1-Click Standalone Virtual Spectator Launcher (-game mode)
 └── Cargo.toml                    # Workspace root
 ```
 
 ---
 
-## Implemented Crates (All Tests Passing: 20/20)
+## System Architecture & Live Simulation Diagram
+
+```mermaid
+flowchart TD
+    subgraph AutonomousCore["ATLAS Studio Autonomous Pipeline"]
+        A1["Topic Discovery<br/>(Google Trends / YT Charts)"] --> A2["Script & Storyboard<br/>(Creative Director / Lead Writer)"]
+        A2 --> A3["Narration & Art<br/>(Kokoro TTS / Grease Pencil)"]
+        A3 --> A4["Assembly & QA<br/>(FFmpeg / Quality Supervisor)"]
+        A4 --> A5["Policy Guardian<br/>(Community Guidelines / Disclosure)"]
+        A5 --> A6["Multi-Platform Publisher<br/>(YouTube Data API / TikTok Upload-Post)"]
+    end
+
+    subgraph AgentBusLayer["Agent Coordination & Persistence"]
+        B1["Typed Agent Bus<br/>(Leases / Retries / Idempotency)"] <--> B2["SQLite WAL Database<br/>(atlas.db Messages / Metrics)"]
+        A1 -.-> B1
+        A2 -.-> B1
+        A3 -.-> B1
+        A4 -.-> B1
+        A5 -.-> B1
+        A6 -.-> B1
+    end
+
+    subgraph SpectatorLayer["24/7 Virtual Spectator & Office Simulation"]
+        C1["Electron Office UI<br/>(Three.js Isometric Realtime View)"]
+        C2["Unreal Engine 5.8 Standalone<br/>(DirectX 12 SM6 / Lumen / Nanite)"]
+        B2 ==>|Live IPC / DB Sync| C1
+        C1 ==>|1-Click Launcher / 'U' Hotkey| C2
+        
+        subgraph UE5Office["AtlasStudioOffice.umap (0 Primitives)"]
+            D1["38 MetaHuman AI Avatars<br/>(Normal Realistic Male & Female)"]
+            D2["7 Department Outfit Styles<br/>(Fab Marketplace + Chaos Outfits)"]
+            D3["Fab Marketplace Props<br/>(Meet Desks, Binders, Storage, Printers)"]
+            D4["Denver Solar Day/Night Cycle<br/>(America/Denver Realtime Solar Angle)"]
+        end
+        C2 --> UE5Office
+    end
+```
+
+---
+
+## 38 AI Agent Workstations & 7 Department Outfit Styles
+
+The Atlas Studio office features 38 dedicated workstations arranged in a 10-column layout, surrounded by the 38-seat Boardroom, Central Operations Hub, Kitchenette / Breakroom, and Brainstorm Bullpen. Every agent is represented by a normal, realistic human MetaHuman avatar (strictly no zombie or generic monster models).
+
+```mermaid
+classDiagram
+    class DepartmentStyles {
+        <<enumeration>>
+        Executive_Leadership : Style 0 (Fab Sleeveless Turtleneck - Designer Black)
+        Engineering_Systems : Style 1 (MetaHuman Sleek Fitted Technical Garment)
+        Creative_Media : Style 2 (MetaHuman Midnight Navy Tailored Garment)
+        Marketing_Growth : Style 3 (MetaHuman Graphite & Slate Smart Casual)
+        Operations_Support : Style 4 (MetaHuman Burgundy & Wine Executive)
+        Analytics_Data : Style 5 (MetaHuman Forest Green & Khaki Professional)
+        Research_Strategy : Style 6 (MetaHuman Steel Grey & Ivory Modernist)
+    }
+
+    class MetaHumanAvatars {
+        <<MetaHuman Character>>
+        Male_Base : MHC_Base_Male (Professional Executive)
+        Male_Skotukeda : Skotukeda5 (Modern Systems Lead)
+        Female_Ada : MHC_Ada (Creative Direction Lead)
+        Female_Maria : MHC_Maria (Operations & Strategy)
+    }
+
+    DepartmentStyles ..> MetaHumanAvatars : Dressed across 38 Workstations
+```
+
+### 7 Department Outfit Allocation Breakdown
+
+| Dept # | Functional Cluster | Agent Roles (Sample) | Primary Outfit Asset | Aesthetic / Palette |
+|:------:|:-------------------|:---------------------|:---------------------|:--------------------|
+| **0** | **Executive & Leadership** | `executive_producer`, `coordinator`, `quality_supervisor` | `SKM_SleevelessTurtleneck` (Fab Marketplace) | Designer Black & Silver |
+| **1** | **Engineering & Systems** | `analytics_engineer`, `blender_animator`, `unreal_cinematographer` | `bodyShapeF_CombinedSkelMesh` | Sleek Fitted Technical Charcoal |
+| **2** | **Creative & Media** | `creative_director`, `lead_writer`, `storyboard_artist`, `illustrator` | `bodyShapeA_CombinedSkelMesh` | Midnight Navy Tailored |
+| **3** | **Marketing & Growth** | `channel_strategist`, `audience_researcher`, `thumbnail_optimizer` | `bodyShapeB_CombinedSkelMesh` | Graphite & Slate Smart Casual |
+| **4** | **Operations & Support** | `resource_scheduler`, `operations`, `rights_editor` | `bodyShapeC_CombinedSkelMesh` | Burgundy & Wine Executive |
+| **5** | **Analytics & Optimization** | `retention_analyst`, `analytics_dashboard`, `recursive_optimizer` | `bodyShapeD_CombinedSkelMesh` | Forest Green & Khaki Professional |
+| **6** | **Research & Strategy** | `research_lead`, `trend_scout`, `trend_analyst`, `fact_checker` | `bodyShapeE_CombinedSkelMesh` | Steel Grey & Ivory Modernist |
+
+---
+
+## 100% Primitive-Free Real 3D Environment (Fab Marketplace & Poly Haven CC0)
+
+Automated validation via [`final_verification_report.txt`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/final_verification_report.txt) confirms **`Primitive Shape Actors Found: 0`**. All cubes, cylinders, and generic shapes have been completely replaced with real copyright-free downloaded models:
+
+- **Modular Studio Floor**: Real Fab Marketplace [`Base`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabOfficeWork/Base.uasset) architectural floor mesh tiled seamlessly across the entire floor (`-81.0` Z offset).
+- **38-Seat Boardroom**: Dual Fab Marketplace [`meet_Desk`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabOfficeWork/meet_Desk.uasset) conference tables surrounded by 38 conference armchairs and a presentation [`projector_screen`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/ProjectorScreen/projector_screen_1k/StaticMeshes/projector_screen.uasset).
+- **Kitchenette & Breakroom**: Poly Haven CC0 [`CoffeeCart_01_cart`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/CoffeeCart/CoffeeCart_01_1k/StaticMeshes/CoffeeCart_01_cart.uasset) equipped with real espresso mugs (`CoffeeCart_01_mugs`) and pitcher (`CoffeeCart_01_props`), authentic [`Shell_Material_013_0`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/VendingMachine/scene/StaticMeshes/Shell_Material_013_0.uasset) vending machine, and dual [`Sofa_01_1k`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/Sofa/Sofa_01_1k/StaticMeshes/Sofa_01_1k.uasset) lounge sofas.
+- **Environmental Storytelling Props (Fab Marketplace)**:
+  - Filing storage cabinets: [`FileStroge`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabOfficeWork/FileStroge.uasset) stationed across aisles.
+  - Central office printers: [`printer`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabOfficeWork/printer.uasset) in the printing hub.
+  - Brainstorming whiteboard: [`whiteboard`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabOfficeWork/whiteboard.uasset) in the engineering bullpen.
+  - Supply & moving boxes: [`SM_Prop_CardboardBox_01`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabOfficeWork/SM_Prop_CardboardBox_01.uasset) clustered in storage areas.
+  - Office binders & document clutter: [`SM_Binder_Standard`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabBinder/SM_Binder_Standard.uasset) and [`SM_Binder_4_Stack`](file:///c:/Users/chrom/Desktop/Marker/AtlasStudioOffice/Content/Assets/Props/FabBinder/SM_Binder_4_Stack.uasset) distributed across desks.
+  - Workstation clutter: Poly Haven CC0 laptops, articulated lamps, stationery pencil cups, and botanical plants. Zero Sketchfab assets.
+
+---
+
+## Virtual Spectator View Window (Launch Configuration)
+
+To launch the Unreal Engine 5.8 3D simulation without opening the editor:
+- **Executable Shortcut**: [`Launch_Unreal_3D_Office.bat`](file:///c:/Users/chrom/Desktop/Marker/Launch_Unreal_3D_Office.bat)
+- **Electron UI Button**: Click **"⚡ Virtual Spectator (UE 5.8)"** or press the **`U`** key in the desktop app.
+- **Launch Command**:
+  ```cmd
+  "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject" -game -windowed -ResX=1920 -ResY=1080 -WinX=60 -WinY=30 -messaging
+  ```
+  *(The `-game` switch placed immediately after `.uproject` guarantees that the standalone spectator game window opens directly without launching the editor GUI).*
+
+---
+
+## Rust Workspace Status
 
 | Crate | Purpose | Key Features |
 |-------|---------|--------------|
-| `atlas-core` | Shared types | Project states, agent messages, tool kinds, render presets |
+| `atlas-core` | Shared types | Project states, agent messages, tool kinds, render presets, `PublishPlatform` |
 | `atlas-doctor` | Tool discovery | Probes OpenCode, Blender 5.1, UE 5.8, FFmpeg, Kokoro, VectorCraft/PhotoCraft/EffectCraft |
 | `atlas-opencode` | NVIDIA provider reuse | Parses `opencode providers list`, `opencode models nvidia` via supported CLI |
 | `atlas-store` | SQLite WAL | Projects, artifacts, agent messages, YouTube metrics, retention curves |
 | `atlas-agent-bus` | Message bus | Leases, heartbeats, exponential backoff retries, idempotency keys |
-| `atlas-analytics` | Retention & optimization | Retention curves, CTR, hook analysis, cliff detection, `OptimizationLoop` → agent messages |
+| `atlas-analytics` | Multi-Platform Analytics & Publishing | YouTube Data API, TikTok Upload-Post API, cliff detection, optimization loops |
 | `atlas-blender` | Render pipeline | Grease Pencil stroke-reveal script gen, preview/final quality, frame collection |
 | `atlas-kokoro` | TTS synthesis | Sentence-segment with retakes, word timestamps, FFmpeg concat, pronunciation hints |
 | `atlas-ffmpeg` | EDL assembly | Filter complex builder, concat + amix, caption tracks, SRT/VTT output |
-| `atlas-cli` | Unified CLI | `doctor`, `config`, `models`, `projects`, `topics`, `produce`, `analytics` |
+| `atlas-cli` | Unified CLI | `doctor`, `produce`, `publish`, `tiktok`, `analytics`, `topics` |
 
 ---
 
-## Verified End-to-End Vertical Slice
+## Running Verification Commands
 
 ```bash
-# 1. Create topic
-atlas topics create "How do lithium-ion batteries actually work?"
-# → Creates project vid_20261015_0000, seeds agent message
+# 1. Run all workspace tests
+cargo test
 
-# 2. Full production (mock frames/audio)
-atlas produce --topic vid_20261015_0000
-# Stage 1: Script → Stage 2: Storyboard (2 shots)
-# Stage 3: Blender renders (90+90 frames) → Stage 4: Kokoro TTS (6 segments)
-# Stage 5: FFmpeg assembly → Stage 6: QA & package
-# Output: exports/vid_20261015_0000/final.mp4 + captions + audio
-
-# 3. Analytics (sample data)
-atlas analytics fetch vid_20261015_0000 --sample
-atlas analytics retention vid_20261015_0000
-atlas analytics recommend vid_20261015_0000
-atlas analytics optimize vid_20261015_0000
-# → Generates REVISION_REQUIRED agent messages from retention cliffs
-
-# 4. YouTube OAuth (real credentials)
-atlas analytics auth                    # Auto-loads youtube_credentials.json
-atlas analytics auth-complete --code <CODE>
-# → Refresh token stored in Windows Credential Manager
-```
-
----
-
-## YouTube Integration
-
-- **Credentials:** `youtube_credentials.json` (Google OAuth installed app, local only)
-- **Scopes:** `youtube.readonly`, `yt-analytics.readonly`, `youtube.upload`
-- **Token Storage:** Windows Credential Manager via `keyring` crate (never in config/files)
-- **Refresh Token:** Persisted securely, auto-refreshed on API calls
-- **Auth Flow:** `atlas analytics auth` → browser → `atlas analytics auth-complete --code <CODE>`
-
----
-
-## Next Milestones (Per Spec)
-
-| Milestone | Target | Status |
-|-----------|--------|--------|
-| **0** System probe & integration | Tool discovery, OpenCode NVIDIA reuse | ✅ Complete |
-| **1** Single-video vertical slice | Script → render → audio → MP4 | ✅ Complete (mock) |
-| **2** Agent bus & auto revisions | Typed handoffs, revision loops | ✅ Core bus done |
-| **3** Full craft pipeline | PhotoCraft, EffectCraft, Unreal, 6-10 min story | 🔄 Pending real renders |
-| **4** Automatic trend editorial | Google Trends RSS, YouTube charts, ranking | 🔄 Pending |
-| **5** Publication automation | OAuth, private upload, scheduling, UI | 🔄 OAuth done |
-| **6** Unattended operations | Quality thresholds, GPU queue, batch ops | 🔄 Pending |
-
----
-
-## Running Tests
-
-```bash
-cargo test                    # All 20 tests pass
-cargo test -p atlas-analytics # 5 tests
-cargo test -p atlas-blender   # 2 tests
-cargo test -p atlas-ffmpeg    # 2 tests
-cargo test -p atlas-kokoro    # 2 tests
-cargo test -p atlas-agent-bus # 2 tests
-cargo test -p atlas-opencode  # 1 test
-```
-
----
-
-## Build & Run
-
-```bash
-cargo build --release         # Optimized binary at target/release/atlas.exe
+# 2. Check tool discovery & system health
 .\target\release\atlas.exe doctor
-.\target\release\atlas.exe config show --redact
-.\target\release\atlas.exe models probe
+
+# 3. Verify final Unreal Engine 5.8 office map
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject" -run=pythonscript -script="C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\Content\Python\verify_final_map.py" -stdout -unattended -nosplash
 ```
-
----
-
-## Security Notes
-
-- ✅ No secrets in repo (`.gitignore` excludes target/, youtube_credentials.json not tracked)
-- ✅ OAuth refresh tokens in Windows Credential Manager only
-- ✅ NVIDIA API key never extracted; reused via OpenCode CLI
-- ✅ SQLite WAL mode, no plaintext credentials in DB
-- ✅ Idempotent uploads, crash recovery via durable state
-
----
-
-## Key Files for Development
-
-| File | Purpose |
-|------|---------|
-| `Cargo.toml` | Workspace root, dependencies |
-| `.opencode/skills/*/SKILL.md` | 38 agent skill definitions |
-| `.opencode/workflows/*.md` | 10 workflow guides |
-| `.opencode/schemas/*.schema.json` | 8 JSON Schema contracts |
-| `crates/atlas-cli/src/main.rs` | CLI command implementations |
-| `crates/atlas-analytics/src/youtube.rs` | YouTube OAuth + Analytics API |
-| `crates/atlas-kokoro/src/lib.rs` | Kokoro TTS + credentials loading |
-| `youtube_credentials.json` | Google OAuth client secret (local only) |

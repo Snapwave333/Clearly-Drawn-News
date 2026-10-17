@@ -1,7 +1,9 @@
 use atlas_core::{AtlasError, AtlasResult};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 use tokio::fs;
+use tokio_util::io::ReaderStream;
 use tracing::info;
 
 const KEYRING_SERVICE: &str = "com.atlas-studio.youtube";
@@ -31,6 +33,33 @@ pub struct YouTubeTokenSet {
     pub access_token: String,
     pub refresh_token: String,
     pub expires_at: SystemTime,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct YouTubeUploadMetadata {
+    pub title: String,
+    pub description: String,
+    pub tags: Vec<String>,
+    pub privacy_status: String,
+    pub category_id: String,
+    pub contains_synthetic_media: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct YouTubeUploadResult {
+    pub video_id: String,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct YouTubeChannelStatus {
+    pub channel_id: String,
+    pub available: bool,
+    pub is_linked: Option<bool>,
+    pub long_uploads_status: Option<String>,
+    pub privacy_status: Option<String>,
+    pub made_for_kids: Option<bool>,
+    pub self_declared_made_for_kids: Option<bool>,
 }
 
 /// Secure storage for YouTube OAuth tokens using the OS credential manager.
@@ -150,7 +179,9 @@ impl YouTubeAnalyticsClient {
             .to_string();
         let refresh_token = json["refresh_token"]
             .as_str()
-            .ok_or_else(|| AtlasError::OpenCode("missing refresh_token; ensure prompt=consent".into()))?
+            .ok_or_else(|| {
+                AtlasError::OpenCode("missing refresh_token; ensure prompt=consent".into())
+            })?
             .to_string();
         let expires_in = json["expires_in"].as_u64().unwrap_or(3600);
         let expires_at = SystemTime::now() + Duration::from_secs(expires_in);
@@ -209,8 +240,205 @@ impl YouTubeAnalyticsClient {
         })
     }
 
+    pub async fn upload_video(
+        &self,
+        video_path: &Path,
+        metadata: &YouTubeUploadMetadata,
+    ) -> AtlasResult<YouTubeUploadResult> {
+        let file_metadata = fs::metadata(video_path)
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("video file unavailable: {e}")))?;
+        if file_metadata.len() == 0 {
+            return Err(AtlasError::OpenCode("video file is empty".into()));
+        }
+
+        let token = self.refresh_access_token().await?;
+        let request_body = upload_request_body(metadata);
+        let init = self
+            .http
+            .post("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status")
+            .bearer_auth(&token.access_token)
+            .header("X-Upload-Content-Length", file_metadata.len())
+            .header("X-Upload-Content-Type", "video/mp4")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("YouTube upload initialization failed: {e}")))?;
+
+        if !init.status().is_success() {
+            let status = init.status();
+            let body = init.text().await.unwrap_or_default();
+            return Err(AtlasError::OpenCode(format!(
+                "YouTube upload initialization returned {status}: {body}"
+            )));
+        }
+
+        let upload_url = init
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+            .ok_or_else(|| AtlasError::OpenCode("YouTube did not return an upload URL".into()))?;
+        let file = fs::File::open(video_path)
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("failed to open video: {e}")))?;
+        let response = self
+            .http
+            .put(upload_url)
+            .bearer_auth(&token.access_token)
+            .header(reqwest::header::CONTENT_TYPE, "video/mp4")
+            .header(reqwest::header::CONTENT_LENGTH, file_metadata.len())
+            .body(reqwest::Body::wrap_stream(ReaderStream::new(file)))
+            .send()
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("YouTube video upload failed: {e}")))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AtlasError::OpenCode(format!(
+                "YouTube video upload returned {status}: {body}"
+            )));
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("invalid YouTube upload response: {e}")))?;
+        let video_id = body["id"]
+            .as_str()
+            .ok_or_else(|| AtlasError::OpenCode("YouTube response omitted the video id".into()))?
+            .to_string();
+        Ok(YouTubeUploadResult {
+            url: format!("https://youtu.be/{video_id}"),
+            video_id,
+        })
+    }
+
+    pub async fn fetch_channel_status(&self) -> AtlasResult<YouTubeChannelStatus> {
+        let token = self.refresh_access_token().await?;
+        let response = self
+            .http
+            .get("https://www.googleapis.com/youtube/v3/channels?part=status&mine=true")
+            .bearer_auth(&token.access_token)
+            .send()
+            .await
+            .map_err(|error| {
+                AtlasError::OpenCode(format!("YouTube channel status request failed: {error}"))
+            })?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AtlasError::OpenCode(format!(
+                "YouTube channel status returned {status}: {body}"
+            )));
+        }
+        let body: serde_json::Value = response.json().await.map_err(|error| {
+            AtlasError::OpenCode(format!("invalid YouTube channel status response: {error}"))
+        })?;
+        let item = body["items"].as_array().and_then(|items| items.first());
+        let Some(item) = item else {
+            return Ok(YouTubeChannelStatus {
+                channel_id: String::new(),
+                available: false,
+                is_linked: None,
+                long_uploads_status: None,
+                privacy_status: None,
+                made_for_kids: None,
+                self_declared_made_for_kids: None,
+            });
+        };
+        let status = &item["status"];
+        Ok(YouTubeChannelStatus {
+            channel_id: item["id"].as_str().unwrap_or_default().into(),
+            available: true,
+            is_linked: status["isLinked"].as_bool(),
+            long_uploads_status: status["longUploadsStatus"].as_str().map(str::to_owned),
+            privacy_status: status["privacyStatus"].as_str().map(str::to_owned),
+            made_for_kids: status["madeForKids"].as_bool(),
+            self_declared_made_for_kids: status["selfDeclaredMadeForKids"].as_bool(),
+        })
+    }
+
+    pub async fn upload_thumbnail(&self, video_id: &str, path: &Path) -> AtlasResult<()> {
+        let token = self.refresh_access_token().await?;
+        let bytes = fs::read(path)
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("failed to read thumbnail: {e}")))?;
+        let response = self
+            .http
+            .post(format!(
+                "https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={video_id}&uploadType=media"
+            ))
+            .bearer_auth(&token.access_token)
+            .header(reqwest::header::CONTENT_TYPE, "image/png")
+            .body(bytes)
+            .send()
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("thumbnail upload failed: {e}")))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AtlasError::OpenCode(format!(
+                "thumbnail upload returned {status}: {body}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub async fn upload_captions(
+        &self,
+        video_id: &str,
+        path: &Path,
+        language: &str,
+    ) -> AtlasResult<()> {
+        let token = self.refresh_access_token().await?;
+        let captions = fs::read(path)
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("failed to read captions: {e}")))?;
+        let boundary = format!("atlas-caption-{}", uuid::Uuid::new_v4().simple());
+        let metadata = serde_json::json!({
+            "snippet": {
+                "videoId": video_id,
+                "language": language,
+                "name": "English",
+                "isDraft": false
+            }
+        });
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{metadata}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("--{boundary}\r\nContent-Type: application/x-subrip\r\n\r\n").as_bytes(),
+        );
+        body.extend_from_slice(&captions);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let response = self
+            .http
+            .post("https://www.googleapis.com/upload/youtube/v3/captions?part=snippet&uploadType=multipart")
+            .bearer_auth(&token.access_token)
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                format!("multipart/related; boundary={boundary}"),
+            )
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| AtlasError::OpenCode(format!("caption upload failed: {e}")))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AtlasError::OpenCode(format!(
+                "caption upload returned {status}: {body}"
+            )));
+        }
+        Ok(())
+    }
+
     /// Fetches analytics for a single YouTube video.
-    pub async fn fetch_video_metrics(&self, youtube_video_id: &str) -> AtlasResult<serde_json::Value> {
+    pub async fn fetch_video_metrics(
+        &self,
+        youtube_video_id: &str,
+    ) -> AtlasResult<serde_json::Value> {
         let token = self.refresh_access_token().await?;
         let url = format!(
             "https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2020-01-01&endDate={}&metrics=views,watchTime(minutes),averageViewDuration(seconds),averageViewPercentage,impressions,impressionsClickThroughRate,likes,comments,subscribersGained,subscribersLost&dimensions=video&filters=video=={}",
@@ -271,6 +499,22 @@ impl YouTubeAnalyticsClient {
     }
 }
 
+fn upload_request_body(metadata: &YouTubeUploadMetadata) -> serde_json::Value {
+    serde_json::json!({
+        "snippet": {
+            "title": metadata.title,
+            "description": metadata.description,
+            "tags": metadata.tags,
+            "categoryId": metadata.category_id
+        },
+        "status": {
+            "privacyStatus": metadata.privacy_status,
+            "selfDeclaredMadeForKids": false,
+            "containsSyntheticMedia": metadata.contains_synthetic_media
+        }
+    })
+}
+
 // Minimal urlencoding helper to avoid an extra dependency.
 mod urlencoding {
     pub fn encode(s: &str) -> String {
@@ -304,12 +548,18 @@ pub struct YouTubeCredentialsFileInner {
 }
 
 /// Load YouTube OAuth credentials from the standard credentials file.
-pub async fn load_youtube_credentials<P: AsRef<std::path::Path>>(path: P) -> AtlasResult<YouTubeCredentials> {
-    let content = fs::read_to_string(path).await
+pub async fn load_youtube_credentials<P: AsRef<std::path::Path>>(
+    path: P,
+) -> AtlasResult<YouTubeCredentials> {
+    let content = fs::read_to_string(path)
+        .await
         .map_err(|e| AtlasError::OpenCode(format!("Failed to read credentials file: {}", e)))?;
     let file_creds: YouTubeCredentialsFile = serde_json::from_str(&content)
         .map_err(|e| AtlasError::OpenCode(format!("Invalid credentials JSON: {}", e)))?;
-    let redirect_uri = file_creds.installed.redirect_uris.first()
+    let redirect_uri = file_creds
+        .installed
+        .redirect_uris
+        .first()
         .cloned()
         .unwrap_or_else(|| "http://localhost".to_string());
     Ok(YouTubeCredentials {
@@ -331,5 +581,21 @@ mod tests {
         assert!(url.contains("response_type=code"));
         assert!(url.contains("access_type=offline"));
         assert!(url.contains("youtube.readonly"));
+    }
+
+    #[test]
+    fn upload_request_contains_visibility_and_disclosure() {
+        let metadata = YouTubeUploadMetadata {
+            title: "Test".into(),
+            description: "Description".into(),
+            tags: vec!["science".into()],
+            privacy_status: "unlisted".into(),
+            category_id: "27".into(),
+            contains_synthetic_media: true,
+        };
+        let body = upload_request_body(&metadata);
+        assert_eq!(body["status"]["privacyStatus"], "unlisted");
+        assert_eq!(body["status"]["containsSyntheticMedia"], true);
+        assert_eq!(body["snippet"]["categoryId"], "27");
     }
 }

@@ -9,28 +9,60 @@ impl RecommendationEngine {
         Self
     }
 
-    pub fn analyze(&self, performance: &VideoPerformance, video_duration_seconds: u64) -> Vec<OptimizationRecommendation> {
+    pub fn analyze(
+        &self,
+        performance: &VideoPerformance,
+        video_duration_seconds: u64,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recs = Vec::new();
 
-        // Hook analysis: first 30 seconds vs channel baseline.
-        if let Some(hook) = performance.metrics.hook_retention(video_duration_seconds) {
-            if hook < performance.channel_average.average_percentage_viewed * 0.9 {
+        // Hook analysis: first 30 seconds vs channel baseline (long-form).
+        if video_duration_seconds > 60 && performance.metrics.format != "short" {
+            if let Some(hook) = performance.metrics.hook_retention(video_duration_seconds) {
+                if hook < performance.channel_average.average_percentage_viewed * 0.9 {
+                    recs.push(OptimizationRecommendation {
+                        recommendation_id: format!("rec_{}", Uuid::new_v4().simple()),
+                        priority: RecommendationPriority::Critical,
+                        category: RecommendationCategory::Hook,
+                        issue: "Hook retention is below the channel baseline.".to_string(),
+                        evidence: format!(
+                            "First-30s retention {:.1}% vs channel average {:.1}%.",
+                            hook * 100.0,
+                            performance.channel_average.average_percentage_viewed * 100.0
+                        ),
+                        suggested_action: "Rewrite the opening question/visual to establish stakes faster; test a stronger concrete image in the first 5 seconds.".to_string(),
+                        affected_timecodes: Some(vec!["00:00-00:30".to_string()]),
+                        expected_impact: ExpectedImpact {
+                            metric: "average_view_duration".to_string(),
+                            direction: "increase".to_string(),
+                            rationale: "Higher hook retention lifts overall average view duration and signals quality to the recommendation algorithm.".to_string(),
+                        },
+                    });
+                }
+            }
+        }
+
+        // Short-form 3-second hook analysis (for vertical Shorts / TikTok).
+        if (video_duration_seconds <= 60 || performance.metrics.format == "short")
+            && performance.metrics.short_hook_retention().is_some()
+        {
+            let short_hook = performance.metrics.short_hook_retention().unwrap();
+            if short_hook < 0.70 {
                 recs.push(OptimizationRecommendation {
                     recommendation_id: format!("rec_{}", Uuid::new_v4().simple()),
                     priority: RecommendationPriority::Critical,
                     category: RecommendationCategory::Hook,
-                    issue: "Hook retention is below the channel baseline.".to_string(),
+                    issue: "3-second Short hook retention is below target threshold (70%).".to_string(),
                     evidence: format!(
-                        "First-30s retention {:.1}% vs channel average {:.1}%.",
-                        hook * 100.0,
-                        performance.channel_average.average_percentage_viewed * 100.0
+                        "First-3s retention is {:.1}% (target >= 70.0% to prevent swipe-away).",
+                        short_hook * 100.0
                     ),
-                    suggested_action: "Rewrite the opening question/visual to establish stakes faster; test a stronger concrete image in the first 5 seconds.".to_string(),
-                    affected_timecodes: Some(vec!["00:00-00:30".to_string()]),
+                    suggested_action: "Add an aggressive opening visual punch, motion morph, or dynamic caption question in the first 0-3 seconds.".to_string(),
+                    affected_timecodes: Some(vec!["00:00-00:03".to_string()]),
                     expected_impact: ExpectedImpact {
-                        metric: "average_view_duration".to_string(),
+                        metric: "short_hook_retention".to_string(),
                         direction: "increase".to_string(),
-                        rationale: "Higher hook retention lifts overall average view duration and signals quality to the recommendation algorithm.".to_string(),
+                        rationale: "Shorts feed algorithms heavily weight the 0-3s retention ratio when deciding whether to distribute the video to wider audiences.".to_string(),
                     },
                 });
             }
@@ -126,7 +158,10 @@ impl RecommendationEngine {
     }
 
     /// Ranks recommendations by priority and expected impact.
-    pub fn rank(&self, mut recs: Vec<OptimizationRecommendation>) -> Vec<OptimizationRecommendation> {
+    pub fn rank(
+        &self,
+        mut recs: Vec<OptimizationRecommendation>,
+    ) -> Vec<OptimizationRecommendation> {
         recs.sort_by(|a, b| {
             let priority_order = |p: &RecommendationPriority| match p {
                 RecommendationPriority::Critical => 0,
@@ -161,11 +196,31 @@ mod tests {
             average_percentage_viewed: Some(0.25),
             impressions_click_through_rate: Some(0.02),
             retention_curve: vec![
-                RetentionPoint { elapsed_ratio: 0.0, retention_ratio: 1.0, elapsed_seconds: 0 },
-                RetentionPoint { elapsed_ratio: 0.05, retention_ratio: 0.35, elapsed_seconds: 15 },
-                RetentionPoint { elapsed_ratio: 0.1, retention_ratio: 0.3, elapsed_seconds: 30 },
-                RetentionPoint { elapsed_ratio: 0.2, retention_ratio: 0.25, elapsed_seconds: 60 },
-                RetentionPoint { elapsed_ratio: 1.0, retention_ratio: 0.15, elapsed_seconds: 300 },
+                RetentionPoint {
+                    elapsed_ratio: 0.0,
+                    retention_ratio: 1.0,
+                    elapsed_seconds: 0,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.05,
+                    retention_ratio: 0.35,
+                    elapsed_seconds: 15,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.1,
+                    retention_ratio: 0.3,
+                    elapsed_seconds: 30,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.2,
+                    retention_ratio: 0.25,
+                    elapsed_seconds: 60,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 1.0,
+                    retention_ratio: 0.15,
+                    elapsed_seconds: 300,
+                },
             ],
             ..Default::default()
         }
@@ -192,7 +247,13 @@ mod tests {
         let engine = RecommendationEngine::new();
         let recs = engine.analyze(&performance, 300);
         assert!(!recs.is_empty());
-        assert!(recs.iter().any(|r| matches!(r.category, RecommendationCategory::Hook)));
-        assert!(recs.iter().any(|r| matches!(r.category, RecommendationCategory::Thumbnail)));
+        assert!(
+            recs.iter()
+                .any(|r| matches!(r.category, RecommendationCategory::Hook))
+        );
+        assert!(
+            recs.iter()
+                .any(|r| matches!(r.category, RecommendationCategory::Thumbnail))
+        );
     }
 }

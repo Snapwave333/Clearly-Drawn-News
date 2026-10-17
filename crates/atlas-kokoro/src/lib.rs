@@ -74,57 +74,70 @@ pub struct KokoroPipeline {
     kokoro_exe: PathBuf,
     voice_config: VoiceConfig,
     workspace_dir: PathBuf,
-    http_client: reqwest::Client,
 }
 
 impl KokoroPipeline {
-    pub fn new(kokoro_exe: impl Into<PathBuf>, voice_config: VoiceConfig, workspace_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        kokoro_exe: impl Into<PathBuf>,
+        voice_config: VoiceConfig,
+        workspace_dir: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             kokoro_exe: kokoro_exe.into(),
             voice_config,
             workspace_dir: workspace_dir.into(),
-            http_client: reqwest::Client::new(),
         }
     }
 
     /// Synthesize a single narration segment.
-    pub async fn synthesize_segment(&self, segment: &NarrationSegment) -> AtlasResult<AudioSegment> {
+    pub async fn synthesize_segment(
+        &self,
+        segment: &NarrationSegment,
+    ) -> AtlasResult<AudioSegment> {
         let output_dir = self.workspace_dir.join("audio").join("segments");
         tokio::fs::create_dir_all(&output_dir).await?;
-        
-        let output_file = output_dir.join(format!("{}.wav", segment.segment_id));
-        
-        // Build Kokoro command
-        // Kokoro CLI: kokoro -m <voice> -l <language> -o <output> <text>
-        let mut args = vec![
-            "-m".to_string(),
-            segment.voice.clone(),
-            "-l".to_string(),
-            self.voice_config.language.clone(),
-            "-o".to_string(),
-            output_file.to_string_lossy().to_string(),
-        ];
-        
-        // Apply speed/pitch if different from defaults
-        if (segment.speed - self.voice_config.default_speed).abs() > 0.01 {
-            args.push("--speed".to_string());
-            args.push(segment.speed.to_string());
-        }
-        if (segment.pitch - self.voice_config.default_pitch).abs() > 0.01 {
-            args.push("--pitch".to_string());
-            args.push(segment.pitch.to_string());
-        }
-        
-        // Add pronunciation hints as word replacements
-        for hint in &segment.pronunciation_hints {
-            args.push("--replace".to_string());
-            args.push(format!("{}={}", hint.word, hint.phonemes));
-        }
-        
-        // The text to synthesize
-        args.push(segment.text.clone());
 
-        info!("Synthesizing segment {}: '{}'", segment.segment_id, segment.text.chars().take(50).collect::<String>());
+        let output_file = output_dir.join(format!("{}.wav", segment.segment_id));
+
+        let input_file = output_dir.join(format!("{}.txt", segment.segment_id));
+        tokio::fs::write(&input_file, &segment.text).await?;
+
+        let model_dir = directories::BaseDirs::new()
+            .map(|dirs| dirs.home_dir().join(".kokoro"))
+            .ok_or_else(|| {
+                AtlasError::Render("Unable to resolve the Kokoro model directory".into())
+            })?;
+        let model_file = model_dir.join("kokoro-v1.0.onnx");
+        let voices_file = model_dir.join("voices-v1.0.bin");
+        if !model_file.is_file() || !voices_file.is_file() {
+            return Err(AtlasError::Render(format!(
+                "Kokoro model files are missing from {}",
+                model_dir.display()
+            )));
+        }
+
+        let args = vec![
+            input_file.to_string_lossy().to_string(),
+            output_file.to_string_lossy().to_string(),
+            "--speed".to_string(),
+            segment.speed.to_string(),
+            "--lang".to_string(),
+            self.voice_config.language.clone(),
+            "--voice".to_string(),
+            segment.voice.clone(),
+            "--format".to_string(),
+            "wav".to_string(),
+            "--model".to_string(),
+            model_file.to_string_lossy().to_string(),
+            "--voices".to_string(),
+            voices_file.to_string_lossy().to_string(),
+        ];
+
+        info!(
+            "Synthesizing segment {}: '{}'",
+            segment.segment_id,
+            segment.text.chars().take(50).collect::<String>()
+        );
 
         let output = Command::new(&self.kokoro_exe)
             .args(&args)
@@ -138,14 +151,24 @@ impl KokoroPipeline {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             warn!("Kokoro synthesis failed: {}", stderr);
-            return Err(AtlasError::Render(format!("Kokoro exited with {}: {}", output.status, stderr)));
+            return Err(AtlasError::Render(format!(
+                "Kokoro exited with {}: {}",
+                output.status, stderr
+            )));
         }
 
-        // Get audio metadata using ffprobe
+        if !output_file.is_file() {
+            return Err(AtlasError::Render(format!(
+                "Kokoro completed without creating {}",
+                output_file.display()
+            )));
+        }
+
         let metadata = self.probe_audio(&output_file).await?;
-        
-        // Generate word timestamps (placeholder - would use Kokoro's alignment output or external aligner)
-        let word_timestamps = self.generate_word_timestamps(segment, metadata.duration_seconds).await?;
+
+        let word_timestamps = self
+            .generate_word_timestamps(segment, metadata.duration_seconds)
+            .await?;
 
         Ok(AudioSegment {
             segment_id: segment.segment_id.clone(),
@@ -158,7 +181,11 @@ impl KokoroPipeline {
     }
 
     /// Synthesize all segments for a narration track.
-    pub async fn synthesize_track(&self, segments: Vec<NarrationSegment>, track_id: String) -> AtlasResult<NarrationTrack> {
+    pub async fn synthesize_track(
+        &self,
+        segments: Vec<NarrationSegment>,
+        track_id: String,
+    ) -> AtlasResult<NarrationTrack> {
         let mut audio_segments = Vec::new();
         let mut total_duration = 0.0f32;
 
@@ -168,39 +195,54 @@ impl KokoroPipeline {
             audio_segments.push(audio);
         }
 
-        // Combine segments into final track
         let combined_file = self.combine_segments(&audio_segments, &track_id).await?;
 
+        let sample_rate = audio_segments
+            .first()
+            .map_or(24000, |segment| segment.sample_rate);
         Ok(NarrationTrack {
             track_id,
             segments: audio_segments,
             total_duration_seconds: total_duration,
-            sample_rate: self.voice_config.default_speed as u32 * 22050, // Kokoro default
+            sample_rate,
             combined_file: Some(combined_file),
         })
     }
 
     /// Combine audio segments with pauses into a single file.
-    async fn combine_segments(&self, segments: &[AudioSegment], track_id: &str) -> AtlasResult<PathBuf> {
+    async fn combine_segments(
+        &self,
+        segments: &[AudioSegment],
+        track_id: &str,
+    ) -> AtlasResult<PathBuf> {
         let output_dir = self.workspace_dir.join("audio").join("combined");
         tokio::fs::create_dir_all(&output_dir).await?;
         let output_file = output_dir.join(format!("{}.wav", track_id));
 
-        // Build FFmpeg filter complex for concatenation with pauses
         let mut filter_parts = Vec::new();
         let mut input_args = Vec::new();
-        
+
         for (i, seg) in segments.iter().enumerate() {
             input_args.push("-i".to_string());
             input_args.push(seg.file_path.to_string_lossy().to_string());
             filter_parts.push(format!("[{}:a]", i));
         }
-        
-        let filter_complex = format!("{}concat=n={}:v=0:a=1[out]", filter_parts.join(""), segments.len());
-        
+
+        let filter_complex = format!(
+            "{}concat=n={}:v=0:a=1[out]",
+            filter_parts.join(""),
+            segments.len()
+        );
+
         let mut args: Vec<String> = vec!["-y".to_string()];
         args.extend(input_args);
-        args.extend(["-filter_complex".to_string(), filter_complex, "-map".to_string(), "[out]".to_string(), output_file.to_string_lossy().to_string()]);
+        args.extend([
+            "-filter_complex".to_string(),
+            filter_complex,
+            "-map".to_string(),
+            "[out]".to_string(),
+            output_file.to_string_lossy().to_string(),
+        ]);
 
         let output = Command::new("ffmpeg")
             .args(&args)
@@ -213,7 +255,10 @@ impl KokoroPipeline {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AtlasError::Render(format!("FFmpeg concat failed: {}", stderr)));
+            return Err(AtlasError::Render(format!(
+                "FFmpeg concat failed: {}",
+                stderr
+            )));
         }
 
         Ok(output_file)
@@ -223,9 +268,12 @@ impl KokoroPipeline {
     async fn probe_audio(&self, file: &Path) -> AtlasResult<AudioMetadata> {
         let output = Command::new("ffprobe")
             .args([
-                "-v", "error",
-                "-show_entries", "format=duration:stream=sample_rate,channels",
-                "-of", "json",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration:stream=sample_rate,channels",
+                "-of",
+                "json",
                 file.to_string_lossy().as_ref(),
             ])
             .stdout(Stdio::piped())
@@ -247,9 +295,7 @@ impl KokoroPipeline {
             .as_str()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(22050);
-        let channels = json["streams"][0]["channels"]
-            .as_u64()
-            .unwrap_or(1) as u16;
+        let channels = json["streams"][0]["channels"].as_u64().unwrap_or(1) as u16;
 
         Ok(AudioMetadata {
             duration_seconds: duration,
@@ -258,17 +304,24 @@ impl KokoroPipeline {
         })
     }
 
-    /// Generate word timestamps (placeholder - real implementation would use alignment).
-    async fn generate_word_timestamps(&self, segment: &NarrationSegment, total_duration: f32) -> AtlasResult<Vec<WordTimestamp>> {
+    async fn generate_word_timestamps(
+        &self,
+        segment: &NarrationSegment,
+        total_duration: f32,
+    ) -> AtlasResult<Vec<WordTimestamp>> {
         let words: Vec<&str> = segment.text.split_whitespace().collect();
         let word_count = words.len().max(1);
-        let avg_word_duration = total_duration / word_count as f32;
-        
+        let total_weight: f32 = words
+            .iter()
+            .map(|word| (word.len() as f32 / 5.0).clamp(0.5, 2.0))
+            .sum();
+
         let mut timestamps = Vec::new();
         let mut current_time = 0.0f32;
-        
+
         for word in words {
-            let word_duration = avg_word_duration * (word.len() as f32 / 5.0).max(0.5).min(2.0);
+            let word_duration = total_duration * (word.len() as f32 / 5.0).clamp(0.5, 2.0)
+                / total_weight.max(word_count as f32 * 0.5);
             timestamps.push(WordTimestamp {
                 word: word.to_string(),
                 start_seconds: current_time,
@@ -276,15 +329,19 @@ impl KokoroPipeline {
             });
             current_time += word_duration;
         }
-        
+
         Ok(timestamps)
     }
 
     /// Request a retake for a specific segment with modified parameters.
-    pub async fn retake_segment(&self, original: &NarrationSegment, modifications: RetakeModifications) -> AtlasResult<AudioSegment> {
+    pub async fn retake_segment(
+        &self,
+        original: &NarrationSegment,
+        modifications: RetakeModifications,
+    ) -> AtlasResult<AudioSegment> {
         let mut modified = original.clone();
         modified.segment_id = format!("{}_retake_{}", original.segment_id, Uuid::new_v4().simple());
-        
+
         if let Some(speed) = modifications.speed {
             modified.speed = speed;
         }
@@ -300,7 +357,7 @@ impl KokoroPipeline {
         if let Some(hints) = modifications.pronunciation_hints {
             modified.pronunciation_hints = hints;
         }
-        
+
         self.synthesize_segment(&modified).await
     }
 }
@@ -336,9 +393,8 @@ use uuid::Uuid;
 
 /// Helper to split script text into narration segments.
 pub fn split_script_into_segments(script: &str, voice_id: &str) -> Vec<NarrationSegment> {
-    // Simple sentence splitting - real implementation would be smarter
     let sentences: Vec<&str> = script
-        .split(|c| c == '.' || c == '?' || c == '!')
+        .split(['.', '?', '!'])
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
@@ -362,13 +418,11 @@ pub fn split_script_into_segments(script: &str, voice_id: &str) -> Vec<Narration
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
-
     #[test]
     fn splits_script_into_segments() {
         let script = "Hello world. This is a test. How are you?";
         let segments = split_script_into_segments(script, "af_heart");
-        
+
         assert_eq!(segments.len(), 3);
         assert_eq!(segments[0].text, "Hello world.");
         assert_eq!(segments[1].text, "This is a test.");
@@ -389,7 +443,7 @@ mod tests {
             pause_after_ms: 300,
             pronunciation_hints: vec![],
         };
-        
+
         let json = serde_json::to_string(&segment).unwrap();
         let parsed: NarrationSegment = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.text, "Hello world.");

@@ -74,6 +74,15 @@
     "require_rights_gate": true,
     "require_quality_gate": true,
     "credits_always": true,
-    "synthetic_media_disclosure_when_required": true
+    "synthetic_media_disclosure_when_required": true,
+    "tiktok": {
+      "default_user": "focogaming",
+      "profile_url": "https://www.tiktok.com/@focogaming",
+      "mcp_url": "https://www.upload-post.com/mcp/tiktok/",
+      "max_posts_per_24_hours": 15,
+      "max_posts_per_minute": 6,
+      "transparent_ai_disclosure": true,
+      "default_post_mode": "DIRECT_POST"
+    }
   }
 }

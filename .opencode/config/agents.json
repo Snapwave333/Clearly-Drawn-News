@@ -167,6 +167,21 @@
       "skill_file": "skills/thumbnail-packaging/SKILL.md"
     },
     {
+      "skill": "thumbnail-research",
+      "role": "thumbnail_researcher",
+      "skill_file": "skills/thumbnail-research/SKILL.md"
+    },
+    {
+      "skill": "thumbnail-ab-testing",
+      "role": "ab_testing_specialist",
+      "skill_file": "skills/thumbnail-ab-testing/SKILL.md"
+    },
+    {
+      "skill": "thumbnail-optimization",
+      "role": "thumbnail_optimizer",
+      "skill_file": "skills/thumbnail-optimization/SKILL.md"
+    },
+    {
       "skill": "trend-analyst",
       "role": "trend_analyst",
       "skill_file": "skills/trend-analyst/SKILL.md"
@@ -190,6 +205,11 @@
       "skill": "video-editor",
       "role": "video_editor",
       "skill_file": "skills/video-editor/SKILL.md"
+    },
+    {
+      "skill": "tiktok-publisher",
+      "role": "tiktok_publisher",
+      "skill_file": "skills/tiktok-publisher/SKILL.md"
     }
   ],
   "require_independent_review": true,

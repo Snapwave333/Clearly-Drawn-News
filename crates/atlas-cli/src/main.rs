@@ -1,24 +1,45 @@
 use atlas_core::{
-    redact_config, AgentMessage, FeedbackItem, Project, ProjectState, PublishMode, PublishPlan,
-    Topic, TrendSource,
+    AgentMessage, FeedbackItem, Project, ProjectState, PublishMode, PublishPlan, Topic,
+    TrendSource, redact_config,
 };
 use atlas_doctor::{has_minimal_pipeline, probe_all};
 use atlas_opencode::OpenCodeClient;
 use atlas_store::Store;
 use chrono::Utc;
-use clap::{Parser, Subcommand};
-use directories::ProjectDirs;
-use std::path::PathBuf;
+use clap::{Parser, Subcommand, ValueEnum};
+use directories::{BaseDirs, ProjectDirs};
+use serde::Deserialize;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use atlas_analytics::{
-    authorization_url, compute_channel_baseline, compare_to_baseline, save_sample_metrics,
-    AnalyticsStore, OptimizationLoop, RecommendationEngine, YouTubeAnalyticsClient,
-    YouTubeCredentials, load_youtube_credentials,
+    AnalyticsStore, DEFAULT_TIKTOK_USER, OptimizationLoop, PublishCadencePolicy, PublishDecision,
+    PublishLedger, PublishedFormat, PublishedItem, RecommendationEngine, TikTokClient,
+    TikTokPostMode, TikTokPrivacyLevel, TikTokUploadMetadata, TikTokUploadStatus,
+    YouTubeAnalyticsClient, YouTubeCredentials, YouTubeUploadMetadata, authorization_url,
+    compare_to_baseline, compute_channel_baseline, load_tiktok_credentials,
+    load_youtube_credentials, media_fingerprint, save_sample_metrics,
 };
-use atlas_blender::{BlenderPipeline, create_test_shot_spec, RenderQuality};
-use atlas_ffmpeg::{EditDecisionList, EdlEntry, FfmpegAssembler, AudioTrack, CaptionTrack, CaptionFormat, SourceType, Transition, TransitionType};
-use atlas_kokoro::{KokoroPipeline, VoiceConfig, split_script_into_segments};
+use atlas_blender::{
+    BlenderPipeline, LipSyncCue, MascotEmotion, MascotGesture, MascotMorph, MascotSpec,
+    RenderQuality, TransformSpec, Viseme, VisualElement, VisualElementType, create_test_shot_spec,
+};
+use atlas_ffmpeg::{
+    AudioTrack, CaptionFormat, CaptionTrack, EditDecisionList, EdlEntry, FfmpegAssembler,
+    SourceType,
+};
+use atlas_kokoro::{
+    AudioSegment, KokoroPipeline, NarrationSegment, NarrationTrack, VoiceConfig,
+    split_script_into_segments,
+};
+use atlas_media::{ImportedMedia, MediaKind, MediaOrientation, StockMediaClient};
+use atlas_policy::{
+    ChannelBrowserReview, ChannelPreflight, CheckStatus, ContentPreflight, PolicyGuardian,
+};
+use atlas_storyboard::{
+    DirectorClient, Emotion as DirectedEmotion, Gesture as DirectedGesture, ScenePattern,
+    StoryboardBeat, StoryboardPlan,
+};
 
 #[derive(Parser)]
 #[command(name = "atlas")]
@@ -31,6 +52,109 @@ struct Cli {
     /// Data directory for ATLAS (defaults to project-local data/).
     #[arg(long, global = true, env = "ATLAS_DATA_DIR")]
     data_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum VideoFormat {
+    Long,
+    Short,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
+enum PublishPrivacy {
+    Private,
+    Unlisted,
+    Public,
+}
+
+impl PublishPrivacy {
+    fn as_youtube_value(self) -> &'static str {
+        match self {
+            Self::Private => "private",
+            Self::Unlisted => "unlisted",
+            Self::Public => "public",
+        }
+    }
+
+    fn as_tiktok_value(self) -> TikTokPrivacyLevel {
+        match self {
+            Self::Private => TikTokPrivacyLevel::SelfOnly,
+            Self::Unlisted => TikTokPrivacyLevel::MutualFollowFriends,
+            Self::Public => TikTokPrivacyLevel::PublicToEveryone,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum, Default, PartialEq, Eq)]
+enum PublishPlatformCli {
+    #[default]
+    #[value(name = "youtube")]
+    YouTube,
+    #[value(name = "tiktok")]
+    TikTok,
+    #[value(name = "both")]
+    Both,
+}
+
+#[derive(Subcommand)]
+enum TikTokAction {
+    /// Inspect connected TikTok account profile info.
+    Info {
+        #[arg(long, default_value = DEFAULT_TIKTOK_USER)]
+        user: String,
+    },
+    /// Check processing and publication status of a TikTok upload job.
+    Status {
+        #[arg(long)]
+        request_id: String,
+    },
+    /// Upload rendered whiteboard video for a topic directly to TikTok.
+    Upload {
+        #[arg(long)]
+        topic: String,
+        #[arg(long, value_enum, default_value_t = VideoFormat::Short)]
+        format: VideoFormat,
+        #[arg(long, value_enum, default_value_t = PublishPrivacy::Public)]
+        privacy: PublishPrivacy,
+        #[arg(long, default_value = DEFAULT_TIKTOK_USER)]
+        user: String,
+        #[arg(long)]
+        draft: bool,
+    },
+    /// View TikTok performance and audience retention analytics.
+    Analytics {
+        #[arg(long)]
+        video_id: String,
+        #[arg(long)]
+        sample: bool,
+    },
+}
+
+#[derive(Clone, Copy)]
+struct VideoProfile {
+    slug: &'static str,
+    width: u32,
+    height: u32,
+    shot_count: u32,
+}
+
+impl VideoFormat {
+    fn profile(self) -> VideoProfile {
+        match self {
+            Self::Long => VideoProfile {
+                slug: "long",
+                width: 1920,
+                height: 1080,
+                shot_count: 10,
+            },
+            Self::Short => VideoProfile {
+                slug: "short",
+                width: 1080,
+                height: 1920,
+                shot_count: 5,
+            },
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -64,6 +188,40 @@ enum Commands {
     Produce {
         #[arg(long)]
         topic: String,
+        #[arg(long)]
+        reuse_rendered: bool,
+        #[arg(long, value_enum, default_value_t = VideoFormat::Long)]
+        format: VideoFormat,
+        #[arg(long)]
+        publish: bool,
+        #[arg(long, value_enum, default_value_t = PublishPrivacy::Private)]
+        privacy: PublishPrivacy,
+        #[arg(long, value_enum, default_value_t = PublishPlatformCli::YouTube)]
+        platform: PublishPlatformCli,
+        #[arg(long, default_value = DEFAULT_TIKTOK_USER)]
+        tiktok_user: String,
+        #[arg(long)]
+        tiktok_draft: bool,
+    },
+    Publish {
+        #[arg(long)]
+        topic: String,
+        #[arg(long, value_enum, default_value_t = VideoFormat::Long)]
+        format: VideoFormat,
+        #[arg(long, value_enum, default_value_t = PublishPrivacy::Private)]
+        privacy: PublishPrivacy,
+        #[arg(long, value_enum, default_value_t = PublishPlatformCli::YouTube)]
+        platform: PublishPlatformCli,
+        #[arg(long, default_value = DEFAULT_TIKTOK_USER)]
+        tiktok_user: String,
+        #[arg(long)]
+        tiktok_draft: bool,
+    },
+    /// TikTok publishing, profile inspection, and upload status.
+    #[command(name = "tiktok")]
+    TikTok {
+        #[command(subcommand)]
+        action: TikTokAction,
     },
     /// Start the headless daemon.
     Daemon {
@@ -74,6 +232,10 @@ enum Commands {
     Analytics {
         #[command(subcommand)]
         action: AnalyticsAction,
+    },
+    Policy {
+        #[command(subcommand)]
+        action: PolicyAction,
     },
 }
 
@@ -115,6 +277,27 @@ enum DaemonAction {
 }
 
 #[derive(Subcommand)]
+enum PolicyAction {
+    Status,
+    Refresh,
+    RecordChannelReview {
+        #[arg(long)]
+        channel_id: String,
+        #[arg(long)]
+        warning_visible: bool,
+        #[arg(long)]
+        strike_visible: bool,
+        #[arg(long)]
+        training_completed: bool,
+        #[arg(long)]
+        warning_expires_at: Option<String>,
+        #[arg(long)]
+        restricted_policy: Option<String>,
+    },
+    AcceptCurrent,
+}
+
+#[derive(Subcommand)]
 enum AnalyticsAction {
     /// Print the OAuth URL and instructions; complete with `auth complete`.
     Auth {
@@ -136,21 +319,29 @@ enum AnalyticsAction {
         #[arg(long)]
         redirect_uri: Option<String>,
     },
-    /// Fetch metrics from YouTube Analytics for a project.
+    /// Fetch metrics from YouTube Analytics or TikTok for a project.
     Fetch {
         video_id: String,
         #[arg(long)]
         sample: bool,
+        #[arg(long, default_value = "youtube")]
+        platform: String,
+        #[arg(long, default_value = "long")]
+        format: String,
     },
     /// Show the retention curve for a video.
     Retention {
         video_id: String,
+        #[arg(long, default_value = "youtube")]
+        platform: String,
     },
     /// Generate optimization recommendations from stored metrics.
     Recommend {
         video_id: String,
         #[arg(long, default_value = "300")]
         duration_seconds: u64,
+        #[arg(long, default_value = "youtube")]
+        platform: String,
     },
     /// Create agent revision tasks from analytics recommendations.
     Optimize {
@@ -178,9 +369,52 @@ async fn main() -> anyhow::Result<()> {
         Commands::Models { action } => cmd_models(action).await,
         Commands::Projects { action } => cmd_projects(&store, action).await,
         Commands::Topics { action } => cmd_topics(&store, action).await,
-        Commands::Produce { topic } => cmd_produce(&store, &topic).await,
+        Commands::Produce {
+            topic,
+            reuse_rendered,
+            format,
+            publish,
+            privacy,
+            platform,
+            tiktok_user,
+            tiktok_draft,
+        } => {
+            cmd_produce(
+                &store,
+                &topic,
+                reuse_rendered,
+                format,
+                publish,
+                privacy,
+                platform,
+                &tiktok_user,
+                tiktok_draft,
+            )
+            .await
+        }
+        Commands::Publish {
+            topic,
+            format,
+            privacy,
+            platform,
+            tiktok_user,
+            tiktok_draft,
+        } => {
+            cmd_publish(
+                &store,
+                &topic,
+                format,
+                privacy,
+                platform,
+                &tiktok_user,
+                tiktok_draft,
+            )
+            .await
+        }
+        Commands::TikTok { action } => cmd_tiktok(&store, action).await,
         Commands::Daemon { action } => cmd_daemon(action).await,
         Commands::Analytics { action } => cmd_analytics(&store, action).await,
+        Commands::Policy { action } => cmd_policy(&store, action).await,
     }
 }
 
@@ -282,7 +516,7 @@ async fn cmd_projects(store: &Store, action: ProjectsAction) -> anyhow::Result<(
             if json {
                 println!("{}", serde_json::to_string_pretty(&projects)?);
             } else {
-                println!("{:<24} {:<24} {}", "VIDEO ID", "STATE", "TOPIC");
+                println!("{:<24} {:<24} TOPIC", "VIDEO ID", "STATE");
                 for p in projects {
                     println!(
                         "{:<24} {:<24} {}",
@@ -314,7 +548,13 @@ async fn cmd_topics(store: &Store, action: TopicsAction) -> anyhow::Result<()> {
     match action {
         TopicsAction::Create { title } => {
             let title = title.join(" ");
-            let video_id = format!("vid_{}_{:04}", Utc::now().format("%Y%m%d"), Uuid::new_v4().as_simple().to_string()[..4].parse::<u16>().unwrap_or(0));
+            let video_id = format!(
+                "vid_{}_{:04}",
+                Utc::now().format("%Y%m%d"),
+                Uuid::new_v4().as_simple().to_string()[..4]
+                    .parse::<u16>()
+                    .unwrap_or(0)
+            );
             let project = Project {
                 video_id: video_id.clone(),
                 topic: Topic {
@@ -338,6 +578,10 @@ async fn cmd_topics(store: &Store, action: TopicsAction) -> anyhow::Result<()> {
                     contains_synthetic_media: None,
                     credits_present: false,
                     youtube_video_id: None,
+                    youtube_video_ids: Default::default(),
+                    tiktok_post_id: None,
+                    tiktok_post_ids: Default::default(),
+                    tiktok_request_id: None,
                 },
             };
             store.insert_project(&project)?;
@@ -356,7 +600,8 @@ async fn cmd_topics(store: &Store, action: TopicsAction) -> anyhow::Result<()> {
                 feedback: vec![FeedbackItem {
                     claim_id: None,
                     issue: "Manual topic created; approve for research.".to_string(),
-                    required_change: "Run `atlas produce --topic <id>` to start production.".to_string(),
+                    required_change: "Run `atlas produce --topic <id>` to start production."
+                        .to_string(),
                 }],
                 created_at: Utc::now(),
                 deadline_at: None,
@@ -368,186 +613,1519 @@ async fn cmd_topics(store: &Store, action: TopicsAction) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_produce(store: &Store, topic_id: &str) -> anyhow::Result<()> {
+async fn cmd_produce(
+    store: &Store,
+    topic_id: &str,
+    reuse_rendered: bool,
+    format: VideoFormat,
+    publish: bool,
+    privacy: PublishPrivacy,
+    platform: PublishPlatformCli,
+    tiktok_user: &str,
+    tiktok_draft: bool,
+) -> anyhow::Result<()> {
     let mut project = store
         .get_project(topic_id)?
         .ok_or_else(|| anyhow::anyhow!("project not found: {}", topic_id))?;
-    
+    let profile = format.profile();
+    let render_project_id = format!("{}_{}", project.video_id, profile.slug);
+
     println!("═══ ATLAS STUDIO Vertical Slice ═══");
     println!("Project: {} — {}", project.video_id, project.topic.title);
+    println!(
+        "Format: {} ({}x{}, {} shots)",
+        profile.slug, profile.width, profile.height, profile.shot_count
+    );
     println!();
-    
-    // Stage 1: Script → Storyboard (simulated)
+
     println!("📝 Stage 1: Generating storyboard from script...");
     project.state = ProjectState::Scripting;
     store.insert_project(&project)?;
-    let script = format!(
-        "How do lithium-ion batteries actually work? \
-         Lithium-ion batteries power our modern world. \
-         At the anode, graphite layers intercalate lithium ions during charging. \
-         At the cathode, lithium cobalt oxide releases ions during discharge. \
-         The electrolyte carries ions between electrodes. \
-         This reversible reaction stores and releases energy."
-    );
+    let planned = planned_video(&project.topic.title, format).await?;
+    let beats = planned.beats;
+    let script = beats
+        .iter()
+        .map(VideoBeat::narration)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let project_dir = store
+        .data_dir()
+        .join("projects")
+        .join(&project.video_id)
+        .join(profile.slug);
+    std::fs::create_dir_all(&project_dir)?;
+    std::fs::write(project_dir.join("script.txt"), &script)?;
+    if let Some(plan) = planned.generated_plan {
+        std::fs::write(
+            project_dir.join("storyboard.json"),
+            serde_json::to_vec_pretty(&plan)?,
+        )?;
+    }
     println!("   Script: {} chars", script.len());
-    
-    // Stage 2: Storyboard → Shot specs
-    println!("🎬 Stage 2: Creating shot specifications...");
+
+    println!("🎙️  Stage 2: Synthesizing narration and timing...");
+    project.state = ProjectState::AudioBuild;
+    store.insert_project(&project)?;
+    let data_dir = store.data_dir().to_path_buf();
+    let voice_config = VoiceConfig::default();
+    let kokoro_pipeline = KokoroPipeline::new("kokoro-tts", voice_config, &data_dir);
+    let mut segments = split_script_into_segments(&script, "af_heart");
+    for segment in &mut segments {
+        segment.pause_after_ms = 0;
+    }
+    if segments.len() != beats.len() {
+        anyhow::bail!(
+            "Storyboard has {} beats but narration produced {} segments",
+            beats.len(),
+            segments.len()
+        );
+    }
+    let narration = kokoro_pipeline
+        .synthesize_track(segments.clone(), project.video_id.clone())
+        .await?;
+    let combined_audio = narration
+        .combined_file
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Kokoro did not return a combined narration file"))?;
+    println!("   ✓ Timed narration: {}", combined_audio.display());
+
+    println!("🎞️  Importing topic-matched B-roll...");
+    let broll_queries = beats
+        .iter()
+        .map(|beat| beat.broll_query().to_string())
+        .collect::<Vec<_>>();
+    let broll = import_broll(&project.video_id, format, &data_dir, &broll_queries).await;
+    println!("   ✓ {} attributed media assets available", broll.len());
+
+    println!("🎬 Stage 3: Creating lip-synced shot specifications...");
     project.state = ProjectState::Storyboarding;
     store.insert_project(&project)?;
-    
-    let shot_specs = vec![
-        create_test_shot_spec(&project.video_id, "shot_001"),
-        create_test_shot_spec(&project.video_id, "shot_002"),
-    ];
+
+    let mut shot_specs = Vec::new();
+    for (index, (beat, audio)) in beats.iter().zip(&narration.segments).enumerate() {
+        let mut spec = create_test_shot_spec(&render_project_id, &format!("shot_{:03}", index + 1));
+        spec.duration_frames = ((audio.duration_seconds + 0.4) * 30.0).ceil() as u32;
+        spec.scene_template = beat.scene().to_string();
+        spec.visual_elements.truncate(1);
+        spec.visual_elements[0].properties["text"] = serde_json::json!(beat.title());
+        spec.visual_elements[0].properties["font_size"] = serde_json::json!(20.0);
+        spec.visual_elements[0].hold_frames = spec.duration_frames;
+        spec.mascot = Some(MascotSpec {
+            name: "Luma".into(),
+            emotion: beat.emotion(),
+            gesture: beat.gesture(),
+            lip_sync: lip_sync_cues(audio),
+            morph: beat.morph(),
+        });
+        if index == 0 {
+            spec.background_media = broll
+                .iter()
+                .find(|media| matches!(media.kind, MediaKind::Image))
+                .map(|media| media.file_path.clone());
+        }
+        if index == 3 {
+            spec.background_media = broll
+                .iter()
+                .find(|media| matches!(media.kind, MediaKind::Video))
+                .map(|media| media.file_path.clone());
+        }
+        if matches!(format, VideoFormat::Short) {
+            spec.camera.ortho_scale = Some(10.0);
+            spec.visual_elements[0].transform.position[1] = 3.2;
+        } else {
+            spec.visual_elements[0].transform.position[1] = 1.6;
+        }
+        beat.apply_visuals(&mut spec, matches!(format, VideoFormat::Short));
+        shot_specs.push(spec);
+    }
     println!("   {} shots planned", shot_specs.len());
-    
-    // Stage 3: Blender renders (preview quality)
-    println!("🎨 Stage 3: Rendering with Blender (preview)...");
+
+    println!("🎨 Stage 4: Rendering animated lessons with Blender...");
     project.state = ProjectState::AssetBuild;
     store.insert_project(&project)?;
-    
-    let data_dir = store.data_dir().to_path_buf();
-    let blender_exe = "blender"; // Assumes in PATH
+
+    let blender_exe = "blender";
     let blender_pipeline = BlenderPipeline::new(blender_exe, &data_dir);
-    
-    let mut render_outputs = Vec::new();
+
     for spec in &shot_specs {
         println!("   Rendering {}...", spec.shot_id);
+        let frames_dir = data_dir
+            .join("renders")
+            .join(&render_project_id)
+            .join(&spec.shot_id);
+        let reusable_frames = if reuse_rendered && frames_dir.is_dir() {
+            std::fs::read_dir(&frames_dir)?
+                .filter_map(Result::ok)
+                .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "png"))
+                .count()
+        } else {
+            0
+        };
+        if reusable_frames == spec.duration_frames as usize {
+            println!("   ✓ {} verified cached frames", reusable_frames);
+            continue;
+        }
         let job = atlas_blender::RenderJob {
             job_id: format!("job_{}", spec.shot_id),
             shot_spec: spec.clone(),
-            quality: RenderQuality::Preview,
-            output_dir: data_dir.join("renders").join(&project.video_id).join(&spec.shot_id),
+            quality: RenderQuality::Final,
+            output_dir: frames_dir,
             status: atlas_blender::RenderStatus::Queued,
+            output_size: Some([profile.width, profile.height]),
         };
-        
-        // In real run, this would call blender_pipeline.render(&job).await
-        // For now, create mock frame output dirs
-        let frames_dir = data_dir.join("renders").join(&project.video_id).join(&spec.shot_id);
-        std::fs::create_dir_all(&frames_dir)?;
-        for frame in 1..=spec.duration_frames {
-            let frame_file = frames_dir.join(format!("{:04}.png", frame));
-            std::fs::write(&frame_file, b"MOCK_FRAME")?;
-        }
-        println!("   ✓ {} frames", spec.duration_frames);
-        render_outputs.push(job);
+        let output = blender_pipeline.render(&job).await?;
+        println!("   ✓ {} real frames", output.frames.len());
     }
-    
-    // Stage 4: Kokoro TTS narration
-    println!("🎙️  Stage 4: Synthesizing narration with Kokoro...");
-    project.state = ProjectState::AudioBuild;
-    store.insert_project(&project)?;
-    
-    let kokoro_exe = "kokoro"; // Assumes in PATH
-    let voice_config = VoiceConfig::default();
-    let kokoro_pipeline = KokoroPipeline::new(kokoro_exe, voice_config, &data_dir);
-    
-    let segments = split_script_into_segments(&script, "af_heart");
-    println!("   {} narration segments", segments.len());
-    
-    // Mock audio output
-    let audio_dir = data_dir.join("audio").join("combined");
-    std::fs::create_dir_all(&audio_dir)?;
-    let combined_audio = audio_dir.join(format!("{}.wav", project.video_id));
-    std::fs::write(&combined_audio, b"MOCK_AUDIO")?;
-    println!("   ✓ Combined narration: {}", combined_audio.display());
-    
-    // Stage 5: FFmpeg assembly
+
     println!("🔧 Stage 5: Assembling final video with FFmpeg...");
     project.state = ProjectState::EditAndMix;
     store.insert_project(&project)?;
-    
+
     let ffmpeg_exe = "ffmpeg";
     let ffprobe_exe = "ffprobe";
     let ffmpeg_assembler = FfmpegAssembler::new(ffmpeg_exe, ffprobe_exe, &data_dir);
-    
+
+    let caption_dir = data_dir
+        .join("captions")
+        .join(&project.video_id)
+        .join(profile.slug);
+    std::fs::create_dir_all(&caption_dir)?;
+    let caption_path = caption_dir.join("en.srt");
+    write_captions(&caption_path, &segments, &narration)?;
+
     let edl = EditDecisionList {
         edl_id: format!("edl_{}", uuid::Uuid::new_v4().simple()),
         project_id: project.video_id.clone(),
         fps: 30,
-        width: 1920,
-        height: 1080,
-        entries: vec![
-            EdlEntry {
-                entry_id: "shot_001".into(),
-                source_type: SourceType::Video,
-                source_path: data_dir.join("renders").join(&project.video_id).join("shot_001").join("%04d.png"),
-                source_in_frame: 0,
-                source_out_frame: 90,
-                record_in_frame: 0,
-                record_out_frame: 90,
-                transition: None,
-                audio_sync_offset_ms: 0,
-            },
-            EdlEntry {
-                entry_id: "shot_002".into(),
-                source_type: SourceType::Video,
-                source_path: data_dir.join("renders").join(&project.video_id).join("shot_002").join("%04d.png"),
-                source_in_frame: 0,
-                source_out_frame: 60,
-                record_in_frame: 90,
-                record_out_frame: 150,
-                transition: Some(Transition {
-                    transition_type: TransitionType::Crossfade,
-                    duration_frames: 15,
-                    parameters: serde_json::json!({}),
-                }),
-                audio_sync_offset_ms: 0,
-            },
-        ],
-        audio_tracks: vec![
-            AudioTrack {
-                track_id: "narration".into(),
-                source_path: combined_audio.clone(),
-                start_frame: 0,
-                volume_db: 0.0,
-                fade_in_frames: 15,
-                fade_out_frames: 15,
-            },
-        ],
-        caption_tracks: vec![
-            CaptionTrack {
-                track_id: "captions_en".into(),
-                format: CaptionFormat::Srt,
-                source_path: data_dir.join("captions").join("en.srt"),
-                language: "en".into(),
-            },
-        ],
+        width: profile.width,
+        height: profile.height,
+        entries: shot_specs
+            .iter()
+            .scan(0_u32, |record_frame, spec| {
+                let index = spec
+                    .shot_id
+                    .trim_start_matches("shot_")
+                    .parse::<u32>()
+                    .unwrap_or(1)
+                    - 1;
+                let shot_id = format!("shot_{:03}", index + 1);
+                let entry = EdlEntry {
+                    entry_id: shot_id.clone(),
+                    source_type: SourceType::Video,
+                    source_path: data_dir
+                        .join("renders")
+                        .join(&render_project_id)
+                        .join(&shot_id)
+                        .join("%04d.png"),
+                    source_in_frame: 0,
+                    source_out_frame: spec.duration_frames,
+                    record_in_frame: *record_frame,
+                    record_out_frame: *record_frame + spec.duration_frames,
+                    transition: None,
+                    audio_sync_offset_ms: 0,
+                };
+                *record_frame += spec.duration_frames;
+                Some(entry)
+            })
+            .collect(),
+        audio_tracks: vec![AudioTrack {
+            track_id: "narration".into(),
+            source_path: combined_audio.clone(),
+            start_frame: 0,
+            volume_db: 0.0,
+            fade_in_frames: 15,
+            fade_out_frames: 15,
+        }],
+        caption_tracks: vec![CaptionTrack {
+            track_id: "captions_en".into(),
+            format: CaptionFormat::Srt,
+            source_path: caption_path.clone(),
+            language: "en".into(),
+        }],
     };
-    
-    // Create mock caption file
-    std::fs::create_dir_all(data_dir.join("captions"))?;
-    std::fs::write(data_dir.join("captions").join("en.srt"), 
-        "1\n00:00:00,000 --> 00:00:03,000\nHow do lithium-ion batteries actually work?\n\n2\n00:00:03,000 --> 00:00:05,000\nLithium-ion batteries power our modern world.\n")?;
-    
-    let output_video = data_dir.join("exports").join(&project.video_id).join("final.mp4");
-    std::fs::create_dir_all(data_dir.join("exports").join(&project.video_id))?;
-    
-    // In real run: ffmpeg_assembler.assemble(&edl, &output_video).await
-    std::fs::write(&output_video, b"MOCK_MP4")?;
-    println!("   ✓ Final video: {}", output_video.display());
-    
-    // Stage 6: QA & Package
+
+    let output_video = data_dir
+        .join("exports")
+        .join(&project.video_id)
+        .join(profile.slug)
+        .join("final.mp4");
+    std::fs::create_dir_all(
+        data_dir
+            .join("exports")
+            .join(&project.video_id)
+            .join(profile.slug),
+    )?;
+
+    let assembly = ffmpeg_assembler.assemble(&edl, &output_video).await?;
+    if assembly.duration_seconds < 5.0 || assembly.frame_count < 150 {
+        anyhow::bail!(
+            "Release QA rejected output: {:.2}s and {} frames",
+            assembly.duration_seconds,
+            assembly.frame_count
+        );
+    }
+    if matches!(format, VideoFormat::Short) && assembly.duration_seconds > 60.0 {
+        anyhow::bail!(
+            "Shorts QA rejected {:.2}s output; maximum is 60 seconds",
+            assembly.duration_seconds
+        );
+    }
+    if matches!(format, VideoFormat::Long) && assembly.duration_seconds <= 60.0 {
+        anyhow::bail!(
+            "Long-form QA rejected {:.2}s output; duration must exceed 60 seconds",
+            assembly.duration_seconds
+        );
+    }
+    if assembly.width != profile.width || assembly.height != profile.height {
+        anyhow::bail!(
+            "Release QA rejected {}x{} output; expected {}x{}",
+            assembly.width,
+            assembly.height,
+            profile.width,
+            profile.height
+        );
+    }
+    let output_size = std::fs::metadata(&output_video)?.len();
+    if output_size < 100_000 {
+        anyhow::bail!(
+            "Release QA rejected undersized output: {} bytes",
+            output_size
+        );
+    }
+    let export_dir = output_video
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Invalid export path"))?;
+    std::fs::copy(
+        data_dir
+            .join("renders")
+            .join(&render_project_id)
+            .join("shot_001")
+            .join(format!(
+                "{:04}.png",
+                (shot_specs[0].duration_frames / 2).max(1)
+            )),
+        export_dir.join("thumbnail.png"),
+    )?;
+    let title = match format {
+        VideoFormat::Long => format!("{} | ATLAS STUDIO", project.topic.title),
+        VideoFormat::Short => format!("{} | #Shorts", project.topic.title),
+    };
+    let metadata = serde_json::json!({
+        "title": title,
+        "description": "A concise whiteboard explanation produced by ATLAS STUDIO. Narration and visuals were generated with AI-assisted production tools. Educational demonstration; sources should be reviewed before reuse.",
+        "transcript": script,
+        "contains_synthetic_media": true,
+        "credits": ["ATLAS STUDIO", "Blender", "Kokoro TTS", "FFmpeg"],
+        "broll_attribution": broll,
+        "format": profile.slug,
+        "width": profile.width,
+        "height": profile.height,
+        "duration_seconds": assembly.duration_seconds,
+        "frame_count": assembly.frame_count,
+        "size_bytes": output_size
+    });
+    std::fs::write(
+        export_dir.join("youtube_metadata.json"),
+        serde_json::to_vec_pretty(&metadata)?,
+    )?;
+    println!(
+        "   ✓ Final video: {} ({:.2}s, {} frames, {} bytes)",
+        output_video.display(),
+        assembly.duration_seconds,
+        assembly.frame_count,
+        output_size
+    );
+
     println!("✅ Stage 6: Quality check & package...");
     project.state = ProjectState::ReleaseQa;
     store.insert_project(&project)?;
-    
+
     println!();
     println!("═══ Production Complete ═══");
     println!("Output: {}", output_video.display());
-    println!("Renders: {}", data_dir.join("renders").join(&project.video_id).display());
+    println!(
+        "Renders: {}",
+        data_dir.join("renders").join(&project.video_id).display()
+    );
     println!("Audio:   {}", combined_audio.display());
-    println!("Captions: {}", data_dir.join("captions").join("en.srt").display());
+    println!("Captions: {}", caption_path.display());
     println!();
     println!("Next steps:");
     println!("  atlas analytics fetch {} --sample", project.video_id);
     println!("  atlas analytics recommend {}", project.video_id);
     println!("  atlas analytics optimize {}", project.video_id);
-    
+
+    project.publish.contains_synthetic_media = Some(true);
+    project.publish.credits_present = true;
     project.state = ProjectState::ReadyToPublish;
     store.insert_project(&project)?;
+    if publish {
+        cmd_publish(
+            store,
+            topic_id,
+            format,
+            privacy,
+            platform,
+            tiktok_user,
+            tiktok_draft,
+        )
+        .await?;
+    }
     Ok(())
+}
+
+#[derive(Deserialize)]
+struct VideoPackageMetadata {
+    title: String,
+    description: String,
+    transcript: String,
+    contains_synthetic_media: bool,
+    #[serde(default)]
+    broll_attribution: Vec<ImportedMedia>,
+}
+
+async fn cmd_publish(
+    store: &Store,
+    topic_id: &str,
+    format: VideoFormat,
+    privacy: PublishPrivacy,
+    platform: PublishPlatformCli,
+    tiktok_user: &str,
+    tiktok_draft: bool,
+) -> anyhow::Result<()> {
+    let mut project = store
+        .get_project(topic_id)?
+        .ok_or_else(|| anyhow::anyhow!("project not found: {}", topic_id))?;
+    let profile = format.profile();
+    let export_dir = store
+        .data_dir()
+        .join("exports")
+        .join(&project.video_id)
+        .join(profile.slug);
+    let video_path = export_dir.join("final.mp4");
+    let thumbnail_path = export_dir.join("thumbnail.png");
+    let caption_path = export_dir.join("captions_en.srt");
+    if !video_path.is_file() {
+        anyhow::bail!("final video not found: {}", video_path.display());
+    }
+
+    let publish_youtube = matches!(
+        platform,
+        PublishPlatformCli::YouTube | PublishPlatformCli::Both
+    );
+    let publish_tiktok = matches!(
+        platform,
+        PublishPlatformCli::TikTok | PublishPlatformCli::Both
+    );
+
+    if publish_youtube {
+        for path in [&thumbnail_path, &caption_path] {
+            if !path.is_file() {
+                anyhow::bail!("publish package is incomplete: {}", path.display());
+            }
+        }
+    }
+
+    let package: VideoPackageMetadata =
+        serde_json::from_slice(&std::fs::read(export_dir.join("youtube_metadata.json"))?)?;
+    let ledger_path = store.data_dir().join("publish").join("ledger.json");
+    let mut ledger = PublishLedger::load(&ledger_path)?;
+    let fingerprint = media_fingerprint(&video_path)?;
+    let published_format = match format {
+        VideoFormat::Long => PublishedFormat::Long,
+        VideoFormat::Short => PublishedFormat::Short,
+    };
+
+    if publish_youtube {
+        let already_uploaded = project.publish.youtube_video_ids.contains_key(profile.slug);
+        let publish_decision = if matches!(privacy, PublishPrivacy::Public) && !already_uploaded {
+            ledger.decide(
+                &PublishCadencePolicy::default(),
+                published_format,
+                &fingerprint,
+                Utc::now(),
+            )
+        } else {
+            PublishDecision::Allow
+        };
+        let unique_media = already_uploaded
+            || !matches!(&publish_decision, PublishDecision::RejectDuplicate { .. });
+        let credentials = load_youtube_credentials("youtube_credentials.json").await?;
+        let client = YouTubeAnalyticsClient::new(credentials);
+        if !client.is_authenticated()? {
+            anyhow::bail!("YouTube is not authenticated; run `atlas analytics auth` first");
+        }
+        let channel = client.fetch_channel_status().await?;
+        let broll_expected = !package.broll_attribution.is_empty();
+        let broll_attribution_present = package.broll_attribution.iter().all(|media| {
+            !media.provider.trim().is_empty()
+                && !media.source_url.trim().is_empty()
+                && !media.creator.trim().is_empty()
+        });
+        let guardian = PolicyGuardian::new(store.data_dir().join("policy"))?;
+        let browser_review = guardian.channel_review()?;
+        let report = guardian
+            .vet(
+                &ContentPreflight {
+                    title: package.title.clone(),
+                    description: package.description.clone(),
+                    transcript: package.transcript.clone(),
+                    contains_synthetic_media: package.contains_synthetic_media,
+                    captions_present: caption_path.is_file(),
+                    thumbnail_present: thumbnail_path.is_file(),
+                    broll_expected,
+                    broll_attribution_present,
+                    unique_media,
+                },
+                &ChannelPreflight {
+                    channel_id: channel.channel_id,
+                    available: channel.available,
+                    linked: channel.is_linked,
+                    long_uploads_status: channel.long_uploads_status,
+                    privacy_status: channel.privacy_status,
+                    browser_review,
+                },
+                &format!("{}_{}", project.video_id, profile.slug),
+            )
+            .await?;
+        println!(
+            "Policy Guardian (YouTube): {}/{} checks passed",
+            report
+                .checks
+                .iter()
+                .filter(|check| check.status == CheckStatus::Pass)
+                .count(),
+            report.checks.len()
+        );
+        if !report.publish_allowed {
+            project.state = ProjectState::ReadyToPublish;
+            store.insert_project(&project)?;
+            let blocked = report
+                .checks
+                .iter()
+                .filter(|check| check.status != CheckStatus::Pass)
+                .map(|check| format!("{}: {}", check.name, check.detail))
+                .collect::<Vec<_>>()
+                .join("; ");
+            anyhow::bail!("Policy Guardian blocked publication: {blocked}");
+        }
+        match publish_decision {
+            PublishDecision::Allow => {}
+            PublishDecision::Defer { retry_at, reason } => {
+                project.state = ProjectState::ReadyToPublish;
+                store.insert_project(&project)?;
+                println!("Public YouTube upload deferred until {retry_at}: {reason}");
+                return Ok(());
+            }
+            PublishDecision::RejectDuplicate { existing_video_id } => {
+                anyhow::bail!(
+                    "Publication rejected: identical media already exists as YouTube video {existing_video_id}"
+                );
+            }
+        }
+
+        let upload_metadata = YouTubeUploadMetadata {
+            title: package.title.clone(),
+            description: package.description.clone(),
+            tags: vec![
+                "education".into(),
+                "science".into(),
+                "whiteboard animation".into(),
+                profile.slug.into(),
+            ],
+            privacy_status: privacy.as_youtube_value().into(),
+            category_id: "27".into(),
+            contains_synthetic_media: package.contains_synthetic_media,
+        };
+
+        project.state = ProjectState::Uploading;
+        store.insert_project(&project)?;
+        let result = if let Some(existing_id) = project.publish.youtube_video_ids.get(profile.slug)
+        {
+            atlas_analytics::YouTubeUploadResult {
+                video_id: existing_id.clone(),
+                url: format!("https://youtu.be/{existing_id}"),
+            }
+        } else {
+            match client.upload_video(&video_path, &upload_metadata).await {
+                Ok(result) => result,
+                Err(error) => {
+                    project.state = ProjectState::ReadyToPublish;
+                    store.insert_project(&project)?;
+                    return Err(error.into());
+                }
+            }
+        };
+
+        project.publish.youtube_video_id = Some(result.video_id.clone());
+        project
+            .publish
+            .youtube_video_ids
+            .insert(profile.slug.into(), result.video_id.clone());
+        project.state = ProjectState::UploadedProcessing;
+        store.insert_project(&project)?;
+        client
+            .upload_thumbnail(&result.video_id, &thumbnail_path)
+            .await?;
+        client
+            .upload_captions(&result.video_id, &caption_path, "en-US")
+            .await?;
+        project.state = ProjectState::Published;
+        store.insert_project(&project)?;
+        if matches!(privacy, PublishPrivacy::Public) {
+            ledger.record(PublishedItem {
+                project_id: project.video_id.clone(),
+                youtube_video_id: result.video_id.clone(),
+                format: published_format,
+                published_at: Utc::now(),
+                content_fingerprint: fingerprint.clone(),
+                platform: "youtube".into(),
+                tiktok_post_id: None,
+            });
+            ledger.save(&ledger_path)?;
+        }
+        println!(
+            "Published {} video to YouTube: {}",
+            profile.slug, result.url
+        );
+    }
+
+    if publish_tiktok {
+        println!(
+            "Configuring TikTok publishing for @{} via Upload-Post...",
+            tiktok_user
+        );
+        let tiktok_creds = load_tiktok_credentials("upload_post_credentials.json").await?;
+        let tiktok_client = TikTokClient::new(tiktok_creds);
+
+        let tiktok_already_uploaded = project.publish.tiktok_post_ids.contains_key(profile.slug);
+        let tiktok_decision = if matches!(privacy, PublishPrivacy::Public)
+            && !tiktok_draft
+            && !tiktok_already_uploaded
+        {
+            ledger.decide_tiktok(&PublishCadencePolicy::default(), &fingerprint, Utc::now())
+        } else {
+            PublishDecision::Allow
+        };
+
+        match tiktok_decision {
+            PublishDecision::Allow => {}
+            PublishDecision::Defer { retry_at, reason } => {
+                project.state = ProjectState::ReadyToPublish;
+                store.insert_project(&project)?;
+                println!("Public TikTok upload deferred until {retry_at}: {reason}");
+                return Ok(());
+            }
+            PublishDecision::RejectDuplicate { existing_video_id } => {
+                anyhow::bail!(
+                    "TikTok publication rejected: identical media already exists as TikTok post {existing_video_id}"
+                );
+            }
+        }
+
+        let tiktok_post_mode = if tiktok_draft {
+            TikTokPostMode::MediaUpload
+        } else {
+            TikTokPostMode::DirectPost
+        };
+        let tiktok_privacy_level = if tiktok_draft {
+            TikTokPrivacyLevel::SelfOnly
+        } else {
+            privacy.as_tiktok_value()
+        };
+
+        let caption = format!(
+            "{} #education #science #whiteboardanimation #focogaming",
+            package.title
+        );
+        let tiktok_metadata = TikTokUploadMetadata {
+            title: caption,
+            user: tiktok_user.to_string(),
+            privacy_level: tiktok_privacy_level,
+            post_mode: tiktok_post_mode,
+            is_ai_generated: true, // Transparent AI disclosure for whiteboard animations
+            disable_duet: false,
+            disable_stitch: false,
+            disable_comment: false,
+        };
+
+        project.state = ProjectState::Uploading;
+        store.insert_project(&project)?;
+
+        println!(
+            "Uploading {} video to TikTok (@{}) via Upload-Post...",
+            profile.slug, tiktok_user
+        );
+        let res = match tiktok_client
+            .upload_video(&video_path, &tiktok_metadata)
+            .await
+        {
+            Ok(res) => res,
+            Err(e) => {
+                project.state = ProjectState::ReadyToPublish;
+                store.insert_project(&project)?;
+                return Err(e.into());
+            }
+        };
+
+        println!("TikTok upload accepted with request_id: {}", res.request_id);
+        project.publish.tiktok_request_id = Some(res.request_id.clone());
+        project.state = ProjectState::UploadedProcessing;
+        store.insert_project(&project)?;
+
+        println!("Polling TikTok processing status...");
+        let status = match tiktok_client
+            .poll_until_complete(&res.request_id, std::time::Duration::from_secs(45))
+            .await
+        {
+            Ok(s) => s,
+            Err(_) => {
+                println!(
+                    "Upload in progress in background. Track status with: atlas tiktok status --request-id {}",
+                    res.request_id
+                );
+                TikTokUploadStatus {
+                    request_id: res.request_id.clone(),
+                    status: "processing".into(),
+                    completed: 0,
+                    total: 1,
+                    success: true,
+                    post_id: None,
+                    url: None,
+                    error_message: None,
+                }
+            }
+        };
+
+        if let Some(post_id) = &status.post_id {
+            project.publish.tiktok_post_id = Some(post_id.clone());
+            project
+                .publish
+                .tiktok_post_ids
+                .insert(profile.slug.into(), post_id.clone());
+        }
+        project.state = ProjectState::Published;
+        store.insert_project(&project)?;
+
+        if matches!(privacy, PublishPrivacy::Public) && !tiktok_draft {
+            ledger.record(PublishedItem {
+                project_id: project.video_id.clone(),
+                youtube_video_id: String::new(),
+                format: published_format,
+                published_at: Utc::now(),
+                content_fingerprint: fingerprint.clone(),
+                platform: "tiktok".into(),
+                tiktok_post_id: status.post_id.clone(),
+            });
+            ledger.save(&ledger_path)?;
+        }
+
+        let post_url = status
+            .url
+            .unwrap_or_else(|| format!("https://www.tiktok.com/@{}", tiktok_user));
+        println!(
+            "Published {} video to TikTok (@{}): {}",
+            profile.slug, tiktok_user, post_url
+        );
+    }
+
+    if !publish_youtube && !publish_tiktok {
+        println!("No platform selected for publication.");
+    } else {
+        cleanup_uploaded_media([video_path.as_path()]);
+        if publish_youtube && thumbnail_path.is_file() {
+            cleanup_uploaded_media([thumbnail_path.as_path()]);
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_tiktok(store: &Store, action: TikTokAction) -> anyhow::Result<()> {
+    match action {
+        TikTokAction::Info { user } => {
+            let creds = load_tiktok_credentials("upload_post_credentials.json").await?;
+            let client = TikTokClient::new(creds);
+            println!("Probing TikTok profile connection for @{user}...");
+            let info = client.fetch_user_status(&user).await?;
+            println!("{}", serde_json::to_string_pretty(&info)?);
+        }
+        TikTokAction::Status { request_id } => {
+            let creds = load_tiktok_credentials("upload_post_credentials.json").await?;
+            let client = TikTokClient::new(creds);
+            println!("Checking TikTok upload status for request {request_id}...");
+            let status = client.get_upload_status(&request_id).await?;
+            println!("{}", serde_json::to_string_pretty(&status)?);
+        }
+        TikTokAction::Upload {
+            topic,
+            format,
+            privacy,
+            user,
+            draft,
+        } => {
+            cmd_publish(
+                store,
+                &topic,
+                format,
+                privacy,
+                PublishPlatformCli::TikTok,
+                &user,
+                draft,
+            )
+            .await?;
+        }
+        TikTokAction::Analytics { video_id, sample } => {
+            let analytics = AnalyticsStore::new(store);
+            let metrics = if sample {
+                let m = atlas_analytics::save_sample_short_metrics(store, &video_id, "tiktok")?;
+                println!("Stored TikTok analytics snapshot for {}", video_id);
+                m
+            } else {
+                analytics.load_platform_metrics(&video_id, "tiktok")?.ok_or_else(|| {
+                    anyhow::anyhow!("no TikTok metrics found for {}. Run with --sample to generate or populate snapshot.", video_id)
+                })?
+            };
+            println!(
+                "TikTok Analytics & Retention — @focogaming ({})",
+                metrics.video_id
+            );
+            println!("==================================================");
+            println!("Views:        {}", metrics.views.unwrap_or(0));
+            println!(
+                "Avg Duration: {:.1}s ({:.1}% of video)",
+                metrics.average_view_duration_seconds.unwrap_or(0.0),
+                metrics.average_percentage_viewed.unwrap_or(0.0) * 100.0
+            );
+            println!(
+                "Likes:        {} | Comments: {} | Shares: {}",
+                metrics.likes.unwrap_or(0),
+                metrics.comments.unwrap_or(0),
+                metrics.shares.unwrap_or(0)
+            );
+            if let Some(hook) = metrics.short_hook_retention() {
+                println!("3-Sec Hook:   {:.1}% (target: >= 70%)", hook * 100.0);
+            }
+            if let Some(comp) = metrics.completion_rate() {
+                println!("Completion:   {:.1}% (target: >= 35%)", comp * 100.0);
+            }
+            println!("\nAudience Retention Curve:");
+            println!("{:<8} {:<12} {:<12}", "Time", "Elapsed", "Retention");
+            for p in &metrics.retention_curve {
+                println!(
+                    "{:02}:{:02}    {:>5.1}%       {:>5.1}%",
+                    p.elapsed_seconds / 60,
+                    p.elapsed_seconds % 60,
+                    p.elapsed_ratio * 100.0,
+                    p.retention_ratio * 100.0
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn cmd_policy(store: &Store, action: PolicyAction) -> anyhow::Result<()> {
+    let guardian = PolicyGuardian::new(store.data_dir().join("policy"))?;
+    match action {
+        PolicyAction::Status => println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "latest_report": guardian.latest_report()?,
+                "channel_browser_review": guardian.channel_review()?
+            }))?
+        ),
+        PolicyAction::Refresh => {
+            let refresh = guardian.refresh_sources().await?;
+            println!("{}", serde_json::to_string_pretty(&refresh)?);
+            if refresh.check.status != CheckStatus::Pass {
+                anyhow::bail!(refresh.check.detail);
+            }
+        }
+        PolicyAction::RecordChannelReview {
+            channel_id,
+            warning_visible,
+            strike_visible,
+            training_completed,
+            warning_expires_at,
+            restricted_policy,
+        } => {
+            let warning_expires_at = warning_expires_at
+                .map(|value| value.parse::<chrono::DateTime<Utc>>())
+                .transpose()?;
+            let review = ChannelBrowserReview {
+                source_url: format!("https://studio.youtube.com/channel/{channel_id}"),
+                channel_id,
+                reviewed_at: Utc::now(),
+                warning_visible,
+                strike_visible,
+                training_completed,
+                warning_expires_at,
+                restricted_policy,
+            };
+            guardian.record_channel_review(&review)?;
+            println!("{}", serde_json::to_string_pretty(&review)?);
+        }
+        PolicyAction::AcceptCurrent => {
+            let accepted = guardian.accept_pending()?;
+            println!(
+                "Accepted {} reviewed YouTube policy pages from {}",
+                accepted.pages.len(),
+                accepted.checked_at
+            );
+        }
+    }
+    Ok(())
+}
+
+fn cleanup_uploaded_media<'a>(paths: impl IntoIterator<Item = &'a Path>) {
+    for path in paths {
+        match std::fs::remove_file(path) {
+            Ok(()) => println!("Removed uploaded local media: {}", path.display()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => eprintln!(
+                "Uploaded successfully, but local cleanup failed for {}: {}",
+                path.display(),
+                error
+            ),
+        }
+    }
+}
+
+async fn import_broll(
+    video_id: &str,
+    format: VideoFormat,
+    data_dir: &Path,
+    queries: &[String],
+) -> Vec<ImportedMedia> {
+    let Some(base_dirs) = BaseDirs::new() else {
+        eprintln!("B-roll skipped: unable to locate the user profile");
+        return Vec::new();
+    };
+    let key_path = std::env::var_os("ATLAS_MEDIA_KEYS_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            base_dirs
+                .home_dir()
+                .join("Desktop")
+                .join("app wallpaper switcher")
+                .join("local.properties")
+        });
+    let client = match StockMediaClient::from_properties(&key_path) {
+        Ok(client) => client,
+        Err(error) => {
+            eprintln!("B-roll skipped: {error}");
+            return Vec::new();
+        }
+    };
+    let orientation = match format {
+        VideoFormat::Long => MediaOrientation::Landscape,
+        VideoFormat::Short => MediaOrientation::Portrait,
+    };
+    let output_dir = data_dir
+        .join("media")
+        .join(video_id)
+        .join(format.profile().slug);
+    let image_query = queries
+        .first()
+        .map(String::as_str)
+        .unwrap_or("educational concept close up");
+    let video_query = queries.get(1).map(String::as_str).unwrap_or(image_query);
+    let requests = [
+        (image_query, MediaKind::Image),
+        (video_query, MediaKind::Video),
+    ];
+    let mut imported = Vec::new();
+    for (query, kind) in requests {
+        match client.import(query, kind, orientation, &output_dir).await {
+            Ok(media) => imported.push(media),
+            Err(error) => eprintln!("B-roll source unavailable for {query}: {error}"),
+        }
+    }
+    if !imported.is_empty()
+        && let Ok(json) = serde_json::to_vec_pretty(&imported)
+    {
+        let _ = std::fs::write(output_dir.join("attribution.json"), json);
+    }
+    imported
+}
+
+#[derive(Clone)]
+struct ProductionBeat {
+    title: &'static str,
+    narration: &'static str,
+    scene: &'static str,
+    emotion: MascotEmotion,
+    gesture: MascotGesture,
+}
+
+enum VideoBeat {
+    Curated(ProductionBeat),
+    Directed(StoryboardBeat),
+}
+
+struct PlannedVideo {
+    beats: Vec<VideoBeat>,
+    generated_plan: Option<StoryboardPlan>,
+}
+
+impl VideoBeat {
+    fn title(&self) -> &str {
+        match self {
+            Self::Curated(beat) => beat.title,
+            Self::Directed(beat) => &beat.title,
+        }
+    }
+
+    fn narration(&self) -> &str {
+        match self {
+            Self::Curated(beat) => beat.narration,
+            Self::Directed(beat) => &beat.narration,
+        }
+    }
+
+    fn scene(&self) -> &str {
+        match self {
+            Self::Curated(_) => "generic_scene",
+            Self::Directed(beat) => match beat.scene_pattern {
+                ScenePattern::Hook => "generic_hook",
+                ScenePattern::Parts => "generic_parts",
+                ScenePattern::Flow => "generic_flow",
+                ScenePattern::SplitPath => "generic_split_path",
+                ScenePattern::Comparison => "generic_comparison",
+                ScenePattern::Scale => "generic_scale",
+                ScenePattern::Timeline => "generic_timeline",
+                ScenePattern::CauseEffect => "generic_cause_effect",
+                ScenePattern::Risk => "generic_risk",
+                ScenePattern::Cycle => "generic_cycle",
+            },
+        }
+    }
+
+    fn emotion(&self) -> MascotEmotion {
+        match self {
+            Self::Curated(beat) => beat.emotion.clone(),
+            Self::Directed(beat) => match beat.character.emotion {
+                DirectedEmotion::Curious => MascotEmotion::Curious,
+                DirectedEmotion::Excited => MascotEmotion::Excited,
+                DirectedEmotion::Explaining => MascotEmotion::Explaining,
+                DirectedEmotion::Concerned => MascotEmotion::Concerned,
+                DirectedEmotion::Confident => MascotEmotion::Confident,
+            },
+        }
+    }
+
+    fn gesture(&self) -> MascotGesture {
+        match self {
+            Self::Curated(beat) => beat.gesture.clone(),
+            Self::Directed(beat) => match beat.character.gesture {
+                DirectedGesture::PointLeft => MascotGesture::PointLeft,
+                DirectedGesture::PointRight => MascotGesture::PointRight,
+                DirectedGesture::Present => MascotGesture::Present,
+                DirectedGesture::Think => MascotGesture::Think,
+                DirectedGesture::Warn => MascotGesture::Warn,
+                DirectedGesture::Celebrate => MascotGesture::Celebrate,
+            },
+        }
+    }
+
+    fn morph(&self) -> Option<MascotMorph> {
+        match self {
+            Self::Curated(beat) => morph_for_scene(beat.scene),
+            Self::Directed(beat) => beat.character.morph.as_ref().map(|morph| MascotMorph {
+                label: morph.label.clone(),
+                silhouette: morph.silhouette.clone(),
+            }),
+        }
+    }
+
+    fn broll_query(&self) -> &str {
+        match self {
+            Self::Curated(_) => "educational science technology close up",
+            Self::Directed(beat) => &beat.broll_query,
+        }
+    }
+
+    fn apply_visuals(&self, spec: &mut atlas_blender::ShotSpec, portrait: bool) {
+        if let Self::Curated(beat) = self {
+            let (pattern, focal_terms) = curated_visual_plan(beat.scene);
+            let directed = StoryboardBeat {
+                title: beat.title.into(),
+                narration: beat.narration.into(),
+                scene_pattern: pattern,
+                focal_terms,
+                broll_query: self.broll_query().into(),
+                character: atlas_storyboard::CharacterDirection {
+                    emotion: DirectedEmotion::Explaining,
+                    gesture: DirectedGesture::Present,
+                    acting_goal: "Make the mechanism visible".into(),
+                    morph: None,
+                },
+            };
+            Self::Directed(directed).apply_visuals(spec, portrait);
+            return;
+        }
+        if let Self::Directed(beat) = self {
+            spec.visual_elements.truncate(1);
+            let count = beat.focal_terms.len().max(1);
+            for (index, term) in beat.focal_terms.iter().enumerate() {
+                let progress = if count == 1 {
+                    0.5
+                } else {
+                    index as f32 / (count - 1) as f32
+                };
+                let x = if portrait { 0.0 } else { -2.4 + progress * 4.8 };
+                let y = if portrait {
+                    1.4 - index as f32 * 0.75
+                } else {
+                    0.2
+                };
+                spec.visual_elements.push(VisualElement {
+                    element_id: format!("focus_{index}"),
+                    element_type: VisualElementType::Shape,
+                    reveal_frame: 20 + index as u32 * 14,
+                    hold_frames: spec.duration_frames.saturating_sub(20),
+                    properties: serde_json::json!({}),
+                    transform: TransformSpec {
+                        position: [x, y, 0.1],
+                        rotation: [0.0, 0.0, 0.0],
+                        scale: if portrait {
+                            [1.45, 0.28, 0.05]
+                        } else {
+                            [0.95, 0.52, 0.05]
+                        },
+                    },
+                });
+                spec.visual_elements.push(VisualElement {
+                    element_id: format!("label_{index}"),
+                    element_type: VisualElementType::Label,
+                    reveal_frame: 26 + index as u32 * 14,
+                    hold_frames: spec.duration_frames.saturating_sub(26),
+                    properties: serde_json::json!({"text": term, "font_size": 18.0}),
+                    transform: TransformSpec {
+                        position: [x, y, 0.25],
+                        rotation: [0.0, 0.0, 0.0],
+                        scale: [1.0, 1.0, 1.0],
+                    },
+                });
+                if index > 0 && !matches!(beat.scene_pattern, ScenePattern::Parts) {
+                    let previous_progress = if count == 1 {
+                        0.5
+                    } else {
+                        (index - 1) as f32 / (count - 1) as f32
+                    };
+                    let previous_x = if portrait {
+                        0.0
+                    } else {
+                        -2.4 + previous_progress * 4.8
+                    };
+                    let previous_y = if portrait {
+                        1.4 - (index - 1) as f32 * 0.75
+                    } else {
+                        0.2
+                    };
+                    spec.visual_elements.push(VisualElement {
+                        element_id: format!("connection_{index}"),
+                        element_type: VisualElementType::Arrow,
+                        reveal_frame: 32 + index as u32 * 14,
+                        hold_frames: spec.duration_frames.saturating_sub(32),
+                        properties: serde_json::json!({
+                            "start": [previous_x, previous_y, 0.2],
+                            "end": [x, y, 0.2]
+                        }),
+                        transform: TransformSpec {
+                            position: [0.0, 0.0, 0.0],
+                            rotation: [0.0, 0.0, 0.0],
+                            scale: [1.0, 1.0, 1.0],
+                        },
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn curated_visual_plan(scene: &str) -> (ScenePattern, Vec<String>) {
+    match scene {
+        "battery_hook" => (
+            ScenePattern::Hook,
+            vec!["chemical imbalance".into(), "stored energy".into()],
+        ),
+        "battery_anatomy" => (
+            ScenePattern::Parts,
+            vec!["anode".into(), "separator".into(), "cathode".into()],
+        ),
+        "battery_electrolyte" => (
+            ScenePattern::SplitPath,
+            vec!["ions pass".into(), "electrons stop".into()],
+        ),
+        "battery_charging" => (
+            ScenePattern::Flow,
+            vec!["charger".into(), "ions".into(), "anode".into()],
+        ),
+        "battery_electrons" => (
+            ScenePattern::SplitPath,
+            vec!["electrolyte".into(), "outside wire".into()],
+        ),
+        "battery_discharging" => (
+            ScenePattern::Flow,
+            vec!["anode".into(), "device".into(), "cathode".into()],
+        ),
+        "battery_voltage" => (
+            ScenePattern::Scale,
+            vec![
+                "high energy".into(),
+                "voltage drop".into(),
+                "useful work".into(),
+            ],
+        ),
+        "battery_aging" => (
+            ScenePattern::CauseEffect,
+            vec![
+                "heat".into(),
+                "side reactions".into(),
+                "capacity loss".into(),
+            ],
+        ),
+        "battery_safety" => (
+            ScenePattern::Risk,
+            vec!["separator".into(), "short circuit".into(), "heat".into()],
+        ),
+        _ => (
+            ScenePattern::Cycle,
+            vec!["charge".into(), "store".into(), "discharge".into()],
+        ),
+    }
+}
+
+async fn planned_video(topic: &str, format: VideoFormat) -> anyhow::Result<PlannedVideo> {
+    let expected = format.profile().shot_count as usize;
+    if let Some(director) = DirectorClient::from_env() {
+        match director
+            .create_plan(topic, format.profile().slug, expected)
+            .await
+        {
+            Ok(plan) => {
+                let beats = plan
+                    .beats
+                    .iter()
+                    .cloned()
+                    .map(VideoBeat::Directed)
+                    .collect();
+                return Ok(PlannedVideo {
+                    beats,
+                    generated_plan: Some(plan),
+                });
+            }
+            Err(error) => eprintln!("Creative director fallback activated: {error}"),
+        }
+    }
+    if topic.to_ascii_lowercase().contains("lithium") {
+        return Ok(PlannedVideo {
+            beats: production_beats(topic, format)
+                .into_iter()
+                .map(VideoBeat::Curated)
+                .collect(),
+            generated_plan: None,
+        });
+    }
+    anyhow::bail!(
+        "A validated creative-director storyboard is required for new topics; configure NVIDIA_API_KEY or ATLAS_DIRECTOR_API_KEY"
+    )
+}
+
+fn production_beats(topic: &str, format: VideoFormat) -> Vec<ProductionBeat> {
+    if !topic.to_ascii_lowercase().contains("lithium") {
+        return generic_beats(format);
+    }
+    match format {
+        VideoFormat::Short => vec![
+            ProductionBeat {
+                title: "YOUR BATTERY IS NOT A TANK",
+                narration: "Your battery does not store electricity like a bottle; it stores a chemical imbalance, and Luma will show you the trick.",
+                scene: "battery_hook",
+                emotion: MascotEmotion::Curious,
+                gesture: MascotGesture::Present,
+            },
+            ProductionBeat {
+                title: "THREE LAYERS CONTROL THE ACTION",
+                narration: "Two electrodes hold lithium, while an electrolyte carries ions and a separator prevents a dangerous short circuit.",
+                scene: "battery_anatomy",
+                emotion: MascotEmotion::Explaining,
+                gesture: MascotGesture::PointLeft,
+            },
+            ProductionBeat {
+                title: "CHARGING SEPARATES THE PLAYERS",
+                narration: "A charger pushes lithium ions into the graphite anode while electrons travel there through the outside wire.",
+                scene: "battery_charging",
+                emotion: MascotEmotion::Excited,
+                gesture: MascotGesture::PointRight,
+            },
+            ProductionBeat {
+                title: "DISCHARGING MAKES CURRENT",
+                narration: "When you unplug, ions return through the electrolyte and electrons power your device on their separate route.",
+                scene: "battery_discharging",
+                emotion: MascotEmotion::Confident,
+                gesture: MascotGesture::Present,
+            },
+            ProductionBeat {
+                title: "HEAT STEALS CAPACITY",
+                narration: "Heat and side reactions build barriers that trap active lithium, so an older battery cannot hold the same charge.",
+                scene: "battery_aging",
+                emotion: MascotEmotion::Concerned,
+                gesture: MascotGesture::Warn,
+            },
+        ],
+        VideoFormat::Long => vec![
+            ProductionBeat {
+                title: "A BATTERY STORES A CHEMICAL IMBALANCE",
+                narration: "A lithium ion battery is not a tank of electricity; it stores energy by separating charge into a chemical state that wants to relax.",
+                scene: "battery_hook",
+                emotion: MascotEmotion::Curious,
+                gesture: MascotGesture::Present,
+            },
+            ProductionBeat {
+                title: "THE CELL HAS FOUR CRITICAL PARTS",
+                narration: "The graphite anode and metal oxide cathode host lithium, the electrolyte carries ions, and the separator keeps the electrodes from touching.",
+                scene: "battery_anatomy",
+                emotion: MascotEmotion::Explaining,
+                gesture: MascotGesture::PointLeft,
+            },
+            ProductionBeat {
+                title: "IONS MAY CROSS; ELECTRONS MAY NOT",
+                narration: "The electrolyte conducts lithium ions but not useful electron current, while the porous separator blocks contact without blocking those moving ions.",
+                scene: "battery_electrolyte",
+                emotion: MascotEmotion::Explaining,
+                gesture: MascotGesture::PointRight,
+            },
+            ProductionBeat {
+                title: "CHARGING DRIVES LITHIUM UPHILL",
+                narration: "A charger supplies energy that pulls lithium from the cathode and pushes it through the electrolyte into spaces between graphite layers.",
+                scene: "battery_charging",
+                emotion: MascotEmotion::Excited,
+                gesture: MascotGesture::PointLeft,
+            },
+            ProductionBeat {
+                title: "ELECTRONS TAKE THE OUTSIDE ROAD",
+                narration: "At the same time electrons move through the external wire because they cannot cross the electrolyte, balancing the arriving lithium inside the anode.",
+                scene: "battery_electrons",
+                emotion: MascotEmotion::Explaining,
+                gesture: MascotGesture::PointRight,
+            },
+            ProductionBeat {
+                title: "DISCHARGING POWERS THE DEVICE",
+                narration: "After unplugging, lithium ions move back toward the cathode and electrons travel through your device, where their current performs useful work.",
+                scene: "battery_discharging",
+                emotion: MascotEmotion::Confident,
+                gesture: MascotGesture::Present,
+            },
+            ProductionBeat {
+                title: "VOLTAGE MEASURES THE ENERGY DROP",
+                narration: "Voltage describes how much energy each unit of charge can release while moving between the two electrode environments.",
+                scene: "battery_voltage",
+                emotion: MascotEmotion::Curious,
+                gesture: MascotGesture::Think,
+            },
+            ProductionBeat {
+                title: "SIDE REACTIONS AGE THE CELL",
+                narration: "Every cycle loses a little active lithium and thickens a boundary layer, while heat and high charge levels accelerate those unwanted reactions.",
+                scene: "battery_aging",
+                emotion: MascotEmotion::Concerned,
+                gesture: MascotGesture::Warn,
+            },
+            ProductionBeat {
+                title: "THE SEPARATOR IS A SAFETY BARRIER",
+                narration: "If damage lets the electrodes touch, current can bypass the device, generate intense heat, and trigger more reactions faster than heat escapes.",
+                scene: "battery_safety",
+                emotion: MascotEmotion::Concerned,
+                gesture: MascotGesture::Warn,
+            },
+            ProductionBeat {
+                title: "SEPARATE TO CHARGE; REUNITE TO WORK",
+                narration: "The complete mental model is simple: charging separates ions and electrons into a higher energy arrangement, while discharging lets separate paths reunite them through useful work.",
+                scene: "battery_summary",
+                emotion: MascotEmotion::Confident,
+                gesture: MascotGesture::Celebrate,
+            },
+        ],
+    }
+}
+
+fn generic_beats(format: VideoFormat) -> Vec<ProductionBeat> {
+    let count = format.profile().shot_count as usize;
+    let scenes = [
+        "battery_hook",
+        "battery_anatomy",
+        "battery_electrolyte",
+        "battery_charging",
+        "battery_electrons",
+        "battery_discharging",
+        "battery_voltage",
+        "battery_aging",
+        "battery_safety",
+        "battery_summary",
+    ];
+    scenes[..count]
+        .iter()
+        .enumerate()
+        .map(|(index, scene)| ProductionBeat {
+            title: "FOLLOW THE CAUSE AND EFFECT",
+            narration: "Luma identifies each important part, follows what changes, and connects that mechanism to the result you can observe.",
+            scene,
+            emotion: MascotEmotion::Explaining,
+            gesture: if index % 2 == 0 {
+                MascotGesture::PointLeft
+            } else {
+                MascotGesture::PointRight
+            },
+        })
+        .collect()
+}
+
+fn lip_sync_cues(audio: &AudioSegment) -> Vec<LipSyncCue> {
+    let mut cues = vec![LipSyncCue {
+        frame: 1,
+        viseme: Viseme::Rest,
+    }];
+    for word in &audio.word_timestamps {
+        let sounds = word
+            .word
+            .chars()
+            .filter(|value| value.is_ascii_alphabetic())
+            .collect::<Vec<_>>();
+        let sound_count = sounds.len().clamp(1, 5);
+        let duration = (word.end_seconds - word.start_seconds).max(0.03);
+        for (index, sound) in sounds.into_iter().take(sound_count).enumerate() {
+            let progress = index as f32 / sound_count as f32;
+            let frame = ((word.start_seconds + duration * progress) * 30.0).round() as u32 + 1;
+            let viseme = match sound.to_ascii_lowercase() {
+                'm' | 'b' | 'p' => Viseme::Closed,
+                'a' | 'h' => Viseme::Open,
+                'e' | 'i' | 'y' => Viseme::Wide,
+                'o' | 'u' | 'w' => Viseme::Round,
+                _ => Viseme::Open,
+            };
+            cues.push(LipSyncCue { frame, viseme });
+        }
+    }
+    cues.push(LipSyncCue {
+        frame: (audio.duration_seconds * 30.0).ceil() as u32,
+        viseme: Viseme::Rest,
+    });
+    cues
+}
+
+fn morph_for_scene(scene: &str) -> Option<MascotMorph> {
+    let (label, silhouette) = match scene {
+        "battery_hook" | "battery_anatomy" => (
+            "battery",
+            vec![
+                [-0.85, -0.95],
+                [-0.85, 0.75],
+                [-0.3, 0.75],
+                [-0.3, 0.95],
+                [0.3, 0.95],
+                [0.3, 0.75],
+                [0.85, 0.75],
+                [0.85, -0.95],
+                [0.4, -0.95],
+                [0.0, -0.95],
+                [-0.4, -0.95],
+            ],
+        ),
+        "battery_electrolyte" | "battery_charging" => (
+            "ion",
+            vec![
+                [-0.65, -0.75],
+                [-0.92, -0.35],
+                [-1.0, 0.15],
+                [-0.82, 0.62],
+                [-0.42, 0.9],
+                [0.0, 1.0],
+                [0.42, 0.9],
+                [0.82, 0.62],
+                [1.0, 0.15],
+                [0.92, -0.35],
+                [0.65, -0.75],
+            ],
+        ),
+        "battery_electrons" | "battery_discharging" | "battery_voltage" => (
+            "energy bolt",
+            vec![
+                [-0.25, -1.0],
+                [0.05, -0.25],
+                [-0.4, -0.25],
+                [0.25, 1.0],
+                [0.05, 0.15],
+                [0.5, 0.15],
+                [-0.1, -1.0],
+                [-0.25, -1.0],
+                [-0.25, -1.0],
+                [-0.25, -1.0],
+                [-0.25, -1.0],
+            ],
+        ),
+        "battery_aging" | "battery_safety" => (
+            "warning sign",
+            vec![
+                [-1.0, -1.0],
+                [-0.8, -0.6],
+                [-0.6, -0.2],
+                [-0.4, 0.2],
+                [-0.2, 0.6],
+                [0.0, 1.0],
+                [0.2, 0.6],
+                [0.4, 0.2],
+                [0.6, -0.2],
+                [0.8, -0.6],
+                [1.0, -1.0],
+            ],
+        ),
+        _ => return None,
+    };
+    Some(MascotMorph {
+        label: label.into(),
+        silhouette,
+    })
+}
+
+fn write_captions(
+    path: &Path,
+    segments: &[NarrationSegment],
+    narration: &NarrationTrack,
+) -> anyhow::Result<()> {
+    if segments.len() != narration.segments.len() {
+        anyhow::bail!(
+            "Caption segment count {} does not match narration segment count {}",
+            segments.len(),
+            narration.segments.len()
+        );
+    }
+
+    let mut output = String::new();
+    let mut start = 0.0_f32;
+    for (index, (segment, audio)) in segments.iter().zip(narration.segments.iter()).enumerate() {
+        let end = start + audio.duration_seconds;
+        output.push_str(&format!(
+            "{}\n{} --> {}\n{}\n\n",
+            index + 1,
+            srt_timestamp(start),
+            srt_timestamp(end),
+            segment.text
+        ));
+        start = end;
+    }
+    std::fs::write(path, output)?;
+    Ok(())
+}
+
+fn srt_timestamp(seconds: f32) -> String {
+    let total_ms = (seconds.max(0.0) * 1000.0).round() as u64;
+    let hours = total_ms / 3_600_000;
+    let minutes = (total_ms / 60_000) % 60;
+    let secs = (total_ms / 1_000) % 60;
+    let millis = total_ms % 1_000;
+    format!("{hours:02}:{minutes:02}:{secs:02},{millis:03}")
 }
 
 async fn cmd_daemon(action: DaemonAction) -> anyhow::Result<()> {
@@ -571,20 +2149,30 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
             redirect_uri,
         } => {
             // Load from credentials file if not provided
-            let (client_id, client_secret, redirect_uri) = match (client_id, client_secret, redirect_uri) {
-                (Some(cid), Some(csec), ruri) => (cid, csec, ruri.unwrap_or_else(|| "http://localhost".to_string())),
+            let (client_id, client_secret, redirect_uri) = match (
+                client_id,
+                client_secret,
+                redirect_uri,
+            ) {
+                (Some(cid), Some(csec), ruri) => (
+                    cid,
+                    csec,
+                    ruri.unwrap_or_else(|| "http://localhost".to_string()),
+                ),
                 _ => {
                     let creds_file = PathBuf::from("youtube_credentials.json");
                     if creds_file.exists() {
                         let file_creds = load_youtube_credentials(&creds_file).await?;
-                        let creds: YouTubeCredentials = file_creds.into();
+                        let creds: YouTubeCredentials = file_creds;
                         (creds.client_id, creds.client_secret, creds.redirect_uri)
                     } else {
-                        anyhow::bail!("YouTube credentials not provided and youtube_credentials.json not found");
+                        anyhow::bail!(
+                            "YouTube credentials not provided and youtube_credentials.json not found"
+                        );
                     }
                 }
             };
-            
+
             let creds = YouTubeCredentials {
                 client_id,
                 client_secret,
@@ -604,20 +2192,30 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
             redirect_uri,
         } => {
             // Load from credentials file if not provided
-            let (client_id, client_secret, redirect_uri) = match (client_id, client_secret, redirect_uri) {
-                (Some(cid), Some(csec), ruri) => (cid, csec, ruri.unwrap_or_else(|| "http://localhost".to_string())),
+            let (client_id, client_secret, redirect_uri) = match (
+                client_id,
+                client_secret,
+                redirect_uri,
+            ) {
+                (Some(cid), Some(csec), ruri) => (
+                    cid,
+                    csec,
+                    ruri.unwrap_or_else(|| "http://localhost".to_string()),
+                ),
                 _ => {
                     let creds_file = PathBuf::from("youtube_credentials.json");
                     if creds_file.exists() {
                         let file_creds = load_youtube_credentials(&creds_file).await?;
-                        let creds: YouTubeCredentials = file_creds.into();
+                        let creds: YouTubeCredentials = file_creds;
                         (creds.client_id, creds.client_secret, creds.redirect_uri)
                     } else {
-                        anyhow::bail!("YouTube credentials not provided and youtube_credentials.json not found");
+                        anyhow::bail!(
+                            "YouTube credentials not provided and youtube_credentials.json not found"
+                        );
                     }
                 }
             };
-            
+
             let creds = YouTubeCredentials {
                 client_id,
                 client_secret,
@@ -625,10 +2223,18 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
             };
             let client = YouTubeAnalyticsClient::new(creds);
             let token = client.exchange_code(&code).await?;
-            println!("YouTube OAuth complete. Access token expires at {:?}", token.expires_at);
+            println!(
+                "YouTube OAuth complete. Access token expires at {:?}",
+                token.expires_at
+            );
             println!("Refresh token stored securely.");
         }
-        AnalyticsAction::Fetch { video_id, sample } => {
+        AnalyticsAction::Fetch {
+            video_id,
+            sample,
+            platform,
+            format,
+        } => {
             let project = store
                 .get_project(&video_id)?
                 .ok_or_else(|| anyhow::anyhow!("project not found: {}", video_id))?;
@@ -639,20 +2245,45 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
                 .unwrap_or_else(|| "sample_video_id".to_string());
 
             if sample {
-                let metrics = save_sample_metrics(store, &video_id, &youtube_id)?;
-                println!("Saved sample metrics for {}", video_id);
+                let metrics = if format.eq_ignore_ascii_case("short")
+                    || platform.eq_ignore_ascii_case("tiktok")
+                {
+                    atlas_analytics::save_sample_short_metrics(store, &video_id, &platform)?
+                } else {
+                    save_sample_metrics(store, &video_id, &youtube_id)?
+                };
+                println!(
+                    "Saved sample metrics for {} on {} ({})",
+                    video_id, platform, format
+                );
                 println!("{}", serde_json::to_string_pretty(&metrics)?);
             } else {
-                println!("Live YouTube Analytics fetch requires authenticated credentials.");
-                println!("Use --sample to store a demo snapshot, or run `atlas analytics auth` first.");
+                println!(
+                    "Live {} Analytics fetch requires authenticated credentials.",
+                    platform
+                );
+                println!(
+                    "Use --sample to store a demo snapshot, or run `atlas analytics auth` first."
+                );
             }
         }
-        AnalyticsAction::Retention { video_id } => {
+        AnalyticsAction::Retention { video_id, platform } => {
             let analytics = AnalyticsStore::new(store);
             let metrics = analytics
-                .load_metrics(&video_id)?
-                .ok_or_else(|| anyhow::anyhow!("no metrics found for {}. Run `atlas analytics fetch {} --sample` first.", video_id, video_id))?;
-            println!("Retention curve for {} ({}):", video_id, metrics.youtube_video_id);
+                .load_platform_metrics(&video_id, &platform)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "no metrics found for {} on {}. Run `atlas analytics fetch {} --sample --platform {}` first.",
+                        video_id,
+                        platform,
+                        video_id,
+                        platform
+                    )
+                })?;
+            println!(
+                "Retention curve for {} [{} | {}]:",
+                video_id, metrics.platform, metrics.format
+            );
             println!("{:<8} {:<12} {:<12}", "Time", "Elapsed", "Retention");
             for p in &metrics.retention_curve {
                 let mm = p.elapsed_seconds / 60;
@@ -665,15 +2296,30 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
                     p.retention_ratio * 100.0
                 );
             }
+            if let Some(hook) = metrics.short_hook_retention() {
+                println!("\n0-3s Short Hook Rate: {:.1}%", hook * 100.0);
+            }
+            if let Some(comp) = metrics.completion_rate() {
+                println!("Full Video Completion: {:.1}%", comp * 100.0);
+            }
         }
         AnalyticsAction::Recommend {
             video_id,
             duration_seconds,
+            platform,
         } => {
             let analytics = AnalyticsStore::new(store);
             let metrics = analytics
-                .load_metrics(&video_id)?
-                .ok_or_else(|| anyhow::anyhow!("no metrics found for {}. Run `atlas analytics fetch {} --sample` first.", video_id, video_id))?;
+                .load_platform_metrics(&video_id, &platform)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "no metrics found for {} on {}. Run `atlas analytics fetch {} --sample --platform {}` first.",
+                        video_id,
+                        platform,
+                        video_id,
+                        platform
+                    )
+                })?;
 
             // Use all stored metrics as the channel baseline.
             let all = analytics.list_metrics(100)?;
@@ -683,12 +2329,12 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
             let engine = RecommendationEngine::new();
             let recs = engine.rank(engine.analyze(&performance, duration_seconds));
 
-            println!("Optimization recommendations for {}:", video_id);
+            println!(
+                "Optimization recommendations for {} ({}):",
+                video_id, platform
+            );
             for r in &recs {
-                println!(
-                    "[{:?}] {:?} — {}",
-                    r.priority, r.category, r.issue
-                );
+                println!("[{:?}] {:?} — {}", r.priority, r.category, r.issue);
                 println!("  Evidence: {}", r.evidence);
                 println!("  Action:   {}", r.suggested_action);
                 if let Some(tc) = &r.affected_timecodes {
@@ -709,7 +2355,10 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
             if ids.is_empty() {
                 println!("No optimization tasks generated; no metrics or no issues detected.");
             } else {
-                println!("Generated {} optimization task(s) from analytics:", ids.len());
+                println!(
+                    "Generated {} optimization task(s) from analytics:",
+                    ids.len()
+                );
                 for id in ids {
                     println!("  - {}", id);
                 }
@@ -729,7 +2378,10 @@ async fn cmd_analytics(store: &Store, action: AnalyticsAction) -> anyhow::Result
                 baseline.average_ctr * 100.0
             );
             println!();
-            println!("{:<24} {:<16} {:<12} {:<12} {:<12}", "VIDEO", "YOUTUBE ID", "VIEWS", "AVG DUR", "CTR");
+            println!(
+                "{:<24} {:<16} {:<12} {:<12} {:<12}",
+                "VIDEO", "YOUTUBE ID", "VIEWS", "AVG DUR", "CTR"
+            );
             for m in metrics {
                 println!(
                     "{:<24} {:<16} {:<12} {:<12} {:<12}",

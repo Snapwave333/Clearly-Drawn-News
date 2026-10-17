@@ -20,6 +20,9 @@ atlas-agent-bus = { workspace = true }
 atlas-blender = { workspace = true }
 atlas-kokoro = { workspace = true }
 atlas-ffmpeg = { workspace = true }
+atlas-media = { workspace = true }
+atlas-storyboard = { workspace = true }
+atlas-policy = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }

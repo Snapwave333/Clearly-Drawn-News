@@ -1,12 +1,24 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+fn default_platform_metrics() -> String {
+    "youtube".into()
+}
+
+fn default_format_metrics() -> String {
+    "long".into()
+}
+
 /// Aggregate performance metrics for a published video.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VideoMetrics {
     pub video_id: String,
     pub youtube_video_id: String,
     pub retrieved_at: DateTime<Utc>,
+    #[serde(default = "default_platform_metrics")]
+    pub platform: String,
+    #[serde(default = "default_format_metrics")]
+    pub format: String,
     pub views: Option<u64>,
     pub watch_time_minutes: Option<f64>,
     pub average_view_duration_seconds: Option<f64>,
@@ -15,6 +27,7 @@ pub struct VideoMetrics {
     pub impressions_click_through_rate: Option<f64>,
     pub likes: Option<u64>,
     pub comments: Option<u64>,
+    pub shares: Option<u64>,
     pub subscribers_gained: Option<u64>,
     pub subscribers_lost: Option<u64>,
     pub retention_curve: Vec<RetentionPoint>,
@@ -143,6 +156,25 @@ impl VideoMetrics {
             Some(points.iter().map(|p| p.retention_ratio).sum::<f64>() / points.len() as f64)
         }
     }
+
+    /// For short-form content (<= 60s), retention in the first 3 seconds (critical hook window).
+    pub fn short_hook_retention(&self) -> Option<f64> {
+        let points: Vec<&RetentionPoint> = self
+            .retention_curve
+            .iter()
+            .filter(|p| p.elapsed_seconds <= 3)
+            .collect();
+        if points.is_empty() {
+            self.retention_curve.first().map(|p| p.retention_ratio)
+        } else {
+            points.last().map(|p| p.retention_ratio)
+        }
+    }
+
+    /// Completion rate: percentage of viewers watching until the final retention sample.
+    pub fn completion_rate(&self) -> Option<f64> {
+        self.retention_curve.last().map(|p| p.retention_ratio)
+    }
 }
 
 /// Convert raw YouTube Analytics rows into structured metrics.
@@ -165,10 +197,13 @@ pub fn rows_to_metrics(
                     if vals.len() >= 8 {
                         metrics.views = vals[0].as_str().and_then(|s| s.parse().ok());
                         metrics.watch_time_minutes = vals[1].as_str().and_then(|s| s.parse().ok());
-                        metrics.average_view_duration_seconds = vals[2].as_str().and_then(|s| s.parse().ok());
-                        metrics.average_percentage_viewed = vals[3].as_str().and_then(|s| s.parse().ok());
+                        metrics.average_view_duration_seconds =
+                            vals[2].as_str().and_then(|s| s.parse().ok());
+                        metrics.average_percentage_viewed =
+                            vals[3].as_str().and_then(|s| s.parse().ok());
                         metrics.impressions = vals[4].as_str().and_then(|s| s.parse().ok());
-                        metrics.impressions_click_through_rate = vals[5].as_str().and_then(|s| s.parse().ok());
+                        metrics.impressions_click_through_rate =
+                            vals[5].as_str().and_then(|s| s.parse().ok());
                         metrics.likes = vals[6].as_str().and_then(|s| s.parse().ok());
                         metrics.comments = vals[7].as_str().and_then(|s| s.parse().ok());
                     }
@@ -190,10 +225,26 @@ mod tests {
             youtube_video_id: "yt1".into(),
             retrieved_at: Utc::now(),
             retention_curve: vec![
-                RetentionPoint { elapsed_ratio: 0.0, retention_ratio: 1.0, elapsed_seconds: 0 },
-                RetentionPoint { elapsed_ratio: 0.1, retention_ratio: 0.8, elapsed_seconds: 10 },
-                RetentionPoint { elapsed_ratio: 0.2, retention_ratio: 0.4, elapsed_seconds: 20 },
-                RetentionPoint { elapsed_ratio: 0.3, retention_ratio: 0.35, elapsed_seconds: 30 },
+                RetentionPoint {
+                    elapsed_ratio: 0.0,
+                    retention_ratio: 1.0,
+                    elapsed_seconds: 0,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.1,
+                    retention_ratio: 0.8,
+                    elapsed_seconds: 10,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.2,
+                    retention_ratio: 0.4,
+                    elapsed_seconds: 20,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.3,
+                    retention_ratio: 0.35,
+                    elapsed_seconds: 30,
+                },
             ],
             ..Default::default()
         };
@@ -207,12 +258,60 @@ mod tests {
             youtube_video_id: "yt1".into(),
             retrieved_at: Utc::now(),
             retention_curve: vec![
-                RetentionPoint { elapsed_ratio: 0.0, retention_ratio: 1.0, elapsed_seconds: 0 },
-                RetentionPoint { elapsed_ratio: 0.05, retention_ratio: 0.9, elapsed_seconds: 5 },
-                RetentionPoint { elapsed_ratio: 0.1, retention_ratio: 0.8, elapsed_seconds: 10 },
+                RetentionPoint {
+                    elapsed_ratio: 0.0,
+                    retention_ratio: 1.0,
+                    elapsed_seconds: 0,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.05,
+                    retention_ratio: 0.9,
+                    elapsed_seconds: 5,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.1,
+                    retention_ratio: 0.8,
+                    elapsed_seconds: 10,
+                },
             ],
             ..Default::default()
         };
         assert!((metrics.hook_retention(100).unwrap() - 0.9).abs() < 0.01);
+    }
+
+    #[test]
+    fn short_hook_and_completion_rate_computed_correctly() {
+        let metrics = VideoMetrics {
+            video_id: "short_1".into(),
+            youtube_video_id: "yt_short".into(),
+            retrieved_at: Utc::now(),
+            platform: "tiktok".into(),
+            format: "short".into(),
+            retention_curve: vec![
+                RetentionPoint {
+                    elapsed_ratio: 0.0,
+                    retention_ratio: 1.0,
+                    elapsed_seconds: 0,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.1,
+                    retention_ratio: 0.88,
+                    elapsed_seconds: 3,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 0.5,
+                    retention_ratio: 0.55,
+                    elapsed_seconds: 15,
+                },
+                RetentionPoint {
+                    elapsed_ratio: 1.0,
+                    retention_ratio: 0.42,
+                    elapsed_seconds: 30,
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(metrics.short_hook_retention(), Some(0.88));
+        assert_eq!(metrics.completion_rate(), Some(0.42));
     }
 }

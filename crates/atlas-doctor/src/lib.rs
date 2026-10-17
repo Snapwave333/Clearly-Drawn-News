@@ -74,7 +74,11 @@ fn optional_unavailable(kind: ToolKind, reason: impl Into<String>) -> ToolProbeR
     }
 }
 
-fn available(kind: ToolKind, version: impl Into<String>, path: impl Into<String>) -> ToolProbeResult {
+fn available(
+    kind: ToolKind,
+    version: impl Into<String>,
+    path: impl Into<String>,
+) -> ToolProbeResult {
     ToolProbeResult {
         kind,
         status: ToolStatus::Available {
@@ -87,7 +91,10 @@ fn available(kind: ToolKind, version: impl Into<String>, path: impl Into<String>
 pub async fn probe_opencode() -> ToolProbeResult {
     match run_version(&["opencode", "--version"], None).await {
         Some((version, path)) => available(ToolKind::OpenCode, version, path),
-        None => unavailable(ToolKind::OpenCode, "opencode --version failed or not in PATH"),
+        None => unavailable(
+            ToolKind::OpenCode,
+            "opencode --version failed or not in PATH",
+        ),
     }
 }
 
@@ -116,7 +123,11 @@ pub async fn probe_unreal() -> ToolProbeResult {
     for candidate in &candidates {
         if Path::new(candidate).exists() {
             // UE -version can be slow; just report presence and path.
-            return available(ToolKind::UnrealEditor, "5.x detected".to_string(), candidate.to_string());
+            return available(
+                ToolKind::UnrealEditor,
+                "5.x detected".to_string(),
+                candidate.to_string(),
+            );
         }
     }
     optional_unavailable(
@@ -158,7 +169,9 @@ pub async fn probe_vectorcraft() -> ToolProbeResult {
     let path_candidates = [
         PathBuf::from(r"tools\vectorcraft\vectorcraft-cli.exe"),
         PathBuf::from(r"tools\vectorcraft\bin\vectorcraft-cli.exe"),
-        PathBuf::from(r"tools\vectorcraft\vectorcraft-0.11.0-windows-x64-portable\vectorcraft-cli.exe"),
+        PathBuf::from(
+            r"tools\vectorcraft\vectorcraft-0.11.0-windows-x64-portable\vectorcraft-cli.exe",
+        ),
     ];
     for candidate in &path_candidates {
         if candidate.exists() {
@@ -206,7 +219,9 @@ pub async fn probe_effectcraft() -> ToolProbeResult {
     let path_candidates = [
         PathBuf::from(r"tools\effectcraft\effectcraft-cli.exe"),
         PathBuf::from(r"tools\effectcraft\bin\effectcraft-cli.exe"),
-        PathBuf::from(r"tools\effectcraft\effectcraft-0.1.1-windows-x64-portable\effectcraft-cli.exe"),
+        PathBuf::from(
+            r"tools\effectcraft\effectcraft-0.1.1-windows-x64-portable\effectcraft-cli.exe",
+        ),
     ];
     for candidate in &path_candidates {
         if candidate.exists() {

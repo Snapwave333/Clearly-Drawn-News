@@ -21,22 +21,30 @@ Prepares and uploads sourced, accessible videos with explicit permissions and tr
   - YouTube video ID, upload receipt, published manifest and retry-safe job ID
 
 ## Procedure
-1. Use `videos.insert` through official YouTube Data API and resumable upload where supported.
+1. Use official platform publishing APIs (`videos.insert` for YouTube Data API and official TikTok Content Posting API) with resumable upload where supported.
 2. Default to private draft and require explicit opt-in for scheduled or public unattended publication.
 3. Set title/thumbnail promises supported by actual video; add chapters, cited sources and transparent AI-production credits.
-4. Set `status.containsSyntheticMedia` if realistic altered/synthetic depiction triggers disclosure; independently include AI-made credits for every video.
-5. Use official caption and thumbnail endpoints with scopes/quota accounted for.
-6. Preserve upload session/idempotency; never retry by creating a duplicate video.
-7. Record review link and job state; comply with project verification/audit limits.
+4. **AI-Generated Media Disclosures:**
+   - On YouTube, set `status.containsSyntheticMedia: true` when synthetic voice or procedural visuals are used.
+   - On TikTok, set `is_aigc: true` / enable the TikTok AIGC Label before posting to avoid distribution throttling or monetization disqualification.
+5. **TikTok Community Guidelines & Creator Rewards Monetization Check:**
+   - Verify zero Community Guidelines strikes on the target TikTok account.
+   - For monetized TikTok posts, enforce 100% original content and duration $\ge 60$s for Creator Rewards eligibility.
+   - Verify audio uses cleared Commercial Music Library (CML) sounds or original master audio.
+6. Use official caption and thumbnail endpoints with scopes/quota accounted for.
+7. Preserve upload session/idempotency; never retry by creating a duplicate video.
+8. Record review link and job state; comply with project verification/audit limits.
 
 ## Review checklist / acceptance gate
 - [ ] Quality passed and channel consent current before API request.
 - [ ] No fabricated citations, misleading thumbnail, or missing rights.
-- [ ] Correct upload scope, visibility and disclosure state.
+- [ ] Correct upload scope, visibility, YouTube synthetic media flag, and TikTok AIGC label.
+- [ ] TikTok Community Guidelines & Creator Rewards monetization rules satisfied.
 
 ## Failure and recovery
-- **Insufficient OAuth:** Prompt authorization for YouTube separately from NVIDIA/OpenCode.
-- **YouTube API private restriction:** Keep private, report project-audit requirement; do not spoof public state.
+- **Insufficient OAuth:** Prompt authorization for YouTube or TikTok separately from NVIDIA/OpenCode.
+- **TikTok AIGC Warning:** Abort upload until `rights_editor` confirms AIGC declaration flag is set.
+- **YouTube/TikTok private restriction:** Keep private, report project-audit requirement; do not spoof public state.
 - **Upload uncertain:** Query status by known ID/session before retry.
 
 ## Communications and operational rules

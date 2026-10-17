@@ -9,6 +9,9 @@ members = [
     "crates/atlas-blender",
     "crates/atlas-kokoro",
     "crates/atlas-ffmpeg",
+    "crates/atlas-media",
+    "crates/atlas-storyboard",
+    "crates/atlas-policy",
     "crates/atlas-cli",
 ]
 resolver = "3"
@@ -31,17 +34,21 @@ atlas-agent-bus = { path = "crates/atlas-agent-bus" }
 atlas-blender = { path = "crates/atlas-blender" }
 atlas-kokoro = { path = "crates/atlas-kokoro" }
 atlas-ffmpeg = { path = "crates/atlas-ffmpeg" }
+atlas-media = { path = "crates/atlas-media" }
+atlas-storyboard = { path = "crates/atlas-storyboard" }
+atlas-policy = { path = "crates/atlas-policy" }
 
 # External
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive", "env", "string"] }
 directories = "5.0"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.34", features = ["bundled", "uuid", "chrono"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 tokio = { version = "1.44", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = { version = "0.4", features = ["serde"] }
