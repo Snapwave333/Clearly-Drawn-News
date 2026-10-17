@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 const MAX_RUNS: usize = 200;
 const FAILING_STREAK: usize = 3;
+const FEED_COOLDOWN_HOURS: i64 = 6;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct WireRun {
@@ -33,12 +34,29 @@ pub(crate) struct FeedHealth {
     pub(crate) failure_streak: usize,
     pub(crate) average_entries: f64,
     pub(crate) last_error: Option<String>,
+    pub(crate) skipped: usize,
+    pub(crate) last_attempt: Option<chrono::DateTime<Utc>>,
 }
 
 impl FeedHealth {
     pub(crate) fn is_failing(&self) -> bool {
         self.failure_streak >= FAILING_STREAK
     }
+
+    pub(crate) fn retry_after(&self) -> Option<chrono::DateTime<Utc>> {
+        self.is_failing()
+            .then_some(self.last_attempt)
+            .flatten()
+            .map(|at| at + chrono::Duration::hours(FEED_COOLDOWN_HOURS))
+    }
+}
+
+pub(crate) fn feeds_to_skip(news_dir: &Path, now: chrono::DateTime<Utc>) -> Vec<(String, chrono::DateTime<Utc>)> {
+    WireHealthLog::load(news_dir)
+        .feed_health(MAX_RUNS)
+        .into_iter()
+        .filter_map(|feed| feed.retry_after().filter(|retry| *retry > now).map(|retry| (feed.source, retry)))
+        .collect()
 }
 
 fn log_path(news_dir: &Path) -> PathBuf {
@@ -95,10 +113,13 @@ impl WireHealthLog {
         sources
             .into_iter()
             .map(|source| {
-                let history = recent
+                let all = recent
                     .iter()
-                    .filter_map(|run| run.feeds.iter().find(|feed| feed.source == source))
+                    .filter_map(|run| run.feeds.iter().find(|feed| feed.source == source).map(|feed| (run.at, feed)))
                     .collect::<Vec<_>>();
+                let skipped = all.iter().filter(|(_, feed)| feed.skipped).count();
+                let last_attempt = all.iter().rev().find(|(_, feed)| !feed.skipped).map(|(at, _)| *at);
+                let history = all.iter().filter(|(_, feed)| !feed.skipped).map(|(_, feed)| *feed).collect::<Vec<_>>();
                 let successes = history.iter().filter(|feed| feed.error.is_none()).count();
                 let failure_streak = history.iter().rev().take_while(|feed| feed.error.is_some()).count();
                 let entries = history.iter().filter(|feed| feed.error.is_none()).map(|feed| feed.entries).sum::<usize>();
@@ -108,6 +129,8 @@ impl WireHealthLog {
                     failure_streak,
                     average_entries: if successes == 0 { 0.0 } else { entries as f64 / successes as f64 },
                     last_error: history.iter().rev().find_map(|feed| feed.error.clone()),
+                    skipped,
+                    last_attempt,
                     source,
                 }
             })
@@ -172,10 +195,14 @@ pub(crate) fn print_health(news_dir: &Path, window: usize) {
     println!("\n  Feeds:");
     let feeds = log.feed_health(window);
     for feed in &feeds {
-        let marker = if feed.is_failing() { "  ⚠ FAILING" } else { "" };
+        let marker = match feed.retry_after() {
+            Some(retry) if retry > Utc::now() => format!("  ⚠ FAILING, paused until {}", retry.format("%H:%M UTC")),
+            Some(_) => "  ⚠ FAILING, will retry next run".to_string(),
+            None => String::new(),
+        };
         println!(
-            "    {:<20} {:>3}/{:<3} ok  avg {:>5.1} items  streak {:>2} failed{}",
-            feed.source, feed.successes, feed.runs, feed.average_entries, feed.failure_streak, marker
+            "    {:<20} {:>3}/{:<3} ok  avg {:>5.1} items  streak {:>2} failed  {:>2} skipped{}",
+            feed.source, feed.successes, feed.runs, feed.average_entries, feed.failure_streak, feed.skipped, marker
         );
         if feed.is_failing()
             && let Some(error) = &feed.last_error
@@ -204,6 +231,7 @@ mod tests {
                     source: (*source).into(),
                     entries: entries.unwrap_or(0),
                     error: entries.is_none().then(|| format!("{source}: error sending request")),
+                    skipped: false,
                 })
                 .collect(),
             candidates: 5,
@@ -230,6 +258,35 @@ mod tests {
         assert!(brew.is_failing());
         assert_eq!(brew.last_error.as_deref(), Some("Brew: error sending request"));
         assert_eq!(log.feed_health(1)[1].failure_streak, 1);
+    }
+
+    #[test]
+    fn failing_feeds_pause_then_retry_without_counting_skips() {
+        let mut log = WireHealthLog::default();
+        let start = Utc::now() - chrono::Duration::hours(1);
+        for hour in 0..3 {
+            let mut r = run(&[("ANN", Some(5)), ("Brew", None)]);
+            r.at = start + chrono::Duration::minutes(hour * 10);
+            log.push(r);
+        }
+        let mut skipped = run(&[("ANN", Some(5))]);
+        skipped.feeds.push(FeedStatus { source: "Brew".into(), entries: 0, error: None, skipped: true });
+        log.push(skipped);
+
+        let brew = log.feed_health(10).into_iter().find(|f| f.source == "Brew").unwrap();
+        assert_eq!((brew.runs, brew.failure_streak, brew.skipped), (3, 3, 1));
+        let retry = brew.retry_after().unwrap();
+        assert_eq!(retry, start + chrono::Duration::minutes(20) + chrono::Duration::hours(FEED_COOLDOWN_HOURS));
+        assert!(retry > Utc::now());
+        let ann = log.feed_health(10).into_iter().find(|f| f.source == "ANN").unwrap();
+        assert!(ann.retry_after().is_none());
+
+        let mut recovered = run(&[("ANN", Some(5)), ("Brew", Some(7))]);
+        recovered.at = Utc::now();
+        log.push(recovered);
+        let brew = log.feed_health(10).into_iter().find(|f| f.source == "Brew").unwrap();
+        assert_eq!(brew.failure_streak, 0);
+        assert!(brew.retry_after().is_none());
     }
 
     #[test]

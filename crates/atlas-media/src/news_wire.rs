@@ -325,26 +325,32 @@ pub struct FeedStatus {
     pub source: String,
     pub entries: usize,
     pub error: Option<String>,
+    #[serde(default)]
+    pub skipped: bool,
 }
 
-pub async fn fetch_feeds(client: &reqwest::Client) -> (Vec<FeedEntry>, Vec<FeedStatus>) {
+pub async fn fetch_feeds(client: &reqwest::Client, skip: &[String]) -> (Vec<FeedEntry>, Vec<FeedStatus>) {
     let mut tasks = tokio::task::JoinSet::new();
+    let mut statuses = Vec::new();
     for source in FEEDS {
+        if skip.iter().any(|name| name == source.name) {
+            statuses.push(FeedStatus { source: source.name.into(), entries: 0, error: None, skipped: true });
+            continue;
+        }
         let client = client.clone();
         tasks.spawn(async move { (source.name, fetch_feed(&client, &source).await) });
     }
     let mut entries = Vec::new();
-    let mut statuses = Vec::new();
     while let Some(joined) = tasks.join_next().await {
         let Ok((source, result)) = joined else {
             continue;
         };
         match result {
             Ok(mut items) => {
-                statuses.push(FeedStatus { source: source.into(), entries: items.len(), error: None });
+                statuses.push(FeedStatus { source: source.into(), entries: items.len(), error: None, skipped: false });
                 entries.append(&mut items);
             }
-            Err(error) => statuses.push(FeedStatus { source: source.into(), entries: 0, error: Some(error) }),
+            Err(error) => statuses.push(FeedStatus { source: source.into(), entries: 0, error: Some(error), skipped: false }),
         }
     }
     statuses.sort_by(|a, b| a.source.cmp(&b.source));

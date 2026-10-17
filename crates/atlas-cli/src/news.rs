@@ -411,7 +411,12 @@ async fn checked_wire(
     news_dir: &Path,
     command: &str,
 ) -> (WireOrigin, FactCheckReport) {
-    let wire = load_wire(news_desk).await;
+    let skip = news_health::feeds_to_skip(news_dir, Utc::now());
+    for (feed, retry) in &skip {
+        println!("  Skipping {feed}: failed repeatedly; next retry after {}", retry.format("%Y-%m-%d %H:%M UTC"));
+    }
+    let skip = skip.into_iter().map(|(feed, _)| feed).collect::<Vec<_>>();
+    let wire = load_wire(news_desk, &skip).await;
     println!("  Found {} candidate industry stories.", wire.items.len());
     let report = fact_checker.verify_candidates(wire.items);
     if let Err(error) = news_health::record(news_dir, command, wire.origin, &wire.feeds, &report) {
@@ -420,8 +425,8 @@ async fn checked_wire(
     (wire.origin, report)
 }
 
-async fn load_wire(news_desk: &AnimationNewsDesk) -> NewsWire {
-    let wire = news_desk.fetch_wire().await;
+async fn load_wire(news_desk: &AnimationNewsDesk, skip: &[String]) -> NewsWire {
+    let wire = news_desk.fetch_wire_skipping(skip).await;
     for feed in &wire.feeds {
         if let Some(error) = &feed.error {
             eprintln!("  Feed unavailable: {error}");

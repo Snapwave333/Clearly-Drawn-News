@@ -78,7 +78,11 @@ impl AnimationNewsDesk {
     }
 
     pub async fn fetch_wire(&self) -> NewsWire {
-        let (entries, feeds) = crate::news_wire::fetch_feeds(&self.client).await;
+        self.fetch_wire_skipping(&[]).await
+    }
+
+    pub async fn fetch_wire_skipping(&self, skip: &[String]) -> NewsWire {
+        let (entries, feeds) = crate::news_wire::fetch_feeds(&self.client, skip).await;
         let items = crate::news_wire::build_wire(entries, chrono::Utc::now(), self.max_age_days, self.max_stories);
         if items.is_empty() {
             return NewsWire {
