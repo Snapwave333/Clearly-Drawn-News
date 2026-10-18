@@ -1,0 +1,4023 @@
+{
+"_note": "Retrospective topic catalog. Built once from Wikidata (animated films/series with exact release dates, 30+ sitelinks, before 2024) plus hand-picked studio, technique and people deep dives. Facts are never taken from here: each topic is researched at run time from its Wikipedia article and corroborated against reputable sources the article cites.",
+"topics": [
+{
+"wiki": "The_Simpsons",
+"label": "The Simpsons",
+"kind": "series",
+"date": "1989-12-17",
+"popularity": 186
+},
+{
+"wiki": "Madagascar_(2005_film)",
+"label": "Madagascar (2005 film)",
+"kind": "film",
+"date": "2005-05-27",
+"popularity": 169
+},
+{
+"wiki": "Go,_Dog._Go!_(TV_series)",
+"label": "Go, Dog. Go! (TV series)",
+"kind": "series",
+"date": "2021-01-26",
+"popularity": 162
+},
+{
+"wiki": "SpongeBob_SquarePants",
+"label": "SpongeBob SquarePants",
+"kind": "series",
+"date": "1999-05-01",
+"popularity": 161
+},
+{
+"wiki": "The_Fox_and_the_Hound",
+"label": "The Fox and the Hound",
+"kind": "film",
+"date": "1981-07-10",
+"popularity": 135
+},
+{
+"wiki": "The_Lion_King",
+"label": "The Lion King",
+"kind": "film",
+"date": "1994-06-15",
+"popularity": 132
+},
+{
+"wiki": "South_Park",
+"label": "South Park",
+"kind": "series",
+"date": "1997-08-13",
+"popularity": 126
+},
+{
+"wiki": "Bad_Cat",
+"label": "Bad Cat",
+"kind": "film",
+"date": "2016-02-05",
+"popularity": 121
+},
+{
+"wiki": "Snow_White_and_the_Seven_Dwarfs_(film)",
+"label": "Snow White and the Seven Dwarfs (film)",
+"kind": "film",
+"date": "1937-12-21",
+"popularity": 121
+},
+{
+"wiki": "The_Little_Mermaid_(1989_film)",
+"label": "The Little Mermaid (1989 film)",
+"kind": "film",
+"date": "1989-11-17",
+"popularity": 116
+},
+{
+"wiki": "Toy_Story",
+"label": "Toy Story",
+"kind": "film",
+"date": "1995-11-22",
+"popularity": 116
+},
+{
+"wiki": "Bambi",
+"label": "Bambi",
+"kind": "film",
+"date": "1942-08-14",
+"popularity": 113
+},
+{
+"wiki": "Shrek",
+"label": "Shrek",
+"kind": "film",
+"date": "2001-04-22",
+"popularity": 112
+},
+{
+"wiki": "Frozen_(2013_film)",
+"label": "Frozen (2013 film)",
+"kind": "film",
+"date": "2013-11-10",
+"popularity": 110
+},
+{
+"wiki": "Dumbo",
+"label": "Dumbo",
+"kind": "film",
+"date": "1941-10-23",
+"popularity": 108
+},
+{
+"wiki": "Aladdin_(1992_Disney_film)",
+"label": "Aladdin (1992 Disney film)",
+"kind": "film",
+"date": "1992-11-11",
+"popularity": 105
+},
+{
+"wiki": "Cinderella_(1950_film)",
+"label": "Cinderella (1950 film)",
+"kind": "film",
+"date": "1950-02-15",
+"popularity": 104
+},
+{
+"wiki": "Lady_and_the_Tramp",
+"label": "Lady and the Tramp",
+"kind": "film",
+"date": "1955-06-16",
+"popularity": 101
+},
+{
+"wiki": "Beauty_and_the_Beast_(1991_film)",
+"label": "Beauty and the Beast (1991 film)",
+"kind": "film",
+"date": "1991-11-22",
+"popularity": 99
+},
+{
+"wiki": "Oliver_&_Company",
+"label": "Oliver & Company",
+"kind": "film",
+"date": "1988-11-18",
+"popularity": 99
+},
+{
+"wiki": "Pinocchio_(1940_film)",
+"label": "Pinocchio (1940 film)",
+"kind": "film",
+"date": "1940-02-23",
+"popularity": 98
+},
+{
+"wiki": "WALL-E",
+"label": "WALL-E",
+"kind": "film",
+"date": "2008-06-21",
+"popularity": 97
+},
+{
+"wiki": "Zootopia",
+"label": "Zootopia",
+"kind": "film",
+"date": "2016-02-17",
+"popularity": 96
+},
+{
+"wiki": "The_Rescuers",
+"label": "The Rescuers",
+"kind": "film",
+"date": "1977-06-19",
+"popularity": 96
+},
+{
+"wiki": "Charlotte's_Web_(1973_film)",
+"label": "Charlotte's Web (1973 film)",
+"kind": "film",
+"date": "1973-02-22",
+"popularity": 95
+},
+{
+"wiki": "Family_Guy",
+"label": "Family Guy",
+"kind": "series",
+"date": "1999-01-31",
+"popularity": 95
+},
+{
+"wiki": "Encanto",
+"label": "Encanto",
+"kind": "film",
+"date": "2021-11-24",
+"popularity": 94
+},
+{
+"wiki": "The_Jungle_Book_(1967_film)",
+"label": "The Jungle Book (1967 film)",
+"kind": "film",
+"date": "1967-10-18",
+"popularity": 93
+},
+{
+"wiki": "One_Hundred_and_One_Dalmatians",
+"label": "One Hundred and One Dalmatians",
+"kind": "film",
+"date": "1961-01-25",
+"popularity": 93
+},
+{
+"wiki": "Finding_Nemo",
+"label": "Finding Nemo",
+"kind": "film",
+"date": "2003-05-20",
+"popularity": 92
+},
+{
+"wiki": "Tangled",
+"label": "Tangled",
+"kind": "film",
+"date": "2010-11-24",
+"popularity": 91
+},
+{
+"wiki": "Ratatouille_(film)",
+"label": "Ratatouille (film)",
+"kind": "film",
+"date": "2007-06-28",
+"popularity": 90
+},
+{
+"wiki": "Moana_(2016_film)",
+"label": "Moana (2016 film)",
+"kind": "film",
+"date": "2016-11-23",
+"popularity": 89
+},
+{
+"wiki": "Toy_Story_2",
+"label": "Toy Story 2",
+"kind": "film",
+"date": "1999-11-24",
+"popularity": 89
+},
+{
+"wiki": "Monsters,_Inc.",
+"label": "Monsters, Inc.",
+"kind": "film",
+"date": "2001-10-23",
+"popularity": 88
+},
+{
+"wiki": "Sleeping_Beauty_(1959_film)",
+"label": "Sleeping Beauty (1959 film)",
+"kind": "film",
+"date": "1959-01-29",
+"popularity": 88
+},
+{
+"wiki": "Toy_Story_3",
+"label": "Toy Story 3",
+"kind": "film",
+"date": "2010-06-12",
+"popularity": 87
+},
+{
+"wiki": "Robin_Hood_(1973_film)",
+"label": "Robin Hood (1973 film)",
+"kind": "film",
+"date": "1973-11-08",
+"popularity": 87
+},
+{
+"wiki": "Kung_Fu_Panda_(film)",
+"label": "Kung Fu Panda (film)",
+"kind": "film",
+"date": "2008-05-15",
+"popularity": 87
+},
+{
+"wiki": "Mulan_(1998_film)",
+"label": "Mulan (1998 film)",
+"kind": "film",
+"date": "1998-06-05",
+"popularity": 86
+},
+{
+"wiki": "Inside_Out",
+"label": "Inside Out",
+"kind": "film",
+"date": "2015-05-18",
+"popularity": 86
+},
+{
+"wiki": "Up_(2009_film)",
+"label": "Up (2009 film)",
+"kind": "film",
+"date": "2009-05-13",
+"popularity": 86
+},
+{
+"wiki": "Thomas_&_Friends",
+"label": "Thomas & Friends",
+"kind": "series",
+"date": "1984-10-09",
+"popularity": 85
+},
+{
+"wiki": "Big_Hero_6_(film)",
+"label": "Big Hero 6 (film)",
+"kind": "film",
+"date": "2014-11-07",
+"popularity": 83
+},
+{
+"wiki": "Cars_(film)",
+"label": "Cars (film)",
+"kind": "film",
+"date": "2006-05-26",
+"popularity": 83
+},
+{
+"wiki": "The_Incredibles",
+"label": "The Incredibles",
+"kind": "film",
+"date": "2004-10-27",
+"popularity": 83
+},
+{
+"wiki": "Ice_Age_(2002_film)",
+"label": "Ice Age (2002 film)",
+"kind": "film",
+"date": "2002-03-15",
+"popularity": 82
+},
+{
+"wiki": "Fantasia_(1940_film)",
+"label": "Fantasia (1940 film)",
+"kind": "film",
+"date": "1940-11-13",
+"popularity": 82
+},
+{
+"wiki": "The_Aristocats",
+"label": "The Aristocats",
+"kind": "film",
+"date": "1970-12-11",
+"popularity": 81
+},
+{
+"wiki": "Hercules_(1997_film)",
+"label": "Hercules (1997 film)",
+"kind": "film",
+"date": "1997-06-15",
+"popularity": 81
+},
+{
+"wiki": "Rock_Dog",
+"label": "Rock Dog",
+"kind": "film",
+"date": "2016-06-15",
+"popularity": 80
+},
+{
+"wiki": "The_Princess_and_the_Frog",
+"label": "The Princess and the Frog",
+"kind": "film",
+"date": "2009-11-25",
+"popularity": 80
+},
+{
+"wiki": "Futurama",
+"label": "Futurama",
+"kind": "series",
+"date": "1999-03-28",
+"popularity": 79
+},
+{
+"wiki": "Avatar:_The_Last_Airbender",
+"label": "Avatar: The Last Airbender",
+"kind": "series",
+"date": "2005-02-21",
+"popularity": 78
+},
+{
+"wiki": "Brave_(2012_film)",
+"label": "Brave (2012 film)",
+"kind": "film",
+"date": "2012-06-10",
+"popularity": 78
+},
+{
+"wiki": "Toy_Story_4",
+"label": "Toy Story 4",
+"kind": "film",
+"date": "2019-06-20",
+"popularity": 77
+},
+{
+"wiki": "Alice_in_Wonderland_(1951_film)",
+"label": "Alice in Wonderland (1951 film)",
+"kind": "film",
+"date": "1951-07-28",
+"popularity": 77
+},
+{
+"wiki": "The_Great_Mouse_Detective",
+"label": "The Great Mouse Detective",
+"kind": "film",
+"date": "1986-07-02",
+"popularity": 76
+},
+{
+"wiki": "Rick_and_Morty",
+"label": "Rick and Morty",
+"kind": "series",
+"date": "2013-12-02",
+"popularity": 76
+},
+{
+"wiki": "Tarzan_(1999_film)",
+"label": "Tarzan (1999 film)",
+"kind": "film",
+"date": "1999-06-18",
+"popularity": 76
+},
+{
+"wiki": "The_Hunchback_of_Notre_Dame_(1996_film)",
+"label": "The Hunchback of Notre Dame (1996 film)",
+"kind": "film",
+"date": "1996-06-21",
+"popularity": 76
+},
+{
+"wiki": "Brother_Bear",
+"label": "Brother Bear",
+"kind": "film",
+"date": "2003-10-24",
+"popularity": 76
+},
+{
+"wiki": "The_Simpsons_Movie",
+"label": "The Simpsons Movie",
+"kind": "film",
+"date": "2007-07-25",
+"popularity": 75
+},
+{
+"wiki": "Peppa_Pig",
+"label": "Peppa Pig",
+"kind": "series",
+"date": "2004-05-31",
+"popularity": 75
+},
+{
+"wiki": "Frozen_2",
+"label": "Frozen 2",
+"kind": "film",
+"date": "2019-11-20",
+"popularity": 75
+},
+{
+"wiki": "Peter_Pan_(1953_film)",
+"label": "Peter Pan (1953 film)",
+"kind": "film",
+"date": "1953-02-05",
+"popularity": 75
+},
+{
+"wiki": "Madagascar:_Escape_2_Africa",
+"label": "Madagascar: Escape 2 Africa",
+"kind": "film",
+"date": "2008-10-30",
+"popularity": 74
+},
+{
+"wiki": "The_Rescuers_Down_Under",
+"label": "The Rescuers Down Under",
+"kind": "film",
+"date": "1990-11-16",
+"popularity": 74
+},
+{
+"wiki": "Despicable_Me_(film)",
+"label": "Despicable Me (film)",
+"kind": "film",
+"date": "2010-06-20",
+"popularity": 74
+},
+{
+"wiki": "Wreck-It_Ralph",
+"label": "Wreck-It Ralph",
+"kind": "film",
+"date": "2012-10-29",
+"popularity": 74
+},
+{
+"wiki": "Coco_(2017_film)",
+"label": "Coco (2017 film)",
+"kind": "film",
+"date": "2017-11-22",
+"popularity": 74
+},
+{
+"wiki": "Adventure_Time",
+"label": "Adventure Time",
+"kind": "series",
+"date": "2010-04-05",
+"popularity": 73
+},
+{
+"wiki": "Pocahontas_(1995_film)",
+"label": "Pocahontas (1995 film)",
+"kind": "film",
+"date": "1995-06-10",
+"popularity": 73
+},
+{
+"wiki": "Robots_(2005_film)",
+"label": "Robots (2005 film)",
+"kind": "film",
+"date": "2005-03-10",
+"popularity": 72
+},
+{
+"wiki": "Ice_Age:_Dawn_of_the_Dinosaurs",
+"label": "Ice Age: Dawn of the Dinosaurs",
+"kind": "film",
+"date": "2009-07-01",
+"popularity": 72
+},
+{
+"wiki": "A_Bug's_Life",
+"label": "A Bug's Life",
+"kind": "film",
+"date": "1998-11-20",
+"popularity": 72
+},
+{
+"wiki": "Lilo_&_Stitch",
+"label": "Lilo & Stitch",
+"kind": "film",
+"date": "2002-06-21",
+"popularity": 71
+},
+{
+"wiki": "Shrek_2",
+"label": "Shrek 2",
+"kind": "film",
+"date": "2004-05-15",
+"popularity": 71
+},
+{
+"wiki": "Charlotte's_Web_2:_Wilbur's_Great_Adventure",
+"label": "Charlotte's Web 2: Wilbur's Great Adventure",
+"kind": "film",
+"date": "2003-03-18",
+"popularity": 71
+},
+{
+"wiki": "The_Sword_in_the_Stone_(1963_film)",
+"label": "The Sword in the Stone (1963 film)",
+"kind": "film",
+"date": "1963-12-25",
+"popularity": 71
+},
+{
+"wiki": "Bolt_(2008_film)",
+"label": "Bolt (2008 film)",
+"kind": "film",
+"date": "2008-11-27",
+"popularity": 71
+},
+{
+"wiki": "Rio_(2011_film)",
+"label": "Rio (2011 film)",
+"kind": "film",
+"date": "2011-04-07",
+"popularity": 71
+},
+{
+"wiki": "Minions_(film)",
+"label": "Minions (film)",
+"kind": "film",
+"date": "2015-07-02",
+"popularity": 70
+},
+{
+"wiki": "Ice_Age:_The_Meltdown",
+"label": "Ice Age: The Meltdown",
+"kind": "film",
+"date": "2006-03-31",
+"popularity": 70
+},
+{
+"wiki": "My_Neighbor_Totoro",
+"label": "My Neighbor Totoro",
+"kind": "film",
+"date": "1988-04-16",
+"popularity": 70
+},
+{
+"wiki": "Atlantis:_The_Lost_Empire",
+"label": "Atlantis: The Lost Empire",
+"kind": "film",
+"date": "2001-06-22",
+"popularity": 70
+},
+{
+"wiki": "The_Penguins_of_Madagascar",
+"label": "The Penguins of Madagascar",
+"kind": "series",
+"date": "2008-11-29",
+"popularity": 70
+},
+{
+"wiki": "Spider-Man:_Into_the_Spider-Verse",
+"label": "Spider-Man: Into the Spider-Verse",
+"kind": "film",
+"date": "2018-12-13",
+"popularity": 69
+},
+{
+"wiki": "The_Emperor's_New_Groove",
+"label": "The Emperor's New Groove",
+"kind": "film",
+"date": "2000-12-15",
+"popularity": 69
+},
+{
+"wiki": "Finding_Dory",
+"label": "Finding Dory",
+"kind": "film",
+"date": "2015-11-25",
+"popularity": 68
+},
+{
+"wiki": "Anastasia_(1997_film)",
+"label": "Anastasia (1997 film)",
+"kind": "film",
+"date": "1997-11-14",
+"popularity": 68
+},
+{
+"wiki": "The_Croods",
+"label": "The Croods",
+"kind": "film",
+"date": "2013-02-15",
+"popularity": 67
+},
+{
+"wiki": "Gravity_Falls",
+"label": "Gravity Falls",
+"kind": "series",
+"date": "2012-06-15",
+"popularity": 67
+},
+{
+"wiki": "Masha_and_the_Bear",
+"label": "Masha and the Bear",
+"kind": "series",
+"date": "2009-01-07",
+"popularity": 67
+},
+{
+"wiki": "Chicken_Run",
+"label": "Chicken Run",
+"kind": "film",
+"date": "2000-06-21",
+"popularity": 67
+},
+{
+"wiki": "Despicable_Me_2",
+"label": "Despicable Me 2",
+"kind": "film",
+"date": "2013-06-05",
+"popularity": 66
+},
+{
+"wiki": "Monsters_University",
+"label": "Monsters University",
+"kind": "film",
+"date": "2013-06-08",
+"popularity": 65
+},
+{
+"wiki": "The_Adventures_of_Ichabod_and_Mr._Toad",
+"label": "The Adventures of Ichabod and Mr. Toad",
+"kind": "film",
+"date": "1949-10-01",
+"popularity": 65
+},
+{
+"wiki": "Antz",
+"label": "Antz",
+"kind": "film",
+"date": "1998-01-13",
+"popularity": 64
+},
+{
+"wiki": "The_Prince_of_Egypt",
+"label": "The Prince of Egypt",
+"kind": "film",
+"date": "1998-12-16",
+"popularity": 64
+},
+{
+"wiki": "The_Nightmare_Before_Christmas",
+"label": "The Nightmare Before Christmas",
+"kind": "film",
+"date": "1993-10-13",
+"popularity": 64
+},
+{
+"wiki": "How_to_Train_Your_Dragon_(2010_film)",
+"label": "How to Train Your Dragon (2010 film)",
+"kind": "film",
+"date": "2010-03-18",
+"popularity": 64
+},
+{
+"wiki": "The_Many_Adventures_of_Winnie_the_Pooh",
+"label": "The Many Adventures of Winnie the Pooh",
+"kind": "film",
+"date": "1977-03-11",
+"popularity": 64
+},
+{
+"wiki": "The_Flintstones",
+"label": "The Flintstones",
+"kind": "series",
+"date": "1960-09-30",
+"popularity": 64
+},
+{
+"wiki": "Phineas_and_Ferb",
+"label": "Phineas and Ferb",
+"kind": "series",
+"date": "2007-08-17",
+"popularity": 64
+},
+{
+"wiki": "The_Lion_King_II:_Simba's_Pride",
+"label": "The Lion King II: Simba's Pride",
+"kind": "film",
+"date": "1998-03-17",
+"popularity": 63
+},
+{
+"wiki": "The_Black_Cauldron_(film)",
+"label": "The Black Cauldron (film)",
+"kind": "film",
+"date": "1985-07-24",
+"popularity": 63
+},
+{
+"wiki": "The_Adventures_of_Jimmy_Neutron,_Boy_Genius",
+"label": "The Adventures of Jimmy Neutron, Boy Genius",
+"kind": "series",
+"date": "2002-07-20",
+"popularity": 63
+},
+{
+"wiki": "Bluey_(TV_series)",
+"label": "Bluey (TV series)",
+"kind": "series",
+"date": "2018-10-01",
+"popularity": 63
+},
+{
+"wiki": "Chicken_Little_(2005_film)",
+"label": "Chicken Little (2005 film)",
+"kind": "film",
+"date": "2005-11-04",
+"popularity": 63
+},
+{
+"wiki": "Meet_the_Robinsons",
+"label": "Meet the Robinsons",
+"kind": "film",
+"date": "2007-03-23",
+"popularity": 63
+},
+{
+"wiki": "Turning_Red",
+"label": "Turning Red",
+"kind": "film",
+"date": "2022-03-10",
+"popularity": 63
+},
+{
+"wiki": "Cars_2",
+"label": "Cars 2",
+"kind": "film",
+"date": "2011-06-18",
+"popularity": 62
+},
+{
+"wiki": "Treasure_Planet",
+"label": "Treasure Planet",
+"kind": "film",
+"date": "2002-11-27",
+"popularity": 62
+},
+{
+"wiki": "Fantastic_Mr._Fox_(film)",
+"label": "Fantastic Mr. Fox (film)",
+"kind": "film",
+"date": "2009-10-14",
+"popularity": 62
+},
+{
+"wiki": "Spider-Man:_Across_the_Spider-Verse",
+"label": "Spider-Man: Across the Spider-Verse",
+"kind": "film",
+"date": "2022-10-07",
+"popularity": 62
+},
+{
+"wiki": "My_Little_Pony:_Friendship_Is_Magic",
+"label": "My Little Pony: Friendship Is Magic",
+"kind": "series",
+"date": "2010-10-10",
+"popularity": 61
+},
+{
+"wiki": "Dora_the_Explorer_(TV_series)",
+"label": "Dora the Explorer (TV series)",
+"kind": "series",
+"date": "2000-08-14",
+"popularity": 61
+},
+{
+"wiki": "The_Fairly_OddParents",
+"label": "The Fairly OddParents",
+"kind": "series",
+"date": "2001-03-30",
+"popularity": 61
+},
+{
+"wiki": "Make_Mine_Music",
+"label": "Make Mine Music",
+"kind": "film",
+"date": "1946-08-15",
+"popularity": 61
+},
+{
+"wiki": "Despicable_Me_3",
+"label": "Despicable Me 3",
+"kind": "film",
+"date": "2017-06-29",
+"popularity": 61
+},
+{
+"wiki": "The_Lion_King_(2019_film)",
+"label": "The Lion King (2019 film)",
+"kind": "film",
+"date": "2019-07-17",
+"popularity": 61
+},
+{
+"wiki": "Minions:_The_Rise_of_Gru",
+"label": "Minions: The Rise of Gru",
+"kind": "film",
+"date": "2022-06-30",
+"popularity": 60
+},
+{
+"wiki": "Ice_Age:_Continental_Drift",
+"label": "Ice Age: Continental Drift",
+"kind": "film",
+"date": "2012-06-26",
+"popularity": 60
+},
+{
+"wiki": "Shrek_the_Third",
+"label": "Shrek the Third",
+"kind": "film",
+"date": "2007-05-06",
+"popularity": 60
+},
+{
+"wiki": "Steven_Universe",
+"label": "Steven Universe",
+"kind": "series",
+"date": "2013-11-04",
+"popularity": 60
+},
+{
+"wiki": "The_Good_Dinosaur",
+"label": "The Good Dinosaur",
+"kind": "film",
+"date": "2014-05-30",
+"popularity": 60
+},
+{
+"wiki": "Shrek_Forever_After",
+"label": "Shrek Forever After",
+"kind": "film",
+"date": "2010-04-21",
+"popularity": 60
+},
+{
+"wiki": "The_Adventures_of_Tintin_(film)",
+"label": "The Adventures of Tintin (film)",
+"kind": "film",
+"date": "2011-10-24",
+"popularity": 60
+},
+{
+"wiki": "Incredibles_2",
+"label": "Incredibles 2",
+"kind": "film",
+"date": "2018-06-05",
+"popularity": 59
+},
+{
+"wiki": "Corpse_Bride",
+"label": "Corpse Bride",
+"kind": "film",
+"date": "2005-09-23",
+"popularity": 59
+},
+{
+"wiki": "Madagascar_3:_Europe's_Most_Wanted",
+"label": "Madagascar 3: Europe's Most Wanted",
+"kind": "film",
+"date": "2012-06-06",
+"popularity": 59
+},
+{
+"wiki": "Regular_Show",
+"label": "Regular Show",
+"kind": "series",
+"date": "2010-09-06",
+"popularity": 59
+},
+{
+"wiki": "Space_Jam",
+"label": "Space Jam",
+"kind": "film",
+"date": "1996-11-15",
+"popularity": 59
+},
+{
+"wiki": "Raya_and_the_Last_Dragon",
+"label": "Raya and the Last Dragon",
+"kind": "film",
+"date": "2021-03-05",
+"popularity": 59
+},
+{
+"wiki": "The_Fox_and_the_Hound_2",
+"label": "The Fox and the Hound 2",
+"kind": "film",
+"date": "2006-12-12",
+"popularity": 58
+},
+{
+"wiki": "Bambi_II",
+"label": "Bambi II",
+"kind": "film",
+"date": "2006-01-26",
+"popularity": 58
+},
+{
+"wiki": "Hotel_Transylvania_(film)",
+"label": "Hotel Transylvania (film)",
+"kind": "film",
+"date": "2012-09-28",
+"popularity": 58
+},
+{
+"wiki": "Winx_Club",
+"label": "Winx Club",
+"kind": "series",
+"date": "2004-01-28",
+"popularity": 58
+},
+{
+"wiki": "Ben_10_(2005_TV_series)",
+"label": "Ben 10 (2005 TV series)",
+"kind": "series",
+"date": "2005-12-27",
+"popularity": 58
+},
+{
+"wiki": "Open_Season_(2006_film)",
+"label": "Open Season (2006 film)",
+"kind": "film",
+"date": "2006-09-25",
+"popularity": 58
+},
+{
+"wiki": "The_Lorax_(film)",
+"label": "The Lorax (film)",
+"kind": "film",
+"date": "2012-02-19",
+"popularity": 58
+},
+{
+"wiki": "Soul_(2020_film)",
+"label": "Soul (2020 film)",
+"kind": "film",
+"date": "2020-10-11",
+"popularity": 58
+},
+{
+"wiki": "Sing_(2016_American_film)",
+"label": "Sing (2016 American film)",
+"kind": "film",
+"date": "2016-09-11",
+"popularity": 57
+},
+{
+"wiki": "Fantasia_2000",
+"label": "Fantasia 2000",
+"kind": "film",
+"date": "1999-12-17",
+"popularity": 57
+},
+{
+"wiki": "Coraline_(film)",
+"label": "Coraline (film)",
+"kind": "film",
+"date": "2009-02-06",
+"popularity": 57
+},
+{
+"wiki": "The_Amazing_World_of_Gumball",
+"label": "The Amazing World of Gumball",
+"kind": "series",
+"date": "2011-05-03",
+"popularity": 57
+},
+{
+"wiki": "Father_of_the_Pride",
+"label": "Father of the Pride",
+"kind": "series",
+"date": "2004-08-31",
+"popularity": 57
+},
+{
+"wiki": "Paw_Patrol",
+"label": "Paw Patrol",
+"kind": "series",
+"date": "2013-08-12",
+"popularity": 57
+},
+{
+"wiki": "Jimmy_Neutron:_Boy_Genius",
+"label": "Jimmy Neutron: Boy Genius",
+"kind": "film",
+"date": "2001-12-21",
+"popularity": 57
+},
+{
+"wiki": "The_Super_Mario_Bros._Movie",
+"label": "The Super Mario Bros. Movie",
+"kind": "film",
+"date": "2023-03-31",
+"popularity": 57
+},
+{
+"wiki": "The_Boss_Baby",
+"label": "The Boss Baby",
+"kind": "film",
+"date": "2017-03-29",
+"popularity": 56
+},
+{
+"wiki": "The_Angry_Birds_Movie",
+"label": "The Angry Birds Movie",
+"kind": "film",
+"date": "2016-05-12",
+"popularity": 56
+},
+{
+"wiki": "The_Secret_Life_of_Pets",
+"label": "The Secret Life of Pets",
+"kind": "film",
+"date": "2016-06-16",
+"popularity": 56
+},
+{
+"wiki": "Nausicaä_of_the_Valley_of_the_Wind_(film)",
+"label": "Nausicaä of the Valley of the Wind (film)",
+"kind": "film",
+"date": "1984-03-11",
+"popularity": 56
+},
+{
+"wiki": "Kung_Fu_Panda_2",
+"label": "Kung Fu Panda 2",
+"kind": "film",
+"date": "2011-05-22",
+"popularity": 56
+},
+{
+"wiki": "Bob_the_Builder",
+"label": "Bob the Builder",
+"kind": "series",
+"date": "1997-05-15",
+"popularity": 56
+},
+{
+"wiki": "The_Powerpuff_Girls",
+"label": "The Powerpuff Girls",
+"kind": "series",
+"date": "1998-11-18",
+"popularity": 56
+},
+{
+"wiki": "Happy_Feet",
+"label": "Happy Feet",
+"kind": "film",
+"date": "2006-11-17",
+"popularity": 56
+},
+{
+"wiki": "Over_the_Hedge",
+"label": "Over the Hedge",
+"kind": "film",
+"date": "2006-05-19",
+"popularity": 56
+},
+{
+"wiki": "Rango_(2011_film)",
+"label": "Rango (2011 film)",
+"kind": "film",
+"date": "2011-02-14",
+"popularity": 56
+},
+{
+"wiki": "Winnie_the_Pooh_(2011_film)",
+"label": "Winnie the Pooh (2011 film)",
+"kind": "film",
+"date": "2011-04-06",
+"popularity": 56
+},
+{
+"wiki": "Bee_Movie",
+"label": "Bee Movie",
+"kind": "film",
+"date": "2007-11-02",
+"popularity": 55
+},
+{
+"wiki": "Wallace_&_Gromit:_The_Curse_of_the_Were-Rabbit",
+"label": "Wallace & Gromit: The Curse of the Were-Rabbit",
+"kind": "film",
+"date": "2005-09-04",
+"popularity": 55
+},
+{
+"wiki": "Puss_in_Boots_(2011_film)",
+"label": "Puss in Boots (2011 film)",
+"kind": "film",
+"date": "2011-10-23",
+"popularity": 55
+},
+{
+"wiki": "Dinosaur_(2000_film)",
+"label": "Dinosaur (2000 film)",
+"kind": "film",
+"date": "2000-05-19",
+"popularity": 55
+},
+{
+"wiki": "Onward_(film)",
+"label": "Onward (film)",
+"kind": "film",
+"date": "2020-03-05",
+"popularity": 54
+},
+{
+"wiki": "The_SpongeBob_SquarePants_Movie",
+"label": "The SpongeBob SquarePants Movie",
+"kind": "film",
+"date": "2004-11-14",
+"popularity": 54
+},
+{
+"wiki": "Oggy_and_the_Cockroaches",
+"label": "Oggy and the Cockroaches",
+"kind": "series",
+"date": "1998-11-28",
+"popularity": 54
+},
+{
+"wiki": "Ralph_Breaks_the_Internet",
+"label": "Ralph Breaks the Internet",
+"kind": "film",
+"date": "2018-11-05",
+"popularity": 54
+},
+{
+"wiki": "Spies_in_Disguise",
+"label": "Spies in Disguise",
+"kind": "film",
+"date": "2019-12-25",
+"popularity": 54
+},
+{
+"wiki": "The_Bad_Guys_(film)",
+"label": "The Bad Guys (film)",
+"kind": "film",
+"date": "2022-03-17",
+"popularity": 54
+},
+{
+"wiki": "Lightyear_(film)",
+"label": "Lightyear (film)",
+"kind": "film",
+"date": "2022-06-16",
+"popularity": 54
+},
+{
+"wiki": "Penguins_of_Madagascar",
+"label": "Penguins of Madagascar",
+"kind": "film",
+"date": "2014-11-26",
+"popularity": 53
+},
+{
+"wiki": "Horton_Hears_a_Who!_(film)",
+"label": "Horton Hears a Who! (film)",
+"kind": "film",
+"date": "2008-03-13",
+"popularity": 53
+},
+{
+"wiki": "Surf's_Up_(film)",
+"label": "Surf's Up (film)",
+"kind": "film",
+"date": "2007-06-08",
+"popularity": 53
+},
+{
+"wiki": "Cloudy_with_a_Chance_of_Meatballs_(film)",
+"label": "Cloudy with a Chance of Meatballs (film)",
+"kind": "film",
+"date": "2009-09-18",
+"popularity": 53
+},
+{
+"wiki": "Shaun_the_Sheep",
+"label": "Shaun the Sheep",
+"kind": "series",
+"date": "2007-03-05",
+"popularity": 53
+},
+{
+"wiki": "The_Loud_House",
+"label": "The Loud House",
+"kind": "series",
+"date": "2016-05-02",
+"popularity": 53
+},
+{
+"wiki": "Lady_and_the_Tramp_II:_Scamp's_Adventure",
+"label": "Lady and the Tramp II: Scamp's Adventure",
+"kind": "film",
+"date": "2001-02-27",
+"popularity": 53
+},
+{
+"wiki": "American_Dad!",
+"label": "American Dad!",
+"kind": "series",
+"date": "2005-02-06",
+"popularity": 53
+},
+{
+"wiki": "Home_on_the_Range_(2004_film)",
+"label": "Home on the Range (2004 film)",
+"kind": "film",
+"date": "2004-04-02",
+"popularity": 53
+},
+{
+"wiki": "How_to_Train_Your_Dragon_2",
+"label": "How to Train Your Dragon 2",
+"kind": "film",
+"date": "2014-05-16",
+"popularity": 52
+},
+{
+"wiki": "Kung_Fu_Panda_3",
+"label": "Kung Fu Panda 3",
+"kind": "film",
+"date": "2016-01-29",
+"popularity": 52
+},
+{
+"wiki": "The_Grinch_(film)",
+"label": "The Grinch (film)",
+"kind": "film",
+"date": "2018-11-09",
+"popularity": 52
+},
+{
+"wiki": "Cars_3",
+"label": "Cars 3",
+"kind": "film",
+"date": "2017-06-15",
+"popularity": 52
+},
+{
+"wiki": "How_to_Train_Your_Dragon:_The_Hidden_World",
+"label": "How to Train Your Dragon: The Hidden World",
+"kind": "film",
+"date": "2019-02-01",
+"popularity": 52
+},
+{
+"wiki": "The_Pebble_and_the_Penguin",
+"label": "The Pebble and the Penguin",
+"kind": "film",
+"date": "1995-04-12",
+"popularity": 52
+},
+{
+"wiki": "Happy_Tree_Friends",
+"label": "Happy Tree Friends",
+"kind": "series",
+"date": "1999-12-24",
+"popularity": 52
+},
+{
+"wiki": "The_Lion_King_1½",
+"label": "The Lion King 1½",
+"kind": "film",
+"date": "2004-01-13",
+"popularity": 52
+},
+{
+"wiki": "Dexter's_Laboratory",
+"label": "Dexter's Laboratory",
+"kind": "series",
+"date": "1996-04-28",
+"popularity": 51
+},
+{
+"wiki": "Miraculous:_Tales_of_Ladybug_&_Cat_Noir",
+"label": "Miraculous: Tales of Ladybug & Cat Noir",
+"kind": "series",
+"date": "2015-09-01",
+"popularity": 51
+},
+{
+"wiki": "Captain_Underpants:_The_First_Epic_Movie",
+"label": "Captain Underpants: The First Epic Movie",
+"kind": "film",
+"date": "2017-06-02",
+"popularity": 51
+},
+{
+"wiki": "Megamind",
+"label": "Megamind",
+"kind": "film",
+"date": "2010-11-05",
+"popularity": 51
+},
+{
+"wiki": "The_Lego_Movie",
+"label": "The Lego Movie",
+"kind": "film",
+"date": "2014-02-06",
+"popularity": 51
+},
+{
+"wiki": "Kim_Possible",
+"label": "Kim Possible",
+"kind": "series",
+"date": "2002-06-07",
+"popularity": 51
+},
+{
+"wiki": "Totally_Spies!",
+"label": "Totally Spies!",
+"kind": "series",
+"date": "2001-11-03",
+"popularity": 51
+},
+{
+"wiki": "Puss_in_Boots:_The_Last_Wish",
+"label": "Puss in Boots: The Last Wish",
+"kind": "film",
+"date": "2022-12-07",
+"popularity": 51
+},
+{
+"wiki": "The_Jungle_Book_2",
+"label": "The Jungle Book 2",
+"kind": "film",
+"date": "2003-02-07",
+"popularity": 51
+},
+{
+"wiki": "Luca_(2021_film)",
+"label": "Luca (2021 film)",
+"kind": "film",
+"date": "2021-06-13",
+"popularity": 51
+},
+{
+"wiki": "Ice_Age:_Collision_Course",
+"label": "Ice Age: Collision Course",
+"kind": "film",
+"date": "2016-06-30",
+"popularity": 50
+},
+{
+"wiki": "Monsters_vs._Aliens",
+"label": "Monsters vs. Aliens",
+"kind": "film",
+"date": "2009-03-27",
+"popularity": 50
+},
+{
+"wiki": "Flushed_Away",
+"label": "Flushed Away",
+"kind": "film",
+"date": "2006-10-22",
+"popularity": 50
+},
+{
+"wiki": "Sing_2",
+"label": "Sing 2",
+"kind": "film",
+"date": "2021-11-14",
+"popularity": 50
+},
+{
+"wiki": "Wish_(film)",
+"label": "Wish (film)",
+"kind": "film",
+"date": "2023-11-08",
+"popularity": 50
+},
+{
+"wiki": "Spirit:_Stallion_of_the_Cimarron",
+"label": "Spirit: Stallion of the Cimarron",
+"kind": "film",
+"date": "2002-05-18",
+"popularity": 49
+},
+{
+"wiki": "Home_(2015_film)",
+"label": "Home (2015 film)",
+"kind": "film",
+"date": "2015-03-26",
+"popularity": 49
+},
+{
+"wiki": "Mr._Peabody_&_Sherman",
+"label": "Mr. Peabody & Sherman",
+"kind": "film",
+"date": "2014-02-07",
+"popularity": 49
+},
+{
+"wiki": "Rugrats",
+"label": "Rugrats",
+"kind": "series",
+"date": "1991-08-11",
+"popularity": 49
+},
+{
+"wiki": "We_Bare_Bears",
+"label": "We Bare Bears",
+"kind": "series",
+"date": "2015-07-27",
+"popularity": 49
+},
+{
+"wiki": "Sinbad:_Legend_of_the_Seven_Seas",
+"label": "Sinbad: Legend of the Seven Seas",
+"kind": "film",
+"date": "2003-07-02",
+"popularity": 49
+},
+{
+"wiki": "Rio_2",
+"label": "Rio 2",
+"kind": "film",
+"date": "2014-04-03",
+"popularity": 48
+},
+{
+"wiki": "Courage_the_Cowardly_Dog",
+"label": "Courage the Cowardly Dog",
+"kind": "series",
+"date": "1999-11-12",
+"popularity": 48
+},
+{
+"wiki": "Fireman_Sam",
+"label": "Fireman Sam",
+"kind": "series",
+"date": "1987-11-17",
+"popularity": 48
+},
+{
+"wiki": "Shark_Tale",
+"label": "Shark Tale",
+"kind": "film",
+"date": "2004-10-01",
+"popularity": 48
+},
+{
+"wiki": "DuckTales_(1987_TV_series)",
+"label": "DuckTales (1987 TV series)",
+"kind": "series",
+"date": "1987-09-18",
+"popularity": 48
+},
+{
+"wiki": "The_Road_to_El_Dorado",
+"label": "The Road to El Dorado",
+"kind": "film",
+"date": "2000-03-31",
+"popularity": 48
+},
+{
+"wiki": "Planet_51",
+"label": "Planet 51",
+"kind": "film",
+"date": "2009-11-14",
+"popularity": 48
+},
+{
+"wiki": "The_Angry_Birds_Movie_2",
+"label": "The Angry Birds Movie 2",
+"kind": "film",
+"date": "2019-08-02",
+"popularity": 47
+},
+{
+"wiki": "Hotel_Transylvania_2",
+"label": "Hotel Transylvania 2",
+"kind": "film",
+"date": "2015-09-25",
+"popularity": 47
+},
+{
+"wiki": "The_Land_Before_Time_(film)",
+"label": "The Land Before Time (film)",
+"kind": "film",
+"date": "1988-11-18",
+"popularity": 47
+},
+{
+"wiki": "The_Legend_of_Korra",
+"label": "The Legend of Korra",
+"kind": "series",
+"date": "2012-04-14",
+"popularity": 47
+},
+{
+"wiki": "The_Lego_Batman_Movie",
+"label": "The Lego Batman Movie",
+"kind": "film",
+"date": "2017-02-09",
+"popularity": 47
+},
+{
+"wiki": "Planes_(film)",
+"label": "Planes (film)",
+"kind": "film",
+"date": "2013-08-02",
+"popularity": 47
+},
+{
+"wiki": "Abominable_(2019_film)",
+"label": "Abominable (2019 film)",
+"kind": "film",
+"date": "2019-09-26",
+"popularity": 47
+},
+{
+"wiki": "The_Polar_Express_(film)",
+"label": "The Polar Express (film)",
+"kind": "film",
+"date": "2004-10-21",
+"popularity": 47
+},
+{
+"wiki": "Tom_and_Jerry:_The_Movie",
+"label": "Tom and Jerry: The Movie",
+"kind": "film",
+"date": "1992-10-01",
+"popularity": 47
+},
+{
+"wiki": "Ferdinand_(film)",
+"label": "Ferdinand (film)",
+"kind": "film",
+"date": "2017-12-14",
+"popularity": 46
+},
+{
+"wiki": "The_Peanuts_Movie",
+"label": "The Peanuts Movie",
+"kind": "film",
+"date": "2015-11-06",
+"popularity": 46
+},
+{
+"wiki": "Smurfs:_The_Lost_Village",
+"label": "Smurfs: The Lost Village",
+"kind": "film",
+"date": "2017-03-30",
+"popularity": 46
+},
+{
+"wiki": "Animaniacs",
+"label": "Animaniacs",
+"kind": "series",
+"date": "1993-01-08",
+"popularity": 46
+},
+{
+"wiki": "Postman_Pat",
+"label": "Postman Pat",
+"kind": "series",
+"date": "1981-09-16",
+"popularity": 46
+},
+{
+"wiki": "Monster_House_(film)",
+"label": "Monster House (film)",
+"kind": "film",
+"date": "2006-07-21",
+"popularity": 46
+},
+{
+"wiki": "Turbo_(2013_film)",
+"label": "Turbo (2013 film)",
+"kind": "film",
+"date": "2013-07-16",
+"popularity": 46
+},
+{
+"wiki": "The_Croods:_A_New_Age",
+"label": "The Croods: A New Age",
+"kind": "film",
+"date": "2020-11-25",
+"popularity": 46
+},
+{
+"wiki": "Hotel_Transylvania_3:_Summer_Vacation",
+"label": "Hotel Transylvania 3: Summer Vacation",
+"kind": "film",
+"date": "2018-06-13",
+"popularity": 46
+},
+{
+"wiki": "Space_Jam:_A_New_Legacy",
+"label": "Space Jam: A New Legacy",
+"kind": "film",
+"date": "2021-07-14",
+"popularity": 46
+},
+{
+"wiki": "Hotel_Transylvania:_Transformania",
+"label": "Hotel Transylvania: Transformania",
+"kind": "film",
+"date": "2022-01-14",
+"popularity": 46
+},
+{
+"wiki": "Elemental_(2023_film)",
+"label": "Elemental (2023 film)",
+"kind": "film",
+"date": "2023-05-27",
+"popularity": 46
+},
+{
+"wiki": "Star_Wars:_The_Clone_Wars_(film)",
+"label": "Star Wars: The Clone Wars (film)",
+"kind": "film",
+"date": "2008-08-14",
+"popularity": 45
+},
+{
+"wiki": "101_Dalmatians_II:_Patch's_London_Adventure",
+"label": "101 Dalmatians II: Patch's London Adventure",
+"kind": "film",
+"date": "2003-01-21",
+"popularity": 45
+},
+{
+"wiki": "Beavis_and_Butt-Head",
+"label": "Beavis and Butt-Head",
+"kind": "series",
+"date": "1993-03-08",
+"popularity": 45
+},
+{
+"wiki": "Star_Wars:_The_Clone_Wars",
+"label": "Star Wars: The Clone Wars",
+"kind": "series",
+"date": "2008-10-03",
+"popularity": 45
+},
+{
+"wiki": "Arcane_(TV_series)",
+"label": "Arcane (TV series)",
+"kind": "series",
+"date": "2021-11-06",
+"popularity": 45
+},
+{
+"wiki": "Rise_of_the_Guardians",
+"label": "Rise of the Guardians",
+"kind": "film",
+"date": "2012-10-10",
+"popularity": 45
+},
+{
+"wiki": "Johnny_Bravo",
+"label": "Johnny Bravo",
+"kind": "series",
+"date": "1997-07-07",
+"popularity": 45
+},
+{
+"wiki": "Trolls_(film)",
+"label": "Trolls (film)",
+"kind": "film",
+"date": "2016-10-20",
+"popularity": 44
+},
+{
+"wiki": "The_Boss_Baby:_Family_Business",
+"label": "The Boss Baby: Family Business",
+"kind": "film",
+"date": "2021-07-01",
+"popularity": 44
+},
+{
+"wiki": "Persepolis_(film)",
+"label": "Persepolis (film)",
+"kind": "film",
+"date": "2007-05-23",
+"popularity": 44
+},
+{
+"wiki": "Clarence_(American_TV_series)",
+"label": "Clarence (American TV series)",
+"kind": "series",
+"date": "2014-04-14",
+"popularity": 44
+},
+{
+"wiki": "Teenage_Mutant_Ninja_Turtles_(2003_TV_series)",
+"label": "Teenage Mutant Ninja Turtles (2003 TV series)",
+"kind": "series",
+"date": "2003-02-01",
+"popularity": 44
+},
+{
+"wiki": "The_Return_of_Jafar",
+"label": "The Return of Jafar",
+"kind": "film",
+"date": "1994-05-20",
+"popularity": 44
+},
+{
+"wiki": "BoJack_Horseman",
+"label": "BoJack Horseman",
+"kind": "series",
+"date": "2014-08-22",
+"popularity": 43
+},
+{
+"wiki": "Planes:_Fire_&_Rescue",
+"label": "Planes: Fire & Rescue",
+"kind": "film",
+"date": "2014-07-17",
+"popularity": 43
+},
+{
+"wiki": "Hoodwinked!",
+"label": "Hoodwinked!",
+"kind": "film",
+"date": "2005-12-16",
+"popularity": 43
+},
+{
+"wiki": "Pingu",
+"label": "Pingu",
+"kind": "series",
+"date": "1990-03-07",
+"popularity": 43
+},
+{
+"wiki": "Isle_of_Dogs_(film)",
+"label": "Isle of Dogs (film)",
+"kind": "film",
+"date": "2018-02-15",
+"popularity": 43
+},
+{
+"wiki": "Aladdin_and_the_King_of_Thieves",
+"label": "Aladdin and the King of Thieves",
+"kind": "film",
+"date": "1996-08-13",
+"popularity": 43
+},
+{
+"wiki": "A_Goofy_Movie",
+"label": "A Goofy Movie",
+"kind": "film",
+"date": "1995-04-07",
+"popularity": 43
+},
+{
+"wiki": "Rocko's_Modern_Life",
+"label": "Rocko's Modern Life",
+"kind": "series",
+"date": "1993-09-18",
+"popularity": 42
+},
+{
+"wiki": "Teen_Titans_Go!",
+"label": "Teen Titans Go!",
+"kind": "series",
+"date": "2013-04-23",
+"popularity": 42
+},
+{
+"wiki": "Disenchantment_(TV_series)",
+"label": "Disenchantment (TV series)",
+"kind": "series",
+"date": "2018-08-17",
+"popularity": 42
+},
+{
+"wiki": "The_Cleveland_Show",
+"label": "The Cleveland Show",
+"kind": "series",
+"date": "2009-09-27",
+"popularity": 42
+},
+{
+"wiki": "The_Wild",
+"label": "The Wild",
+"kind": "film",
+"date": "2006-04-06",
+"popularity": 42
+},
+{
+"wiki": "CatDog",
+"label": "CatDog",
+"kind": "series",
+"date": "1998-04-04",
+"popularity": 42
+},
+{
+"wiki": "Migration_(2023_film)",
+"label": "Migration (2023 film)",
+"kind": "film",
+"date": "2023-12-06",
+"popularity": 42
+},
+{
+"wiki": "Strange_World_(film)",
+"label": "Strange World (film)",
+"kind": "film",
+"date": "2022-11-23",
+"popularity": 42
+},
+{
+"wiki": "The_Little_Prince_(2015_film)",
+"label": "The Little Prince (2015 film)",
+"kind": "film",
+"date": "2015-07-29",
+"popularity": 41
+},
+{
+"wiki": "Sausage_Party",
+"label": "Sausage Party",
+"kind": "film",
+"date": "2016-06-03",
+"popularity": 41
+},
+{
+"wiki": "The_Ant_Bully_(film)",
+"label": "The Ant Bully (film)",
+"kind": "film",
+"date": "2006-10-13",
+"popularity": 41
+},
+{
+"wiki": "Cloudy_with_a_Chance_of_Meatballs_2",
+"label": "Cloudy with a Chance of Meatballs 2",
+"kind": "film",
+"date": "2013-09-26",
+"popularity": 41
+},
+{
+"wiki": "Super_Wings",
+"label": "Super Wings",
+"kind": "series",
+"date": "2014-09-01",
+"popularity": 41
+},
+{
+"wiki": "Star_Wars_Rebels",
+"label": "Star Wars Rebels",
+"kind": "series",
+"date": "2014-10-03",
+"popularity": 41
+},
+{
+"wiki": "Storks_(film)",
+"label": "Storks (film)",
+"kind": "film",
+"date": "2016-09-22",
+"popularity": 41
+},
+{
+"wiki": "A_Christmas_Carol_(2009_film)",
+"label": "A Christmas Carol (2009 film)",
+"kind": "film",
+"date": "2009-06-11",
+"popularity": 41
+},
+{
+"wiki": "The_Swan_Princess",
+"label": "The Swan Princess",
+"kind": "film",
+"date": "1994-11-18",
+"popularity": 41
+},
+{
+"wiki": "Joseph:_King_of_Dreams",
+"label": "Joseph: King of Dreams",
+"kind": "film",
+"date": "2000-11-07",
+"popularity": 41
+},
+{
+"wiki": "Smallfoot",
+"label": "Smallfoot",
+"kind": "film",
+"date": "2018-09-20",
+"popularity": 41
+},
+{
+"wiki": "Happy_Feet_Two",
+"label": "Happy Feet Two",
+"kind": "film",
+"date": "2011-11-18",
+"popularity": 41
+},
+{
+"wiki": "Guillermo_del_Toro's_Pinocchio",
+"label": "Guillermo del Toro's Pinocchio",
+"kind": "film",
+"date": "2022-11-24",
+"popularity": 41
+},
+{
+"wiki": "Kubo_and_the_Two_Strings",
+"label": "Kubo and the Two Strings",
+"kind": "film",
+"date": "2016-08-13",
+"popularity": 40
+},
+{
+"wiki": "Shaun_the_Sheep_Movie",
+"label": "Shaun the Sheep Movie",
+"kind": "film",
+"date": "2015-02-06",
+"popularity": 40
+},
+{
+"wiki": "Wish_Dragon",
+"label": "Wish Dragon",
+"kind": "film",
+"date": "2021-06-11",
+"popularity": 40
+},
+{
+"wiki": "The_Lord_of_the_Rings_(1978_film)",
+"label": "The Lord of the Rings (1978 film)",
+"kind": "film",
+"date": "1978-11-15",
+"popularity": 40
+},
+{
+"wiki": "The_Little_Mermaid_II:_Return_to_the_Sea",
+"label": "The Little Mermaid II: Return to the Sea",
+"kind": "film",
+"date": "2000-09-19",
+"popularity": 40
+},
+{
+"wiki": "Code_Lyoko",
+"label": "Code Lyoko",
+"kind": "series",
+"date": "2003-09-03",
+"popularity": 40
+},
+{
+"wiki": "King_of_the_Hill",
+"label": "King of the Hill",
+"kind": "series",
+"date": "1997-01-12",
+"popularity": 40
+},
+{
+"wiki": "The_Ren_&_Stimpy_Show",
+"label": "The Ren & Stimpy Show",
+"kind": "series",
+"date": "1991-08-11",
+"popularity": 40
+},
+{
+"wiki": "What_If...?_(TV_series)",
+"label": "What If...? (TV series)",
+"kind": "series",
+"date": "2021-08-11",
+"popularity": 40
+},
+{
+"wiki": "KikoRiki",
+"label": "KikoRiki",
+"kind": "series",
+"date": "2004-05-17",
+"popularity": 40
+},
+{
+"wiki": "The_Lego_Movie_2:_The_Second_Part",
+"label": "The Lego Movie 2: The Second Part",
+"kind": "film",
+"date": "2019-02-06",
+"popularity": 40
+},
+{
+"wiki": "Barnyard_(film)",
+"label": "Barnyard (film)",
+"kind": "film",
+"date": "2006-08-04",
+"popularity": 40
+},
+{
+"wiki": "The_Pirates!_In_an_Adventure_with_Scientists!",
+"label": "The Pirates! In an Adventure with Scientists!",
+"kind": "film",
+"date": "2012-03-28",
+"popularity": 40
+},
+{
+"wiki": "DuckTales_the_Movie:_Treasure_of_the_Lost_Lamp",
+"label": "DuckTales the Movie: Treasure of the Lost Lamp",
+"kind": "film",
+"date": "1990-08-03",
+"popularity": 40
+},
+{
+"wiki": "Quest_for_Camelot",
+"label": "Quest for Camelot",
+"kind": "film",
+"date": "1998-05-15",
+"popularity": 40
+},
+{
+"wiki": "Justin_and_the_Knights_of_Valour",
+"label": "Justin and the Knights of Valour",
+"kind": "film",
+"date": "2013-09-12",
+"popularity": 39
+},
+{
+"wiki": "ParaNorman",
+"label": "ParaNorman",
+"kind": "film",
+"date": "2012-08-03",
+"popularity": 39
+},
+{
+"wiki": "Return_to_Never_Land",
+"label": "Return to Never Land",
+"kind": "film",
+"date": "2002-02-15",
+"popularity": 39
+},
+{
+"wiki": "Arthur_Christmas",
+"label": "Arthur Christmas",
+"kind": "film",
+"date": "2011-11-02",
+"popularity": 39
+},
+{
+"wiki": "The_Brave_Little_Toaster",
+"label": "The Brave Little Toaster",
+"kind": "film",
+"date": "1987-07-10",
+"popularity": 39
+},
+{
+"wiki": "Chip_'n_Dale:_Rescue_Rangers_(TV_series)",
+"label": "Chip 'n Dale: Rescue Rangers (TV series)",
+"kind": "series",
+"date": "1989-03-04",
+"popularity": 39
+},
+{
+"wiki": "Ed,_Edd_n_Eddy",
+"label": "Ed, Edd n Eddy",
+"kind": "series",
+"date": "1999-01-04",
+"popularity": 39
+},
+{
+"wiki": "Cow_and_Chicken",
+"label": "Cow and Chicken",
+"kind": "series",
+"date": "1995-12-15",
+"popularity": 39
+},
+{
+"wiki": "The_Smurfs_(1981_TV_series)",
+"label": "The Smurfs (1981 TV series)",
+"kind": "series",
+"date": "1981-09-12",
+"popularity": 39
+},
+{
+"wiki": "Sofia_the_First",
+"label": "Sofia the First",
+"kind": "series",
+"date": "2012-11-18",
+"popularity": 39
+},
+{
+"wiki": "Gnomeo_&_Juliet",
+"label": "Gnomeo & Juliet",
+"kind": "film",
+"date": "2011-02-11",
+"popularity": 39
+},
+{
+"wiki": "The_Lego_Ninjago_Movie",
+"label": "The Lego Ninjago Movie",
+"kind": "film",
+"date": "2017-09-21",
+"popularity": 39
+},
+{
+"wiki": "Loving_Vincent",
+"label": "Loving Vincent",
+"kind": "film",
+"date": "2017-06-12",
+"popularity": 39
+},
+{
+"wiki": "Scoob!",
+"label": "Scoob!",
+"kind": "film",
+"date": "2020-05-15",
+"popularity": 39
+},
+{
+"wiki": "Mary_and_Max",
+"label": "Mary and Max",
+"kind": "film",
+"date": "2009-01-15",
+"popularity": 39
+},
+{
+"wiki": "Danny_Phantom",
+"label": "Danny Phantom",
+"kind": "series",
+"date": "2004-04-03",
+"popularity": 39
+},
+{
+"wiki": "Balto_(film)",
+"label": "Balto (film)",
+"kind": "film",
+"date": "1995-12-22",
+"popularity": 39
+},
+{
+"wiki": "Mulan_II",
+"label": "Mulan II",
+"kind": "film",
+"date": "2004-11-10",
+"popularity": 39
+},
+{
+"wiki": "Only_Yesterday_(1991_film)",
+"label": "Only Yesterday (1991 film)",
+"kind": "film",
+"date": "1991-07-20",
+"popularity": 39
+},
+{
+"wiki": "Klaus_(film)",
+"label": "Klaus (film)",
+"kind": "film",
+"date": "2019-11-08",
+"popularity": 39
+},
+{
+"wiki": "My_Little_Pony:_The_Movie_(2017_film)",
+"label": "My Little Pony: The Movie (2017 film)",
+"kind": "film",
+"date": "2017-10-05",
+"popularity": 38
+},
+{
+"wiki": "9_(2009_animated_film)",
+"label": "9 (2009 animated film)",
+"kind": "film",
+"date": "2009-09-09",
+"popularity": 38
+},
+{
+"wiki": "Spider-Man:_The_Animated_Series",
+"label": "Spider-Man: The Animated Series",
+"kind": "series",
+"date": "1994-11-19",
+"popularity": 38
+},
+{
+"wiki": "Chowder_(TV_series)",
+"label": "Chowder (TV series)",
+"kind": "series",
+"date": "2007-11-02",
+"popularity": 38
+},
+{
+"wiki": "Mr._Bean:_The_Animated_Series",
+"label": "Mr. Bean: The Animated Series",
+"kind": "series",
+"date": "2002-01-05",
+"popularity": 38
+},
+{
+"wiki": "El_Chavo_Animado",
+"label": "El Chavo Animado",
+"kind": "series",
+"date": "2006-10-21",
+"popularity": 38
+},
+{
+"wiki": "Hero_Elementary",
+"label": "Hero Elementary",
+"kind": "series",
+"date": "2020-06-01",
+"popularity": 38
+},
+{
+"wiki": "Ben_10:_Alien_Force",
+"label": "Ben 10: Alien Force",
+"kind": "series",
+"date": "2008-04-18",
+"popularity": 38
+},
+{
+"wiki": "The_Addams_Family_(2019_film)",
+"label": "The Addams Family (2019 film)",
+"kind": "film",
+"date": "2019-10-11",
+"popularity": 38
+},
+{
+"wiki": "All_Dogs_Go_to_Heaven",
+"label": "All Dogs Go to Heaven",
+"kind": "film",
+"date": "1989-11-17",
+"popularity": 38
+},
+{
+"wiki": "The_Boxtrolls",
+"label": "The Boxtrolls",
+"kind": "film",
+"date": "2014-09-12",
+"popularity": 37
+},
+{
+"wiki": "Over_the_Garden_Wall",
+"label": "Over the Garden Wall",
+"kind": "series",
+"date": "2014-11-03",
+"popularity": 37
+},
+{
+"wiki": "The_Jetsons",
+"label": "The Jetsons",
+"kind": "series",
+"date": "1962-09-23",
+"popularity": 37
+},
+{
+"wiki": "Batman:_The_Animated_Series",
+"label": "Batman: The Animated Series",
+"kind": "series",
+"date": "1992-09-05",
+"popularity": 37
+},
+{
+"wiki": "Adventures_of_the_Gummi_Bears",
+"label": "Adventures of the Gummi Bears",
+"kind": "series",
+"date": "1985-09-14",
+"popularity": 37
+},
+{
+"wiki": "Daria",
+"label": "Daria",
+"kind": "series",
+"date": "1997-03-03",
+"popularity": 37
+},
+{
+"wiki": "The_Emoji_Movie",
+"label": "The Emoji Movie",
+"kind": "film",
+"date": "2017-07-28",
+"popularity": 37
+},
+{
+"wiki": "Police_Academy_(TV_series)",
+"label": "Police Academy (TV series)",
+"kind": "series",
+"date": "1988-09-01",
+"popularity": 37
+},
+{
+"wiki": "Teenage_Mutant_Ninja_Turtles_(1987_TV_series)",
+"label": "Teenage Mutant Ninja Turtles (1987 TV series)",
+"kind": "series",
+"date": "1987-12-14",
+"popularity": 37
+},
+{
+"wiki": "The_Tale_of_the_Princess_Kaguya_(film)",
+"label": "The Tale of the Princess Kaguya (film)",
+"kind": "film",
+"date": "2013-11-23",
+"popularity": 37
+},
+{
+"wiki": "Cats_Don't_Dance",
+"label": "Cats Don't Dance",
+"kind": "film",
+"date": "1997-03-26",
+"popularity": 37
+},
+{
+"wiki": "Titan_A.E.",
+"label": "Titan A.E.",
+"kind": "film",
+"date": "2000-06-16",
+"popularity": 36
+},
+{
+"wiki": "Brother_Bear_2",
+"label": "Brother Bear 2",
+"kind": "film",
+"date": "2006-08-17",
+"popularity": 36
+},
+{
+"wiki": "The_Emperor's_New_School",
+"label": "The Emperor's New School",
+"kind": "series",
+"date": "2006-01-27",
+"popularity": 36
+},
+{
+"wiki": "Teen_Titans_(TV_series)",
+"label": "Teen Titans (TV series)",
+"kind": "series",
+"date": "2003-07-19",
+"popularity": 36
+},
+{
+"wiki": "Foster's_Home_for_Imaginary_Friends",
+"label": "Foster's Home for Imaginary Friends",
+"kind": "series",
+"date": "2004-08-13",
+"popularity": 36
+},
+{
+"wiki": "Scooby-Doo!_Mystery_Incorporated",
+"label": "Scooby-Doo! Mystery Incorporated",
+"kind": "series",
+"date": "2010-04-05",
+"popularity": 36
+},
+{
+"wiki": "The_Lion_Guard",
+"label": "The Lion Guard",
+"kind": "series",
+"date": "2015-11-22",
+"popularity": 36
+},
+{
+"wiki": "The_Owl_House",
+"label": "The Owl House",
+"kind": "series",
+"date": "2020-01-10",
+"popularity": 36
+},
+{
+"wiki": "Star_Trek:_The_Animated_Series",
+"label": "Star Trek: The Animated Series",
+"kind": "series",
+"date": "1973-09-08",
+"popularity": 36
+},
+{
+"wiki": "Open_Season:_Scared_Silly",
+"label": "Open Season: Scared Silly",
+"kind": "film",
+"date": "2015-12-31",
+"popularity": 36
+},
+{
+"wiki": "Waltz_with_Bashir",
+"label": "Waltz with Bashir",
+"kind": "film",
+"date": "2008-05-15",
+"popularity": 36
+},
+{
+"wiki": "The_Powerpuff_Girls_Movie",
+"label": "The Powerpuff Girls Movie",
+"kind": "film",
+"date": "2002-07-03",
+"popularity": 36
+},
+{
+"wiki": "Paw_Patrol:_The_Movie",
+"label": "Paw Patrol: The Movie",
+"kind": "film",
+"date": "2021-08-19",
+"popularity": 36
+},
+{
+"wiki": "DC_League_of_Super-Pets",
+"label": "DC League of Super-Pets",
+"kind": "film",
+"date": "2022-07-27",
+"popularity": 36
+},
+{
+"wiki": "Alpha_and_Omega_(film)",
+"label": "Alpha and Omega (film)",
+"kind": "film",
+"date": "2010-09-08",
+"popularity": 35
+},
+{
+"wiki": "The_Little_Mermaid:_Ariel's_Beginning",
+"label": "The Little Mermaid: Ariel's Beginning",
+"kind": "film",
+"date": "2008-08-26",
+"popularity": 35
+},
+{
+"wiki": "Khumba",
+"label": "Khumba",
+"kind": "film",
+"date": "2013-09-08",
+"popularity": 35
+},
+{
+"wiki": "Camp_Lazlo",
+"label": "Camp Lazlo",
+"kind": "series",
+"date": "2005-07-08",
+"popularity": 35
+},
+{
+"wiki": "Ultimate_Spider-Man_(TV_series)",
+"label": "Ultimate Spider-Man (TV series)",
+"kind": "series",
+"date": "2012-04-01",
+"popularity": 35
+},
+{
+"wiki": "Mickey_Mouse_Clubhouse",
+"label": "Mickey Mouse Clubhouse",
+"kind": "series",
+"date": "2006-05-05",
+"popularity": 35
+},
+{
+"wiki": "Teenage_Mutant_Ninja_Turtles_(2012_TV_series)",
+"label": "Teenage Mutant Ninja Turtles (2012 TV series)",
+"kind": "series",
+"date": "2012-09-28",
+"popularity": 35
+},
+{
+"wiki": "Star_Wars:_Clone_Wars",
+"label": "Star Wars: Clone Wars",
+"kind": "series",
+"date": "2003-11-07",
+"popularity": 35
+},
+{
+"wiki": "Peep_and_the_Big_Wide_World",
+"label": "Peep and the Big Wide World",
+"kind": "series",
+"date": "2004-04-12",
+"popularity": 35
+},
+{
+"wiki": "Hey_Arnold!",
+"label": "Hey Arnold!",
+"kind": "series",
+"date": "1996-09-09",
+"popularity": 35
+},
+{
+"wiki": "Star_vs._the_Forces_of_Evil",
+"label": "Star vs. the Forces of Evil",
+"kind": "series",
+"date": "2015-01-18",
+"popularity": 35
+},
+{
+"wiki": "Nature_Cat",
+"label": "Nature Cat",
+"kind": "series",
+"date": "2015-11-25",
+"popularity": 35
+},
+{
+"wiki": "DuckTales_(2017_TV_series)",
+"label": "DuckTales (2017 TV series)",
+"kind": "series",
+"date": "2017-08-12",
+"popularity": 35
+},
+{
+"wiki": "Duck_Duck_Goose_(film)",
+"label": "Duck Duck Goose (film)",
+"kind": "film",
+"date": "2018-03-09",
+"popularity": 35
+},
+{
+"wiki": "American_Dragon:_Jake_Long",
+"label": "American Dragon: Jake Long",
+"kind": "series",
+"date": "2005-01-21",
+"popularity": 35
+},
+{
+"wiki": "Cinderella_II:_Dreams_Come_True",
+"label": "Cinderella II: Dreams Come True",
+"kind": "film",
+"date": "2002-02-26",
+"popularity": 35
+},
+{
+"wiki": "Thumbelina_(1994_film)",
+"label": "Thumbelina (1994 film)",
+"kind": "film",
+"date": "1994-03-30",
+"popularity": 35
+},
+{
+"wiki": "Pinocchio_3000",
+"label": "Pinocchio 3000",
+"kind": "film",
+"date": "2004-07-09",
+"popularity": 35
+},
+{
+"wiki": "The_Book_of_Life_(2014_film)",
+"label": "The Book of Life (2014 film)",
+"kind": "film",
+"date": "2015-02-12",
+"popularity": 34
+},
+{
+"wiki": "TMNT_(film)",
+"label": "TMNT (film)",
+"kind": "film",
+"date": "2007-03-22",
+"popularity": 34
+},
+{
+"wiki": "The_Mystery_of_the_Third_Planet",
+"label": "The Mystery of the Third Planet",
+"kind": "film",
+"date": "1981-07-31",
+"popularity": 34
+},
+{
+"wiki": "Inspector_Gadget_(1983_TV_series)",
+"label": "Inspector Gadget (1983 TV series)",
+"kind": "series",
+"date": "1983-09-05",
+"popularity": 34
+},
+{
+"wiki": "Codename:_Kids_Next_Door",
+"label": "Codename: Kids Next Door",
+"kind": "series",
+"date": "2002-12-06",
+"popularity": 34
+},
+{
+"wiki": "Pocoyo",
+"label": "Pocoyo",
+"kind": "series",
+"date": "2005-05-10",
+"popularity": 34
+},
+{
+"wiki": "Scooby-Doo,_Where_Are_You!",
+"label": "Scooby-Doo, Where Are You!",
+"kind": "series",
+"date": "1969-09-13",
+"popularity": 34
+},
+{
+"wiki": "The_Secret_of_NIMH",
+"label": "The Secret of NIMH",
+"kind": "film",
+"date": "1982-07-15",
+"popularity": 34
+},
+{
+"wiki": "An_American_Tail",
+"label": "An American Tail",
+"kind": "film",
+"date": "1986-11-21",
+"popularity": 34
+},
+{
+"wiki": "Pocahontas_II:_Journey_to_a_New_World",
+"label": "Pocahontas II: Journey to a New World",
+"kind": "film",
+"date": "1998-08-04",
+"popularity": 34
+},
+{
+"wiki": "Ben_10:_Ultimate_Alien",
+"label": "Ben 10: Ultimate Alien",
+"kind": "series",
+"date": "2010-04-23",
+"popularity": 34
+},
+{
+"wiki": "Teen_Titans_Go!_To_the_Movies",
+"label": "Teen Titans Go! To the Movies",
+"kind": "film",
+"date": "2018-07-22",
+"popularity": 34
+},
+{
+"wiki": "The_Triplets_of_Belleville",
+"label": "The Triplets of Belleville",
+"kind": "film",
+"date": "2003-05-18",
+"popularity": 34
+},
+{
+"wiki": "Cinderella_III:_A_Twist_in_Time",
+"label": "Cinderella III: A Twist in Time",
+"kind": "film",
+"date": "2007-02-06",
+"popularity": 34
+},
+{
+"wiki": "Spirit_Untamed",
+"label": "Spirit Untamed",
+"kind": "film",
+"date": "2021-06-04",
+"popularity": 34
+},
+{
+"wiki": "Sonic_Boom_(TV_series)",
+"label": "Sonic Boom (TV series)",
+"kind": "series",
+"date": "2014-11-08",
+"popularity": 33
+},
+{
+"wiki": "Legend_of_the_Guardians:_The_Owls_of_Ga'Hoole",
+"label": "Legend of the Guardians: The Owls of Ga'Hoole",
+"kind": "film",
+"date": "2010-09-19",
+"popularity": 33
+},
+{
+"wiki": "Darkwing_Duck",
+"label": "Darkwing Duck",
+"kind": "series",
+"date": "1991-09-07",
+"popularity": 33
+},
+{
+"wiki": "Bob's_Burgers",
+"label": "Bob's Burgers",
+"kind": "series",
+"date": "2011-01-09",
+"popularity": 33
+},
+{
+"wiki": "Ninjago_(TV_series)",
+"label": "Ninjago (TV series)",
+"kind": "series",
+"date": "2011-01-14",
+"popularity": 33
+},
+{
+"wiki": "Arthur_(TV_series)",
+"label": "Arthur (TV series)",
+"kind": "series",
+"date": "1996-10-07",
+"popularity": 33
+},
+{
+"wiki": "X-Men:_The_Animated_Series",
+"label": "X-Men: The Animated Series",
+"kind": "series",
+"date": "1992-10-31",
+"popularity": 33
+},
+{
+"wiki": "Elena_of_Avalor",
+"label": "Elena of Avalor",
+"kind": "series",
+"date": "2016-07-22",
+"popularity": 33
+},
+{
+"wiki": "Star_Wars:_The_Bad_Batch",
+"label": "Star Wars: The Bad Batch",
+"kind": "series",
+"date": "2021-05-04",
+"popularity": 33
+},
+{
+"wiki": "The_Grim_Adventures_of_Billy_&_Mandy",
+"label": "The Grim Adventures of Billy & Mandy",
+"kind": "series",
+"date": "2001-08-24",
+"popularity": 33
+},
+{
+"wiki": "Anomalisa",
+"label": "Anomalisa",
+"kind": "film",
+"date": "2015-09-04",
+"popularity": 33
+},
+{
+"wiki": "Capture_the_Flag_(film)",
+"label": "Capture the Flag (film)",
+"kind": "film",
+"date": "2015-12-04",
+"popularity": 33
+},
+{
+"wiki": "Sherlock_Gnomes",
+"label": "Sherlock Gnomes",
+"kind": "film",
+"date": "2018-03-22",
+"popularity": 33
+},
+{
+"wiki": "Wonder_Park",
+"label": "Wonder Park",
+"kind": "film",
+"date": "2019-03-15",
+"popularity": 33
+},
+{
+"wiki": "Ruby_Gillman,_Teenage_Kraken",
+"label": "Ruby Gillman, Teenage Kraken",
+"kind": "film",
+"date": "2023-06-28",
+"popularity": 33
+},
+{
+"wiki": "Trolls_Band_Together",
+"label": "Trolls Band Together",
+"kind": "film",
+"date": "2023-10-18",
+"popularity": 33
+},
+{
+"wiki": "Nimona_(film)",
+"label": "Nimona (film)",
+"kind": "film",
+"date": "2023-06-23",
+"popularity": 33
+},
+{
+"wiki": "Song_of_the_Sea_(2014_film)",
+"label": "Song of the Sea (2014 film)",
+"kind": "film",
+"date": "2014-09-06",
+"popularity": 32
+},
+{
+"wiki": "Beauty_and_the_Beast:_The_Enchanted_Christmas",
+"label": "Beauty and the Beast: The Enchanted Christmas",
+"kind": "film",
+"date": "1997-11-11",
+"popularity": 32
+},
+{
+"wiki": "Resident_Evil:_Degeneration",
+"label": "Resident Evil: Degeneration",
+"kind": "film",
+"date": "2008-10-18",
+"popularity": 32
+},
+{
+"wiki": "Timon_&_Pumbaa_(TV_series)",
+"label": "Timon & Pumbaa (TV series)",
+"kind": "series",
+"date": "1995-09-08",
+"popularity": 32
+},
+{
+"wiki": "Garfield_and_Friends",
+"label": "Garfield and Friends",
+"kind": "series",
+"date": "1988-09-17",
+"popularity": 32
+},
+{
+"wiki": "Lilo_&_Stitch:_The_Series",
+"label": "Lilo & Stitch: The Series",
+"kind": "series",
+"date": "2003-09-20",
+"popularity": 32
+},
+{
+"wiki": "Johnny_Test",
+"label": "Johnny Test",
+"kind": "series",
+"date": "2005-09-17",
+"popularity": 32
+},
+{
+"wiki": "The_Garfield_Show",
+"label": "The Garfield Show",
+"kind": "series",
+"date": "2008-07-22",
+"popularity": 32
+},
+{
+"wiki": "I_Am_Groot",
+"label": "I Am Groot",
+"kind": "series",
+"date": "2022-08-05",
+"popularity": 32
+},
+{
+"wiki": "Justice_League_(TV_series)",
+"label": "Justice League (TV series)",
+"kind": "series",
+"date": "2001-11-17",
+"popularity": 32
+},
+{
+"wiki": "Early_Man_(film)",
+"label": "Early Man (film)",
+"kind": "film",
+"date": "2018-01-26",
+"popularity": 32
+},
+{
+"wiki": "UglyDolls",
+"label": "UglyDolls",
+"kind": "film",
+"date": "2019-05-03",
+"popularity": 32
+},
+{
+"wiki": "The_Nut_Job",
+"label": "The Nut Job",
+"kind": "film",
+"date": "2014-01-11",
+"popularity": 32
+},
+{
+"wiki": "Batman:_Mask_of_the_Phantasm",
+"label": "Batman: Mask of the Phantasm",
+"kind": "film",
+"date": "1993-12-25",
+"popularity": 32
+},
+{
+"wiki": "Asterix:_The_Mansions_of_the_Gods",
+"label": "Asterix: The Mansions of the Gods",
+"kind": "film",
+"date": "2014-11-26",
+"popularity": 31
+},
+{
+"wiki": "The_Red_Turtle",
+"label": "The Red Turtle",
+"kind": "film",
+"date": "2016-05-18",
+"popularity": 31
+},
+{
+"wiki": "Tinker_Bell_(film)",
+"label": "Tinker Bell (film)",
+"kind": "film",
+"date": "2008-09-11",
+"popularity": 31
+},
+{
+"wiki": "Tarzan_II",
+"label": "Tarzan II",
+"kind": "film",
+"date": "2005-06-14",
+"popularity": 31
+},
+{
+"wiki": "Captain_Planet_and_the_Planeteers",
+"label": "Captain Planet and the Planeteers",
+"kind": "series",
+"date": "1990-09-15",
+"popularity": 31
+},
+{
+"wiki": "Archer_(2009_TV_series)",
+"label": "Archer (2009 TV series)",
+"kind": "series",
+"date": "2009-09-17",
+"popularity": 31
+},
+{
+"wiki": "Total_Drama_Island",
+"label": "Total Drama Island",
+"kind": "series",
+"date": "2007-07-08",
+"popularity": 31
+},
+{
+"wiki": "Jackie_Chan_Adventures",
+"label": "Jackie Chan Adventures",
+"kind": "series",
+"date": "2000-09-09",
+"popularity": 31
+},
+{
+"wiki": "VeggieTales",
+"label": "VeggieTales",
+"kind": "series",
+"date": "1993-12-21",
+"popularity": 31
+},
+{
+"wiki": "Wander_Over_Yonder",
+"label": "Wander Over Yonder",
+"kind": "series",
+"date": "2013-08-16",
+"popularity": 31
+},
+{
+"wiki": "Splash_and_Bubbles",
+"label": "Splash and Bubbles",
+"kind": "series",
+"date": "2016-11-23",
+"popularity": 31
+},
+{
+"wiki": "Castlevania_(TV_series)",
+"label": "Castlevania (TV series)",
+"kind": "series",
+"date": "2017-07-07",
+"popularity": 31
+},
+{
+"wiki": "Amphibia_(TV_series)",
+"label": "Amphibia (TV series)",
+"kind": "series",
+"date": "2019-06-17",
+"popularity": 31
+},
+{
+"wiki": "Kamp_Koral:_SpongeBob's_Under_Years",
+"label": "Kamp Koral: SpongeBob's Under Years",
+"kind": "series",
+"date": "2021-03-04",
+"popularity": 31
+},
+{
+"wiki": "Curious_George_(film)",
+"label": "Curious George (film)",
+"kind": "film",
+"date": "2006-02-10",
+"popularity": 31
+},
+{
+"wiki": "Ballerina_(2016_film)",
+"label": "Ballerina (2016 film)",
+"kind": "film",
+"date": "2016-01-26",
+"popularity": 31
+},
+{
+"wiki": "The_Star_(2017_film)",
+"label": "The Star (2017 film)",
+"kind": "film",
+"date": "2017-12-07",
+"popularity": 31
+},
+{
+"wiki": "Asterix:_The_Secret_of_the_Magic_Potion",
+"label": "Asterix: The Secret of the Magic Potion",
+"kind": "film",
+"date": "2018-12-05",
+"popularity": 31
+},
+{
+"wiki": "The_Tale_of_Despereaux_(film)",
+"label": "The Tale of Despereaux (film)",
+"kind": "film",
+"date": "2008-12-17",
+"popularity": 31
+},
+{
+"wiki": "Space_Dogs",
+"label": "Space Dogs",
+"kind": "film",
+"date": "2010-03-18",
+"popularity": 30
+},
+{
+"wiki": "DreamWorks_Dragons",
+"label": "DreamWorks Dragons",
+"kind": "series",
+"date": "2012-09-04",
+"popularity": 30
+},
+{
+"wiki": "The_Marvelous_Misadventures_of_Flapjack",
+"label": "The Marvelous Misadventures of Flapjack",
+"kind": "series",
+"date": "2008-06-05",
+"popularity": 30
+},
+{
+"wiki": "Tiny_Toon_Adventures",
+"label": "Tiny Toon Adventures",
+"kind": "series",
+"date": "1990-09-14",
+"popularity": 30
+},
+{
+"wiki": "The_Spectacular_Spider-Man_(TV_series)",
+"label": "The Spectacular Spider-Man (TV series)",
+"kind": "series",
+"date": "2008-03-08",
+"popularity": 30
+},
+{
+"wiki": "My_Gym_Partner's_a_Monkey",
+"label": "My Gym Partner's a Monkey",
+"kind": "series",
+"date": "2005-12-26",
+"popularity": 30
+},
+{
+"wiki": "I_Am_Weasel",
+"label": "I Am Weasel",
+"kind": "series",
+"date": "1997-07-22",
+"popularity": 30
+},
+{
+"wiki": "Bubble_Guppies",
+"label": "Bubble Guppies",
+"kind": "series",
+"date": "2013-08-12",
+"popularity": 30
+},
+{
+"wiki": "Caillou",
+"label": "Caillou",
+"kind": "series",
+"date": "1997-09-15",
+"popularity": 30
+},
+{
+"wiki": "Quack_Pack",
+"label": "Quack Pack",
+"kind": "series",
+"date": "1996-09-03",
+"popularity": 30
+},
+{
+"wiki": "Batman_Beyond",
+"label": "Batman Beyond",
+"kind": "series",
+"date": "1999-01-10",
+"popularity": 30
+},
+{
+"wiki": "Dinosaur_Train",
+"label": "Dinosaur Train",
+"kind": "series",
+"date": "2009-09-07",
+"popularity": 30
+},
+{
+"wiki": "Milo_Murphy's_Law",
+"label": "Milo Murphy's Law",
+"kind": "series",
+"date": "2016-10-03",
+"popularity": 30
+},
+{
+"wiki": "Star_Wars_Resistance",
+"label": "Star Wars Resistance",
+"kind": "series",
+"date": "2018-10-07",
+"popularity": 30
+},
+{
+"wiki": "Invincible_(TV_series)",
+"label": "Invincible (TV series)",
+"kind": "series",
+"date": "2021-03-25",
+"popularity": 30
+},
+{
+"wiki": "101_Dalmatian_Street",
+"label": "101 Dalmatian Street",
+"kind": "series",
+"date": "2018-12-14",
+"popularity": 30
+},
+{
+"wiki": "Love,_Death_&_Robots",
+"label": "Love, Death & Robots",
+"kind": "series",
+"date": "2019-03-15",
+"popularity": 30
+},
+{
+"wiki": "The_Patrick_Star_Show",
+"label": "The Patrick Star Show",
+"kind": "series",
+"date": "2021-07-09",
+"popularity": 30
+},
+{
+"wiki": "Robot_Chicken",
+"label": "Robot Chicken",
+"kind": "series",
+"date": "2005-02-20",
+"popularity": 30
+},
+{
+"wiki": "Lilo_&_Stitch_2:_Stitch_Has_a_Glitch",
+"label": "Lilo & Stitch 2: Stitch Has a Glitch",
+"kind": "film",
+"date": "2005-08-30",
+"popularity": 30
+},
+{
+"wiki": "Battle_for_Terra",
+"label": "Battle for Terra",
+"kind": "film",
+"date": "2007-09-08",
+"popularity": 30
+},
+{
+"wiki": "The_Secret_of_Kells",
+"label": "The Secret of Kells",
+"kind": "film",
+"date": "2009-01-30",
+"popularity": 30
+},
+{
+"wiki": "Astro_Boy_(film)",
+"label": "Astro Boy (film)",
+"kind": "film",
+"date": "2009-10-05",
+"popularity": 30
+},
+{
+"wiki": "Fleischer_Studios",
+"label": "Fleischer Studios",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Hanna-Barbera",
+"label": "Hanna-Barbera",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Walt_Disney_Animation_Studios",
+"label": "Walt Disney Animation Studios",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Pixar",
+"label": "Pixar",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Studio_Ghibli",
+"label": "Studio Ghibli",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Aardman_Animations",
+"label": "Aardman Animations",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Toei_Animation",
+"label": "Toei Animation",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Warner_Bros._Cartoons",
+"label": "Warner Bros. Cartoons",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Terrytoons",
+"label": "Terrytoons",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Walter_Lantz_Productions",
+"label": "Walter Lantz Productions",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "UPA_(animation_studio)",
+"label": "UPA (animation studio)",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Laika_(company)",
+"label": "Laika (company)",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Cartoon_Saloon",
+"label": "Cartoon Saloon",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Mushi_Production",
+"label": "Mushi Production",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Madhouse_(company)",
+"label": "Madhouse (company)",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Sunrise_(company)",
+"label": "Sunrise (company)",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Filmation",
+"label": "Filmation",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Rankin/Bass_Productions",
+"label": "Rankin/Bass Productions",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "DePatie–Freleng_Enterprises",
+"label": "DePatie–Freleng Enterprises",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Soyuzmultfilm",
+"label": "Soyuzmultfilm",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Zagreb_School_of_Animated_Films",
+"label": "Zagreb School of Animated Films",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "National_Film_Board_of_Canada",
+"label": "National Film Board of Canada",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Klasky_Csupo",
+"label": "Klasky Csupo",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Nelvana",
+"label": "Nelvana",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "DreamWorks_Animation",
+"label": "DreamWorks Animation",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Blue_Sky_Studios",
+"label": "Blue Sky Studios",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Sony_Pictures_Animation",
+"label": "Sony Pictures Animation",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Production_I.G",
+"label": "Production I.G",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Gainax",
+"label": "Gainax",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Tatsunoko_Production",
+"label": "Tatsunoko Production",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Van_Beuren_Studios",
+"label": "Van Beuren Studios",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Famous_Studios",
+"label": "Famous Studios",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Screen_Gems_(cartoon_studio)",
+"label": "Screen Gems (cartoon studio)",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Metro-Goldwyn-Mayer_cartoon_studio",
+"label": "Metro-Goldwyn-Mayer cartoon studio",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Bray_Productions",
+"label": "Bray Productions",
+"kind": "studio",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Rotoscoping",
+"label": "Rotoscoping",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Multiplane_camera",
+"label": "Multiplane camera",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Stop-motion_animation",
+"label": "Stop-motion animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Clay_animation",
+"label": "Clay animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Cel",
+"label": "Cel",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Traditional_animation",
+"label": "Traditional animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Limited_animation",
+"label": "Limited animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Cutout_animation",
+"label": "Cutout animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Pixilation",
+"label": "Pixilation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Computer_animation",
+"label": "Computer animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Pinscreen",
+"label": "Pinscreen",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Sand_animation",
+"label": "Sand animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Silhouette_animation",
+"label": "Silhouette animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Puppetoon",
+"label": "Puppetoon",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Go_motion",
+"label": "Go motion",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Twelve_basic_principles_of_animation",
+"label": "Twelve basic principles of animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Model_sheet",
+"label": "Model sheet",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Storyboard",
+"label": "Storyboard",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "History_of_anime",
+"label": "History of anime",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Golden_age_of_American_animation",
+"label": "Golden age of American animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Disney_Renaissance",
+"label": "Disney Renaissance",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Xerography",
+"label": "Xerography",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Flip_book",
+"label": "Flip book",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Zoetrope",
+"label": "Zoetrope",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Phenakistiscope",
+"label": "Phenakistiscope",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Praxinoscope",
+"label": "Praxinoscope",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Direct_animation",
+"label": "Direct animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Paint-on-glass_animation",
+"label": "Paint-on-glass animation",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Motion_capture",
+"label": "Motion capture",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Machinima",
+"label": "Machinima",
+"kind": "technique",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Winsor_McCay",
+"label": "Winsor McCay",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Lotte_Reiniger",
+"label": "Lotte Reiniger",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Ub_Iwerks",
+"label": "Ub Iwerks",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Max_Fleischer",
+"label": "Max Fleischer",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Chuck_Jones",
+"label": "Chuck Jones",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Tex_Avery",
+"label": "Tex Avery",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Osamu_Tezuka",
+"label": "Osamu Tezuka",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Hayao_Miyazaki",
+"label": "Hayao Miyazaki",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Ray_Harryhausen",
+"label": "Ray Harryhausen",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Norman_McLaren",
+"label": "Norman McLaren",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Mary_Blair",
+"label": "Mary Blair",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Retta_Scott",
+"label": "Retta Scott",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "William_Hanna",
+"label": "William Hanna",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Joseph_Barbera",
+"label": "Joseph Barbera",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Isao_Takahata",
+"label": "Isao Takahata",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Satoshi_Kon",
+"label": "Satoshi Kon",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Nick_Park",
+"label": "Nick Park",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Jan_Švankmajer",
+"label": "Jan Švankmajer",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Brad_Bird",
+"label": "Brad Bird",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Don_Bluth",
+"label": "Don Bluth",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Ralph_Bakshi",
+"label": "Ralph Bakshi",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Émile_Cohl",
+"label": "Émile Cohl",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "J._Stuart_Blackton",
+"label": "J. Stuart Blackton",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Quirino_Cristiani",
+"label": "Quirino Cristiani",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Ladislas_Starevich",
+"label": "Ladislas Starevich",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Mel_Blanc",
+"label": "Mel Blanc",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "June_Foray",
+"label": "June Foray",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Friz_Freleng",
+"label": "Friz Freleng",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Bob_Clampett",
+"label": "Bob Clampett",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Walt_Disney",
+"label": "Walt Disney",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Grim_Natwick",
+"label": "Grim Natwick",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Milt_Kahl",
+"label": "Milt Kahl",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Frank_Thomas_(animator)",
+"label": "Frank Thomas (animator)",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Ollie_Johnston",
+"label": "Ollie Johnston",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Glen_Keane",
+"label": "Glen Keane",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Genndy_Tartakovsky",
+"label": "Genndy Tartakovsky",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Craig_McCracken",
+"label": "Craig McCracken",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Otto_Messmer",
+"label": "Otto Messmer",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Pat_Sullivan_(film_producer)",
+"label": "Pat Sullivan (film producer)",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Walter_Lantz",
+"label": "Walter Lantz",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Paul_Terry",
+"label": "Paul Terry",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Dave_Fleischer",
+"label": "Dave Fleischer",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Bill_Melendez",
+"label": "Bill Melendez",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Leiji_Matsumoto",
+"label": "Leiji Matsumoto",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Rintaro",
+"label": "Rintaro",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Mamoru_Oshii",
+"label": "Mamoru Oshii",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Katsuhiro_Otomo",
+"label": "Katsuhiro Otomo",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Richard_Williams_(animator)",
+"label": "Richard Williams (animator)",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Yuri_Norstein",
+"label": "Yuri Norstein",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Caroline_Leaf",
+"label": "Caroline Leaf",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Alexandre_Alexeieff",
+"label": "Alexandre Alexeieff",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Oskar_Fischinger",
+"label": "Oskar Fischinger",
+"kind": "person",
+"date": null,
+"popularity": 0
+},
+{
+"wiki": "Len_Lye",
+"label": "Len Lye",
+"kind": "person",
+"date": null,
+"popularity": 0
+}
+]
+}

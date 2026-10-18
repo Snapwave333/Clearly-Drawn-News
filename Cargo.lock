@@ -157,6 +157,7 @@ dependencies = [
  "chrono",
  "clap",
  "directories",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
