@@ -86,14 +86,11 @@ fn plan_lines(script: &MasterEpisodeScript, voices: &AnchorVoices) -> Vec<Planne
         .flat_map(|segment| {
             segment.lines.iter().enumerate().map(move |(index, line)| (segment.segment_number, index, line))
         })
-        .filter(|(_, _, line)| !line.spoken_text.trim().is_empty())
+        .filter(|(_, _, line)| !strip_stage_tags(&line.spoken_text).is_empty())
         .enumerate()
         .map(|(order, (segment_number, line_index, line))| {
-            let text = if line.phonetic_text.trim().is_empty() {
-                line.spoken_text.clone()
-            } else {
-                line.phonetic_text.clone()
-            };
+            let phonetic = strip_stage_tags(&line.phonetic_text);
+            let text = if phonetic.is_empty() { strip_stage_tags(&line.spoken_text) } else { phonetic };
             PlannedLine {
                 segment_number,
                 line_index,
@@ -111,6 +108,30 @@ fn plan_lines(script: &MasterEpisodeScript, voices: &AnchorVoices) -> Vec<Planne
             }
         })
         .collect()
+}
+
+/// Removes camera and visual direction tags such as `[BANTER]`, `[REACTION:elena]`, or
+/// `[VISUAL: cards/ghibli.png]` (any square-bracket tag) so they are never read aloud, then tidies
+/// the spacing left behind. An unclosed `[` is kept as ordinary text.
+pub(crate) fn strip_stage_tags(text: &str) -> String {
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        match rest[open..].find(']') {
+            Some(close) => {
+                kept.push_str(&rest[..open]);
+                kept.push(' ');
+                rest = &rest[open + close + 1..];
+            }
+            None => break,
+        }
+    }
+    kept.push_str(rest);
+    let mut tidy = kept.split_whitespace().collect::<Vec<_>>().join(" ");
+    for mark in [",", ".", "!", "?", ";", ":"] {
+        tidy = tidy.replace(&format!(" {mark}"), mark);
+    }
+    tidy
 }
 
 fn speaker_slug(speaker: AnchorRole) -> &'static str {
@@ -254,6 +275,37 @@ mod tests {
             assert_eq!(line.segment.voice, expected);
         }
         assert!(planned.iter().any(|l| l.segment.text.contains("JIB-lee")));
+    }
+
+    #[test]
+    fn stage_tags_are_never_spoken() {
+        assert_eq!(strip_stage_tags("[BANTER] Thrilled is a strong word, Marcus."), "Thrilled is a strong word, Marcus.");
+        assert_eq!(strip_stage_tags("Even the dust is hand-painted [REACTION:marcus]."), "Even the dust is hand-painted.");
+        assert_eq!(
+            strip_stage_tags("Ghibli opened a lab. [VISUAL: news_intro/assets/story_cards/card 1.png] [SETUP]  It restores cels."),
+            "Ghibli opened a lab. It restores cels."
+        );
+        assert_eq!(strip_stage_tags("[WALK]"), "");
+        assert_eq!(strip_stage_tags("A dangling [bracket stays"), "A dangling [bracket stays");
+        assert_eq!(strip_stage_tags("No tags here."), "No tags here.");
+    }
+
+    #[test]
+    fn tagged_lines_reach_kokoro_clean_and_tag_only_lines_are_skipped() {
+        let voices = AnchorVoices { marcus: "m".into(), elena: "e".into() };
+        let mut script = script();
+        let first = &mut script.segments[0].lines[0];
+        first.spoken_text = format!("[BANTER] {} [REACTION:elena]", first.spoken_text);
+        first.phonetic_text = format!("[VISUAL: a.png] {}", first.phonetic_text);
+        let mut tag_only = script.segments[0].lines[0].clone();
+        tag_only.spoken_text = "[WALK]".into();
+        tag_only.phonetic_text = String::new();
+        script.segments[0].lines.push(tag_only);
+        let total_lines = script.segments.iter().map(|s| s.lines.len()).sum::<usize>();
+        let planned = plan_lines(&script, &voices);
+        assert_eq!(planned.len(), total_lines - 1);
+        assert!(planned.iter().all(|l| !l.segment.text.contains('[') && !l.segment.text.contains(']')));
+        assert!(!planned[0].segment.text.is_empty());
     }
 
     #[test]
