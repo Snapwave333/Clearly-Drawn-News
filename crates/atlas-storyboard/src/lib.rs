@@ -143,22 +143,83 @@ pub struct DirectorClient {
 
 impl DirectorClient {
     pub fn from_env() -> Option<Self> {
-        let endpoint = std::env::var("ATLAS_DIRECTOR_URL")
-            .unwrap_or_else(|_| "https://integrate.api.nvidia.com/v1/chat/completions".into());
-        let api_key = std::env::var("ATLAS_DIRECTOR_API_KEY")
-            .or_else(|_| std::env::var("NVIDIA_API_KEY"))
-            .ok()?;
-        let model = std::env::var("ATLAS_DIRECTOR_MODEL")
-            .unwrap_or_else(|_| "meta/llama-3.2-11b-vision-instruct".into());
+        Self::from_lookup(|name| std::env::var(name).ok().filter(|value| !value.trim().is_empty()))
+    }
+
+    /// Builds the client from `ATLAS_DIRECTOR_URL`, `ATLAS_DIRECTOR_MODEL`, and the first key found in
+    /// `ATLAS_DIRECTOR_API_KEY`, then `ANTHROPIC_API_KEY` (Anthropic URL only), then `NVIDIA_API_KEY`.
+    /// `ATLAS_DIRECTOR_TIMEOUT_SECS` overrides the request timeout (180 s for Anthropic, 60 s otherwise).
+    pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Option<Self> {
+        let endpoint = lookup("ATLAS_DIRECTOR_URL").unwrap_or_else(|| DEFAULT_DIRECTOR_URL.into());
+        let anthropic = is_anthropic_endpoint(&endpoint);
+        let api_key = lookup("ATLAS_DIRECTOR_API_KEY")
+            .or_else(|| if anthropic { lookup("ANTHROPIC_API_KEY") } else { None })
+            .or_else(|| lookup("NVIDIA_API_KEY"))?;
+        let model = lookup("ATLAS_DIRECTOR_MODEL").unwrap_or_else(|| {
+            if anthropic { DEFAULT_ANTHROPIC_MODEL.into() } else { DEFAULT_NVIDIA_MODEL.into() }
+        });
+        let timeout = lookup("ATLAS_DIRECTOR_TIMEOUT_SECS")
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .filter(|seconds| *seconds > 0)
+            .unwrap_or(if anthropic { 180 } else { 60 });
         Some(Self {
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
+                .timeout(std::time::Duration::from_secs(timeout))
                 .build()
                 .unwrap_or_default(),
             endpoint,
             api_key,
             model,
         })
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub fn is_anthropic(&self) -> bool {
+        is_anthropic_endpoint(&self.endpoint)
+    }
+
+    /// OpenAI-style chat body. Anthropic's compatible endpoint rejects `temperature` on current Claude
+    /// models and ignores `response_format`, so both are omitted there and `max_tokens` is set instead.
+    fn chat_body(&self, system: &str, user: &str, temperature: f64) -> serde_json::Value {
+        let mut body = serde_json::json!({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user}
+            ]
+        });
+        if self.is_anthropic() {
+            body["max_tokens"] = serde_json::json!(ANTHROPIC_MAX_TOKENS);
+        } else {
+            body["temperature"] = serde_json::json!(temperature);
+            body["response_format"] = serde_json::json!({"type": "json_object"});
+        }
+        body
+    }
+
+    async fn chat(&self, system: &str, user: &str, temperature: f64) -> AtlasResult<String> {
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&self.chat_body(system, user, temperature))
+            .send()
+            .await
+            .map_err(director_error)?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            let detail: String = body.chars().take(300).collect();
+            return Err(AtlasError::Config(format!("Creative director returned {status}: {detail}")));
+        }
+        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
+        payload["choices"][0]["message"]["content"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| AtlasError::Config("Director response omitted JSON content".into()))
     }
 
     pub async fn create_plan(
@@ -168,28 +229,14 @@ impl DirectorClient {
         beat_count: usize,
     ) -> AtlasResult<StoryboardPlan> {
         let prompt = director_prompt(topic, format, beat_count);
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
-            .json(&serde_json::json!({
-                "model": self.model,
-                "temperature": 0.72,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": "You are the creative director for an educational animation studio. Return valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ]
-            }))
-            .send()
-            .await
-            .map_err(director_error)?
-            .error_for_status()
-            .map_err(director_error)?;
-        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
-        let content = payload["choices"][0]["message"]["content"]
-            .as_str()
-            .ok_or_else(|| AtlasError::Config("Director response omitted JSON content".into()))?;
+        let content = self
+            .chat(
+                "You are the creative director for an educational animation studio. Return valid JSON only.",
+                &prompt,
+                0.72,
+            )
+            .await?;
+        let content = content.as_str();
         let mut plan: StoryboardPlan = serde_json::from_str(strip_json_fence(content))
             .map_err(|error| AtlasError::Config(format!("Invalid director storyboard: {error}")))?;
         plan.validate(beat_count)?;
@@ -197,58 +244,22 @@ impl DirectorClient {
     }
 
     pub async fn complete_json(&self, system: &str, prompt: &str, temperature: f64) -> AtlasResult<serde_json::Value> {
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
-            .json(&serde_json::json!({
-                "model": self.model,
-                "temperature": temperature,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt}
-                ]
-            }))
-            .send()
-            .await
-            .map_err(director_error)?
-            .error_for_status()
-            .map_err(director_error)?;
-        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
-        let content = payload["choices"][0]["message"]["content"]
-            .as_str()
-            .ok_or_else(|| AtlasError::Config("Director response omitted JSON content".into()))?;
+        let content = self.chat(system, prompt, temperature).await?;
+        let content = content.as_str();
         serde_json::from_str(strip_json_fence(content))
             .map_err(|error| AtlasError::Config(format!("Director returned invalid JSON: {error}")))
     }
 
     pub async fn create_topic(&self, existing_titles: &[String]) -> AtlasResult<TopicIdea> {
         let existing = existing_titles.join(" | ");
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
-            .json(&serde_json::json!({
-                "model": self.model,
-                "temperature": 0.85,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": "You select accurate evergreen topics for an educational animation channel. Return valid JSON only."},
-                    {"role": "user", "content": format!("Choose one fresh educational topic with a visually explainable mechanism, broad curiosity appeal, and reliable public facts. Avoid news, politics, medical advice, financial advice, dangerous instructions, and every existing title. Existing titles: {existing}. Return exactly title and rationale.")}
-                ]
-            }))
-            .send()
-            .await
-            .map_err(director_error)?
-            .error_for_status()
-            .map_err(director_error)?;
-        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
-        let content = payload["choices"][0]["message"]["content"]
-            .as_str()
-            .ok_or_else(|| {
-                AtlasError::Config("Topic director response omitted JSON content".into())
-            })?;
+        let content = self
+            .chat(
+                "You select accurate evergreen topics for an educational animation channel. Return valid JSON only.",
+                &format!("Choose one fresh educational topic with a visually explainable mechanism, broad curiosity appeal, and reliable public facts. Avoid news, politics, medical advice, financial advice, dangerous instructions, and every existing title. Existing titles: {existing}. Return exactly title and rationale."),
+                0.85,
+            )
+            .await?;
+        let content = content.as_str();
         let stripped = strip_json_fence(content);
         let idea: TopicIdea = if let Ok(parsed) = serde_json::from_str::<TopicIdea>(stripped) {
             parsed
@@ -331,14 +342,30 @@ fn director_prompt(topic: &str, format: &str, beat_count: usize) -> String {
     )
 }
 
+/// Extracts the JSON object from a model reply: strips a ```json fence and any prose around the
+/// outermost `{ ... }` (Claude does not honor `response_format`).
 fn strip_json_fence(value: &str) -> &str {
-    value
-        .trim()
+    let trimmed = value.trim();
+    let unfenced = trimmed
         .strip_prefix("```json")
-        .and_then(|value| value.strip_suffix("```"))
+        .or_else(|| trimmed.strip_prefix("```"))
+        .and_then(|value| value.trim_end().strip_suffix("```"))
         .map(str::trim)
-        .unwrap_or_else(|| value.trim())
+        .unwrap_or(trimmed);
+    match (unfenced.find('{'), unfenced.rfind('}')) {
+        (Some(open), Some(close)) if close > open => &unfenced[open..=close],
+        _ => unfenced,
+    }
 }
+
+fn is_anthropic_endpoint(endpoint: &str) -> bool {
+    endpoint.contains("api.anthropic.com")
+}
+
+const DEFAULT_DIRECTOR_URL: &str = "https://integrate.api.nvidia.com/v1/chat/completions";
+const DEFAULT_NVIDIA_MODEL: &str = "meta/llama-3.2-11b-vision-instruct";
+const DEFAULT_ANTHROPIC_MODEL: &str = "claude-sonnet-5-5";
+const ANTHROPIC_MAX_TOKENS: u32 = 8192;
 
 fn director_error(error: reqwest::Error) -> AtlasError {
     AtlasError::Config(format!("Creative director request failed: {}", error.without_url()))
@@ -371,6 +398,44 @@ mod tests {
                 },
             }],
         }
+    }
+
+    fn lookup(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |name| pairs.iter().find(|(key, _)| *key == name).map(|(_, value)| value.to_string())
+    }
+
+    #[test]
+    fn anthropic_director_omits_temperature_and_sets_max_tokens() {
+        let director = DirectorClient::from_lookup(lookup(&[
+            ("ATLAS_DIRECTOR_URL", "https://api.anthropic.com/v1/chat/completions"),
+            ("ANTHROPIC_API_KEY", "k"),
+        ]))
+        .unwrap();
+        assert!(director.is_anthropic());
+        assert_eq!(director.model(), DEFAULT_ANTHROPIC_MODEL);
+        let body = director.chat_body("sys", "user", 0.6);
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("response_format").is_none());
+        assert_eq!(body["max_tokens"], ANTHROPIC_MAX_TOKENS);
+        assert_eq!(body["messages"][0]["role"], "system");
+    }
+
+    #[test]
+    fn nvidia_director_keeps_temperature_and_ignores_anthropic_key() {
+        assert!(DirectorClient::from_lookup(lookup(&[("ANTHROPIC_API_KEY", "k")])).is_none());
+        let director = DirectorClient::from_lookup(lookup(&[("NVIDIA_API_KEY", "k")])).unwrap();
+        assert!(!director.is_anthropic());
+        let body = director.chat_body("sys", "user", 0.6);
+        assert_eq!(body["temperature"], 0.6);
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+
+    #[test]
+    fn json_is_extracted_from_fences_and_prose() {
+        assert_eq!(strip_json_fence("```json\n{\"a\": 1}\n```"), "{\"a\": 1}");
+        assert_eq!(strip_json_fence("```\n{\"a\": 1}\n```"), "{\"a\": 1}");
+        assert_eq!(strip_json_fence("Here you go:\n{\"a\": {\"b\": 2}}\nThanks"), "{\"a\": {\"b\": 2}}");
+        assert_eq!(strip_json_fence("no json"), "no json");
     }
 
     #[test]
