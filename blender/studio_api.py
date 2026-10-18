@@ -128,6 +128,25 @@ def use_camera(role, manifest=None):
     return obj
 
 
+# ---------------------------------------------------------------- anchors
+
+def anchor_specs(manifest=None):
+    manifest = manifest or load_manifest()
+    return {role: spec for role, spec in manifest["anchors"].items() if not role.startswith("_")}
+
+
+def anchor(role, manifest=None):
+    """Return the scene object for 'anchor_female' (Elena) or 'anchor_male' (Marcus)."""
+    _require_bpy()
+    specs = anchor_specs(manifest)
+    if role not in specs:
+        raise KeyError("unknown anchor role '{}'; known: {}".format(role, ", ".join(specs)))
+    obj = bpy.data.objects.get(specs[role]["object"])
+    if obj is None:
+        raise LookupError("anchor '{}' object '{}' is not in this .blend".format(role, specs[role]["object"]))
+    return obj
+
+
 # ---------------------------------------------------------------- screens
 
 def screen_materials(role, manifest=None):
@@ -315,8 +334,8 @@ def validate(manifest=None):
     for role, name in manifest["cameras"].items():
         obj = bpy.data.objects.get(name)
         check("camera {} ({})".format(name, role), obj is not None and obj.type == "CAMERA")
-    for anchor, spec in manifest["anchors"].items():
-        check("anchor {} armature {}".format(anchor, spec["armature"]), spec["armature"] in bpy.data.objects)
+    for role, spec in anchor_specs(manifest).items():
+        check("anchor {} ({}) object {}".format(role, spec["name"], spec["object"]), spec["object"] in bpy.data.objects)
     for role, spec in manifest["screens"].items():
         materials = screen_materials(role, manifest)
         check("screen {} materials ({})".format(role, ", ".join(m.name for m in materials[:4]) or "none"), bool(materials))
