@@ -196,7 +196,10 @@ impl TikTokClient {
     pub fn new(credentials: TikTokCredentials) -> Self {
         Self {
             credentials,
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .build()
+                .unwrap_or_default(),
         }
     }
 

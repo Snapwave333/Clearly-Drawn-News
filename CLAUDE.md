@@ -1,4 +1,17 @@
-# CLAUDE.md — ATLAS STUDIO Development Guide
+# CLAUDE.md — Clearly Drawn Studios (ATLAS engine) Development Guide
+
+## Brand Identity
+
+| Layer | Name | Source of truth |
+|-------|------|-----------------|
+| Company | Clearly Drawn Studios | `atlas_core::COMPANY_NAME` |
+| Company tagline | Every story, clearly drawn. | `atlas_core::COMPANY_TAGLINE` |
+| Production engine | ATLAS (`atlas` CLI) | `atlas_core::PRODUCTION_ENGINE` |
+| Flagship show | Clearly Drawn News | `atlas_core::SHOW_TITLE` |
+| Channel | Clearly Drawn | `atlas_core::CHANNEL_NAME` |
+| Office simulation | Clearly Drawn Studios HQ | `office-ui/` |
+
+Use these constants instead of hardcoding brand strings in Rust.
 
 ## Quick Start
 
@@ -7,7 +20,7 @@ cd C:\Users\chrom\Desktop\Marker\atlas-studio
 cargo build --release                    # Build optimized binary
 .\target\release\atlas.exe doctor        # Verify tool discovery
 .\target\release\atlas.exe --help        # Show all commands
-cargo test                               # Run all 20 tests
+cargo test                               # Run the workspace test suite
 ```
 
 ## Project Structure
@@ -32,6 +45,27 @@ atlas-studio/
 | `atlas topics create "Title"` | Create new project/topic |
 | `atlas produce --topic <id>` | Render real Blender frames, synthesize Kokoro narration, and assemble MP4 |
 | `atlas produce --topic <id> --reuse-rendered` | Reassemble from a verified existing frame cache |
+| `ATLAS_RENDER_JOBS=2 atlas produce --topic <id>` | Render up to N Blender shots in parallel (default 1) |
+| `ATLAS_TTS_JOBS=2 atlas produce --topic <id>` | Synthesize up to N Kokoro narration segments in parallel (default 1) |
+| `atlas news research` | Live RSS/Atom wire from Anime News Network, Cartoon Brew, Animation Magazine, and Crunchyroll News; stories from 7 days, cross-outlet corroboration, rumor flagging; falls back to the curated wire (labelled) when feeds are unreachable |
+| `atlas news health [--runs 20]` | Feed reliability (success rate, average items, failure streak, last error) and fact-check pass rates from `news/wire_health.json`, which every wire run appends to (last 200 kept); flags feeds failing 3+ runs in a row; such feeds are skipped for 6 hours after their last failed attempt, then retried (skips are not counted as failures) |
+| `NVIDIA_API_KEY=... atlas news produce` | Director (LLM) writes each live story's Marcus/Elena dialogue from verified facts only, in parallel; invalid segments fall back to templates. Without a key, template segments run about 1 minute per story and production halts if under 15 minutes. Provenance in `script_provenance.json` |
+| `atlas news produce --skip-telegram-wait` | Clearly Drawn News episode package in `news/EP-###/` (fact check, slate, approval, script, rights manifest, timings, status) |
+| `ATLAS_MARCUS_VOICE` / `ATLAS_ELENA_VOICE` | Kokoro voices for the anchors (defaults `am_michael` / `af_bella`); `atlas news produce` writes `audio/episode_narration.wav` (two-pass loudnorm to -16 LUFS / -1.5 dBTP, 48 kHz), per-line `audio/lines/*.wav`, and `voice_timeline.json` for Unreal lip sync, and reports runtime from the synthesized audio |
+| `atlas news animatic --episode EP-001` | Re-render `preview/animatic.mp4` (1280x720 H.264/AAC review cut: show header, segment titles, speaker lower thirds, on-air captions over the normalized narration; marked not for broadcast). `atlas news produce` renders it automatically after voicing; `ATLAS_PREVIEW_FONT` picks the font |
+| `TELEGRAM_BOT_TOKEN=... atlas news produce` | Same, gated on Telegram editorial approval; the token is never stored in code |
+| `ATLAS_UE_CMD` / `ATLAS_UE_PROJECT` / `ATLAS_UE_MAP` | Phase 6 of `atlas news produce`: launches the Unreal editor (windowed `UnrealEditor.exe` next to `-Cmd` when present, or `ATLAS_UE_EDITOR`) with `unreal/Content/Python/clearly_drawn_produce.py`, which loads the map, runs `setup_newsroom_studio.py` if present, dresses the anchors, builds `LS_EP_###`, renders PNG frames with Movie Render Queue, writes `render/handoff.json`, and quits; ATLAS then muxes frames + narration into `final/episode.mp4`. `ATLAS_RENDER_PRESET` (`fast` 1 sample default for an RTX 4070, `balanced` 4, `quality` 8), `ATLAS_RENDER_WIDTH`/`HEIGHT`/`FPS` (1920/1080/30), `CLEARLY_DRAWN_TEMPORAL_SAMPLES` override; `status.json` records render minutes, real-time factor, and estimated episodes/day, `CLEARLY_DRAWN_RUN_SETUP=0`, `CLEARLY_DRAWN_KEEP_EDITOR_OPEN=1`, `ATLAS_UNREAL_SCRIPTS`. Skipped (with reason) when the editor, project, or voices are missing. Lip sync: ATLAS writes `lipsync.json` (per-anchor 30 fps jaw-open curves from each line's audio envelope; duo lines move both) and `clearly_drawn_lipsync.py` keys `CTRL_C_jaw` on each anchor's MetaHuman face control rig (`CLEARLY_DRAWN_FACE_RIG`, `CLEARLY_DRAWN_JAW_CONTROL`, `CLEARLY_DRAWN_JAW_SCALE`=0.6, `CLEARLY_DRAWN_LIPSYNC=0` to disable); result in `render/handoff.json` |
+| `py "<repo>/unreal/Content/Python/clearly_drawn_wardrobe.py"` | Unreal Editor Python console: dry run listing which dress-code clothing each MetaHuman would get |
+| `py "<repo>/unreal/Content/Python/clearly_drawn_wardrobe.py" --apply` | Dress MetaHumans (Torso/Legs/Feet) per `unreal/wardrobe.json`; report in `Saved/ClearlyDrawn/wardrobe_report.json` |
+| `py "<repo>/unreal/Content/Python/clearly_drawn_newsroom_sequence.py" <episode_dir> [--apply]` | Unreal Editor: build `LS_EP_###` Level Sequence from an episode package (per-anchor VO tracks from `voice_timeline.json`, camera cuts from `script.json` mapped to CineCameras via `unreal/newsroom_cameras.json`); dry run reports matched cameras |
+| `atlas cache stats` | Disk usage of narration, render, B-roll, and vector caches |
+| `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched); the daemon runs this weekly with 30-day retention |
+| `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
+| `atlas daemon start` (news) | Produces Clearly Drawn News at `ATLAS_NEWS_HOURS` in the PC's local time (default `12,20` = 2 episodes/day; `0,6,12,18` for 4; `off` to disable). Each slot runs once, only with Telegram approval (`TELEGRAM_BOT_TOKEN`, optional `TELEGRAM_CHAT_ID`) or explicit `ATLAS_NEWS_AUTO_APPROVE=1`; failures back off per slot; `daemon/news_last_run` holds the last slot |
+| `news/aired_stories.json` | Live-wire stories aired in the last 7 days (by id, source URL, or headline) are skipped so daily episodes never repeat news |
+| `stage_timings.json` | Written next to each `final.mp4`; per-stage seconds plus the slowest stage |
+| `audio/segments/<hash>.wav` | Narration cache keyed by text, voice, speed, and language; delete to force re-synthesis |
+| `media/<id>/<format>/attribution.json` | B-roll cache; reused when both image and video files are present |
 | `atlas publish --topic <id> --platform tiktok` | Publish whiteboard Short directly to TikTok (@focogaming) |
 | `atlas publish --topic <id> --platform both` | Publish multi-platform (YouTube + TikTok) |
 | `atlas tiktok info --user focogaming` | Inspect TikTok account connection via Upload-Post |
@@ -57,7 +91,7 @@ atlas-studio/
 | `atlas-blender` | `lib.rs` | `BlenderPipeline`, `ShotSpec`, `RenderJob`, Grease Pencil script generation |
 | `atlas-kokoro` | `lib.rs` | `KokoroPipeline`, `NarrationSegment`, `load_youtube_credentials()` |
 | `atlas-ffmpeg` | `lib.rs` | `FfmpegAssembler`, `EditDecisionList`, filter_complex builder |
-| `atlas-cli` | `main.rs` | All CLI commands, vertical slice in `cmd_produce()`, multi-platform `cmd_publish()` |
+| `atlas-cli` | `main.rs` + `produce/publish/production/broll/planning/audio/analytics/memory/daemon/cache/news*.rs` | CLI definitions and dispatch in `main.rs`; `cmd_produce()` and thumbnails in `produce.rs`; `cmd_publish()`/`cmd_tiktok()` in `publish.rs`; stage timing, render fan-out, and duration QA in `production.rs`; B-roll import in `broll.rs`; daemon loop and failure ledger in `daemon.rs`; cache tooling in `cache.rs`; beat planning, lip-sync cues, and captions in `planning.rs`; Freesound and AIWaves scoring in `audio.rs`; `analytics.rs` and `memory.rs` commands; newsroom pipeline in `news.rs`, `news_voice.rs`, and `news_health.rs` |
 
 ## Development Workflow
 
@@ -117,7 +151,10 @@ cargo build --release    # Optimized (target/release/atlas.exe)
 
 | File | Why |
 |------|-----|
-| `crates/atlas-cli/src/main.rs` | All CLI commands, vertical slice logic |
+| `crates/atlas-cli/src/main.rs` | CLI definitions and command dispatch |
+| `crates/atlas-cli/src/produce.rs` | Whiteboard vertical slice (`cmd_produce`) |
+| `crates/atlas-cli/src/news.rs` | Clearly Drawn News episode pipeline |
+| `.github/workflows/ci.yml` | CI: strict clippy, tests (with FFmpeg), Unreal script checks, office UI build |
 | `crates/atlas-analytics/src/youtube.rs` | YouTube OAuth + Analytics API |
 | `crates/atlas-kokoro/src/lib.rs` | Kokoro TTS + credentials loading |
 | `crates/atlas-blender/src/lib.rs` | Blender script generation |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Authorized, idempotent TikTok video publisher for ATLAS STUDIO Whiteboard Pipeline.
+"""Authorized, idempotent TikTok video publisher for the Clearly Drawn Studios ATLAS Whiteboard Pipeline.
 Integrates with Upload-Post (https://www.upload-post.com/mcp/tiktok/) to publish
 educational whiteboard animations to TikTok (@focogaming).
 

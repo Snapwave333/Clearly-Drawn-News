@@ -13,6 +13,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+chrono = { workspace = true }
+quick-xml = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

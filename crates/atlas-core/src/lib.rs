@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use thiserror::Error;
 
-/// Errors that can occur across ATLAS STUDIO.
+/// Errors that can occur across the Clearly Drawn Studios ATLAS engine.
 #[derive(Error, Debug)]
 pub enum AtlasError {
     #[error("tool not found: {0}")]
@@ -314,6 +314,9 @@ pub struct Artifact {
 }
 
 /// Clearly Drawn News Show Identity
+pub const COMPANY_NAME: &str = "Clearly Drawn Studios";
+pub const COMPANY_TAGLINE: &str = "Every story, clearly drawn.";
+pub const PRODUCTION_ENGINE: &str = "ATLAS";
 pub const SHOW_TITLE: &str = "Clearly Drawn News";
 pub const CHANNEL_NAME: &str = "Clearly Drawn";
 pub const SHOW_TAGLINE: &str = "Animation news with personality.";

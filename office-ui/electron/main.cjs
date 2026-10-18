@@ -162,9 +162,9 @@ function updateTrayMenu() {
     hour12: true
   }).format(new Date())
 
-  tray.setToolTip(`Atlas Studio Office — 38 Agents (Denver: ${denverTimeStr})`)
+  tray.setToolTip(`Clearly Drawn Studios HQ — 38 Agents (Denver: ${denverTimeStr})`)
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Atlas Studio Office (3D)', click: showWindow },
+    { label: 'Open Clearly Drawn Studios HQ (3D)', click: showWindow },
     {
       label: '⚡ Launch Unreal Virtual Spectator View (3D Office)',
       click: () => {

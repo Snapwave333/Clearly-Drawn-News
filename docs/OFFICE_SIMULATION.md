@@ -1,8 +1,8 @@
-# Atlas Studio 3D Office & MetaHuman Simulation
+# Clearly Drawn Studios HQ — 3D Office & MetaHuman Simulation
 
 ## Overview
 
-The Atlas Studio 3D Virtual Spectator simulation provides a real-time, 24/7 digital twin of the 38 autonomous agents collaborating inside Atlas Studio. Built on Unreal Engine 5.8 with DirectX 12 SM6, Lumen dynamic global illumination, and native MetaHuman characters, the simulation renders an immersive isometric studio office synchronized directly with the local SQLite WAL message bus and agent state.
+The Clearly Drawn Studios 3D Virtual Spectator simulation provides a real-time, 24/7 digital twin of the 38 autonomous agents collaborating inside Clearly Drawn Studios. Built on Unreal Engine 5.8 with DirectX 12 SM6, Lumen dynamic global illumination, and native MetaHuman characters, the simulation renders an immersive isometric studio office synchronized directly with the local SQLite WAL message bus and agent state.
 
 ---
 
@@ -47,17 +47,17 @@ To distinguish agent departments visually, 7 distinct outfits are assigned acros
 ```mermaid
 flowchart LR
     subgraph Outfits["7 Functional Department Outfits"]
-        O0["0. Executive / Leadership<br/>Fab Sleeveless Turtleneck"]
-        O1["1. Engineering / Systems<br/>MetaHuman Fitted Technical"]
-        O2["2. Creative / Media<br/>MetaHuman Navy Tailored"]
-        O3["3. Marketing / Growth<br/>MetaHuman Graphite Smart Casual"]
-        O4["4. Operations / Support<br/>MetaHuman Burgundy Executive"]
-        O5["5. Analytics / Optimization<br/>MetaHuman Forest Green Professional"]
-        O6["6. Research / Strategy<br/>MetaHuman Steel Grey Modernist"]
+        O0["0. Executive / Leadership<br/>Unstructured Blazer & Oxford"]
+        O1["1. Engineering / Systems<br/>Merino Quarter-Zip & Chinos"]
+        O2["2. Creative / Media<br/>Chore Jacket & Knit Tee"]
+        O3["3. Marketing / Growth<br/>Knit Polo & Pleated Trousers"]
+        O4["4. Operations / Support<br/>Shawl Cardigan & Crewneck"]
+        O5["5. Analytics / Optimization<br/>Merino Crewneck & Chinos"]
+        O6["6. Research / Strategy<br/>Suede Overshirt & Mock-Neck"]
     end
 ```
 
-Every agent uses native MetaHuman components (`SKM_Body`, `SKM_Face`, `MH_Groom_Head`, and the department's outfit mesh) attached to `BP_CrowdActor`, seated facing their workstation monitor.
+All looks follow the elevated smart casual dress code in [`unreal/wardrobe.json`](../unreal/wardrobe.json) (no ties, suits, hoodies, or athleisure), applied by `unreal/Content/Python/clearly_drawn_wardrobe.py`. Every agent uses native MetaHuman components (`SKM_Body`, `SKM_Face`, `MH_Groom_Head`, and the department's outfit mesh) attached to `BP_CrowdActor`, seated facing their workstation monitor.
 
 ---
 

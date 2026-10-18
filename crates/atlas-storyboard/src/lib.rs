@@ -2,6 +2,7 @@ use atlas_core::{AtlasError, AtlasResult};
 use serde::{Deserialize, Serialize};
 
 pub mod pronunciation;
+pub mod story_script;
 pub mod two_anchor_script;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -132,6 +133,7 @@ impl StoryboardPlan {
     }
 }
 
+#[derive(Clone)]
 pub struct DirectorClient {
     client: reqwest::Client,
     endpoint: String,
@@ -192,6 +194,33 @@ impl DirectorClient {
             .map_err(|error| AtlasError::Config(format!("Invalid director storyboard: {error}")))?;
         plan.validate(beat_count)?;
         Ok(plan)
+    }
+
+    pub async fn complete_json(&self, system: &str, prompt: &str, temperature: f64) -> AtlasResult<serde_json::Value> {
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&serde_json::json!({
+                "model": self.model,
+                "temperature": temperature,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt}
+                ]
+            }))
+            .send()
+            .await
+            .map_err(director_error)?
+            .error_for_status()
+            .map_err(director_error)?;
+        let payload: serde_json::Value = response.json().await.map_err(director_error)?;
+        let content = payload["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| AtlasError::Config("Director response omitted JSON content".into()))?;
+        serde_json::from_str(strip_json_fence(content))
+            .map_err(|error| AtlasError::Config(format!("Director returned invalid JSON: {error}")))
     }
 
     pub async fn create_topic(&self, existing_titles: &[String]) -> AtlasResult<TopicIdea> {
@@ -312,7 +341,7 @@ fn strip_json_fence(value: &str) -> &str {
 }
 
 fn director_error(error: reqwest::Error) -> AtlasError {
-    AtlasError::Config(format!("Creative director request failed: {error}"))
+    AtlasError::Config(format!("Creative director request failed: {}", error.without_url()))
 }
 
 #[cfg(test)]

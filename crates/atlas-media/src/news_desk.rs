@@ -38,8 +38,24 @@ pub struct VerifiedNewsItem {
     pub estimated_duration_mins: f64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WireOrigin {
+    LiveFeeds,
+    CuratedFallback,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NewsWire {
+    pub origin: WireOrigin,
+    pub items: Vec<VerifiedNewsItem>,
+    pub feeds: Vec<crate::news_wire::FeedStatus>,
+}
+
 pub struct AnimationNewsDesk {
     client: reqwest::Client,
+    max_age_days: i64,
+    max_stories: usize,
 }
 
 impl Default for AnimationNewsDesk {
@@ -52,9 +68,33 @@ impl AnimationNewsDesk {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(10))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(20))
                 .build()
                 .unwrap_or_default(),
+            max_age_days: 7,
+            max_stories: 8,
+        }
+    }
+
+    pub async fn fetch_wire(&self) -> NewsWire {
+        self.fetch_wire_skipping(&[]).await
+    }
+
+    pub async fn fetch_wire_skipping(&self, skip: &[String]) -> NewsWire {
+        let (entries, feeds) = crate::news_wire::fetch_feeds(&self.client, skip).await;
+        let items = crate::news_wire::build_wire(entries, chrono::Utc::now(), self.max_age_days, self.max_stories);
+        if items.is_empty() {
+            return NewsWire {
+                origin: WireOrigin::CuratedFallback,
+                items: self.fetch_curated_wire().await,
+                feeds,
+            };
+        }
+        NewsWire {
+            origin: WireOrigin::LiveFeeds,
+            items,
+            feeds,
         }
     }
 

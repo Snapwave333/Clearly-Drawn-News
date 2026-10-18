@@ -103,7 +103,7 @@ impl RightsRecord {
             asset_id: asset_id.to_string(),
             sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
             media_type: MediaType::OriginalUnrealFootage,
-            creator_or_holder: "Clearly Drawn News Virtual Studio".into(),
+            creator_or_holder: atlas_core::COMPANY_NAME.into(),
             source_url: None,
             acquisition_timestamp: Utc::now(),
             license_type: "Proprietary Original".into(),

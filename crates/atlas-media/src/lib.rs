@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 pub mod fact_checker;
 pub mod news_desk;
+pub mod news_wire;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -45,7 +46,11 @@ impl StockMediaClient {
         })?;
         let values = parse_properties(&properties);
         Ok(Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(180))
+                .build()
+                .unwrap_or_default(),
             unsplash_key: values
                 .get("unsplash.key")
                 .filter(|v| !v.is_empty())
