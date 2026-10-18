@@ -18,8 +18,16 @@ const DEFAULT_UE_CMD: &str =
 const DEFAULT_UE_PROJECT: &str =
     r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject";
 const ANCHOR_WARDROBE: &str = include_str!("../../../unreal/wardrobe.json");
-/// Clearly Drawn News only airs stories confirmed by two independent outlets.
+/// Clearly Drawn News only airs stories confirmed by two independent outlets
+/// (`ATLAS_NEWS_MIN_SOURCES` overrides, 1-3, for testing).
 const NEWS_MIN_SOURCES: usize = 2;
+
+fn news_min_sources(lookup: impl Fn(&str) -> Option<String>) -> usize {
+    lookup("ATLAS_NEWS_MIN_SOURCES")
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|n| (1..=3).contains(n))
+        .unwrap_or(NEWS_MIN_SOURCES)
+}
 
 /// Who signs off on a news slate before production continues.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -45,7 +53,8 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
     println!("══════════════════════════════════════════════════════════════════");
 
     let news_desk = AnimationNewsDesk::new();
-    let fact_checker = NewsFactChecker::new(NEWS_MIN_SOURCES, true);
+    let min_sources = news_min_sources(|name| std::env::var(name).ok());
+    let fact_checker = NewsFactChecker::new(min_sources, true);
     let policy = EpisodeDurationPolicy::default();
     let news_dir = store.data_dir().join("news");
 
@@ -162,6 +171,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 res => println!("\nScan Result: {:?}", res),
             }
         }
+        NewsAction::YoutubeCheck => news_publish::youtube_check().await?,
         NewsAction::Publish { episode, dry_run, override_hold } => {
             let episode_dir = news_dir.join(&episode);
             if !episode_dir.join("status.json").is_file() {
@@ -192,7 +202,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             }
             if report.passed_stories.is_empty() {
                 notify_best_effort(&format!(
-                    "⚠️ {SHOW_TITLE} {episode_id}: no fresh stories confirmed by {NEWS_MIN_SOURCES} sources; nothing produced."
+                    "⚠️ {SHOW_TITLE} {episode_id}: no fresh stories confirmed by {min_sources} sources; nothing produced."
                 ))
                 .await;
                 anyhow::bail!("Production halted: no fresh stories passed fact-checking");
@@ -214,7 +224,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             let proposal = slate_proposal(&episode_id, episode_number, &report);
             write_json(&episode_dir.join("slate.json"), &proposal)?;
             let (approval, approved) = if mode == NewsApprovalMode::Auto {
-                println!("  Auto-approved: {} stories passed {NEWS_MIN_SOURCES}-source fact-checking (Telegram gets a notice only).", report.passed_stories.len());
+                println!("  Auto-approved: {} stories passed {min_sources}-source fact-checking (Telegram gets a notice only).", report.passed_stories.len());
                 notify_best_effort(&format!(
                     "🎬 {SHOW_TITLE} {episode_id} production started: {} stories ({}).",
                     report.passed_stories.len(),
@@ -821,6 +831,13 @@ mod tests {
         assert_eq!(news_approval_mode(|_| Some("auto".into())), NewsApprovalMode::Auto);
         assert_eq!(news_approval_mode(|_| Some(" Telegram ".into())), NewsApprovalMode::Telegram);
         assert_eq!(news_approval_mode(|_| Some("whatever".into())), NewsApprovalMode::Auto);
+    }
+
+    #[test]
+    fn news_requires_two_sources_by_default() {
+        assert_eq!(news_min_sources(|_| None), 2);
+        assert_eq!(news_min_sources(|_| Some("1".into())), 1);
+        assert_eq!(news_min_sources(|_| Some("9".into())), 2);
     }
 
     #[test]

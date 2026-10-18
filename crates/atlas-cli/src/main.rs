@@ -346,6 +346,8 @@ enum NewsAction {
         #[arg(long)]
         dry_run_publish: bool,
     },
+    /// Read-only check that the stored YouTube login still works (channel info only).
+    YoutubeCheck,
     /// Build the YouTube package for an existing episode and upload it when ATLAS_NEWS_PUBLISH=on.
     Publish {
         #[arg(long)]

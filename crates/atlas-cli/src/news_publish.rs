@@ -221,11 +221,16 @@ pub(crate) fn build_metadata(script: &MasterEpisodeScript, report: &FactCheckRep
         atlas_core::SHOW_TAGLINE,
         script.episode_date
     );
+    let corroborated = report.passed_stories.iter().all(|s| s.secondary_source_url.is_some());
+    let sourcing = if corroborated {
+        "Every story comes from the outlets linked above and was confirmed by at least two of them"
+    } else {
+        "Every story comes from the outlets linked above"
+    };
     let disclosure = format!(
         "\nAbout this video: {show} is produced by {company} with AI. The anchors Marcus and Elena, \
-         their voices, and the virtual studio are synthetic, AI-generated media. Every story is drawn \
-         from the outlets linked above and confirmed by at least two sources; the anchors' opinions are \
-         their own commentary.\n\n#AnimationNews #Anime #Cartoons #ClearlyDrawnNews",
+         their voices, and the virtual studio are synthetic, AI-generated media. {sourcing}; the anchors' \
+         opinions are their own commentary.\n\n#AnimationNews #Anime #Cartoons #ClearlyDrawnNews",
         show = atlas_core::SHOW_TITLE,
         company = atlas_core::COMPANY_NAME,
     );
@@ -298,6 +303,23 @@ fn chunk_words(text: &str, max_chars: usize) -> Vec<String> {
     chunks
 }
 
+/// Splits text into the fewest cues of at most `max_chars`, balanced in length so no cue is a
+/// one-word flash.
+fn balanced_cues(text: &str, max_chars: usize) -> Vec<String> {
+    let greedy = chunk_words(text, max_chars);
+    if greedy.len() <= 1 {
+        return greedy;
+    }
+    let total = text.split_whitespace().map(|w| w.chars().count() + 1).sum::<usize>();
+    for width in (total / greedy.len()).max(1)..=max_chars {
+        let attempt = chunk_words(text, width);
+        if attempt.len() <= greedy.len() {
+            return attempt;
+        }
+    }
+    greedy
+}
+
 /// SubRip captions from the voiced timeline: long lines are split into two-line cues timed in
 /// proportion to their length.
 pub(crate) fn build_srt(lines: &[VoicedLine]) -> String {
@@ -305,7 +327,7 @@ pub(crate) fn build_srt(lines: &[VoicedLine]) -> String {
     let mut index = 1;
     for line in lines {
         let text = crate::news_voice::strip_stage_tags(&line.text);
-        let chunks = chunk_words(&text, CAPTION_CHARS);
+        let chunks = balanced_cues(&text, CAPTION_CHARS);
         let total_chars = chunks.iter().map(|c| c.chars().count()).sum::<usize>().max(1) as f32;
         let mut start = line.start_seconds;
         for chunk in chunks {
@@ -556,6 +578,23 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
     Ok(())
 }
 
+/// Read-only YouTube check: refreshes the stored OAuth token and reads the channel status
+/// (no uploads, nothing printed but channel facts).
+pub(crate) async fn youtube_check() -> anyhow::Result<()> {
+    let path = youtube_credentials_path();
+    println!("\nYouTube credentials: {}", path.display());
+    let client = YouTubeAnalyticsClient::new(load_youtube_credentials(&path).await?);
+    if !client.is_authenticated()? {
+        anyhow::bail!("no stored YouTube refresh token; run `atlas analytics auth` and sign in");
+    }
+    let channel = client.fetch_channel_status().await?;
+    println!("  Token refresh: OK");
+    println!("  Channel: {} (available: {})", channel.channel_id, channel.available);
+    println!("  Linked: {:?} | Long uploads: {:?} | Privacy: {:?}", channel.is_linked, channel.long_uploads_status, channel.privacy_status);
+    println!("  Made for kids: {:?}", channel.made_for_kids);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -605,6 +644,9 @@ mod tests {
         assert!(srt.starts_with("1\n00:00:00,000 --> 00:00:04,000\nHello there.\n\n2\n01:01:01,500"));
         assert!(srt.lines().all(|l| l.chars().count() <= CAPTION_LINE_CHARS || l.contains("-->")));
         assert!(srt.contains("\n3\n"));
+        let cues = balanced_cues("And I'm Elena. We read the animation news so you don't have to, and we check it twice.", CAPTION_CHARS);
+        assert_eq!(cues.len(), 2);
+        assert!(cues.iter().all(|c| c.split_whitespace().count() >= 5), "{cues:?}");
     }
 
     #[test]
