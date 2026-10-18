@@ -106,7 +106,20 @@ fn font_option() -> String {
         .ok()
         .filter(|font| !font.trim().is_empty() && font.chars().all(|c| c.is_alphanumeric() || c == ' ' || c == '-'))
         .map(|font| format!(":font='{font}'"))
+        .or_else(default_font_file)
         .unwrap_or_default()
+}
+
+/// FFmpeg 9 builds for Windows crash in drawtext when no font is given (fontconfig lookup), so
+/// default to a system font file there.
+fn default_font_file() -> Option<String> {
+    if !cfg!(windows) {
+        return None;
+    }
+    ["segoeui.ttf", "arial.ttf"].iter().find_map(|name| {
+        let path = Path::new(r"C:\Windows\Fonts").join(name);
+        path.is_file().then(|| format!(":fontfile='C\\:/Windows/Fonts/{name}'"))
+    })
 }
 
 fn filter_graph(titles: &[Title], captions: &[Caption], duration: f32, text_dir: &Path) -> anyhow::Result<String> {
@@ -159,7 +172,7 @@ pub(crate) async fn render_animatic(episode_dir: &Path, script: &MasterEpisodeSc
     let output = preview_dir.join("animatic.mp4");
     let result = tokio::process::Command::new("ffmpeg")
         .current_dir(&preview_dir)
-        .args(["-y", "-hide_banner", "-loglevel", "error", "-filter_complex_script", "graph.txt", "-i"])
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-/filter_complex", "graph.txt", "-i"])
         .arg(&narration)
         .args(["-map", "[v]", "-map", "0:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"])
         .args(["-c:a", "aac", "-b:a", "160k", "-t", &format!("{duration:.3}"), "animatic.mp4"])
