@@ -108,6 +108,10 @@ Rules:
 
 `atlas news produce` Phase 6 still films in Unreal; selecting the Blender studio as the Phase 6 engine is not wired yet.
 
+## Voice Backend Option: Voicebox
+
+Local [Voicebox](https://github.com/jamiepine/voicebox) v0.5.0 (MIT) is installed at `C:\Users\chrom\Tools\voicebox` (API `http://127.0.0.1:17493`, only while the app is open; `vb-status --start`). It is an optional backend beside Kokoro for the CDN anchors (`CDN Marcus` = `kokoro:am_michael`, `CDN Elena` = `kokoro:af_bella`) and for Thursday Throwback guests (`TT <Character>` profiles: clone from public-domain clips with `vb-clone --engine chatterbox`, or an original voice for silent-era characters). CLI tools `vb-status`, `vb-voices`, `vb-clone`, `vb-say`, `vb-batch` (per-line WAVs + `manifest.json`, strips `[bracket]` stage tags like `strip_tags`), `vb-export`, `vb-import`, `vb-transcribe`, `vb-models`, `vb-effects`, `vb-delete` live in `C:\Users\chrom\Tools\voicebox-cli` (source mirror: `integrations/voicebox-cli/`). `atlas news produce` does not call Voicebox yet. See `docs/VOICEBOX.md`.
+
 ## Legacy: Office Simulation
 
 The UE office simulation (`docs/OFFICE_SIMULATION.md`, `office-ui/`, `Launch_Unreal_3D_Office.bat`,
