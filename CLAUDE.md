@@ -91,13 +91,17 @@ shoot through one manifest and one helper. Never hardcode studio camera, screen,
 | Docs | `docs/BLENDER_STUDIO.md`, `AtlasStudioOffice\PIPELINE_STUDIO_README.md` (Mermaid pipeline flow and camera map) |
 
 Camera roles: `desk_hero`, `desk_wide`, `desk_closeup_elena`, `desk_closeup_marcus`, `desk_ots_graphics`,
-`interview_two_shot`, `interview_reverse`, `interview_monitor`, `bts_wide`, `bts_handheld`.
+`interview_two_shot`, `interview_reverse`, `interview_monitor`, `bts_wide`, `bts_handheld`, `throwback_walk_wide`, `throwback_walk_track`.
 Anchor roles: `anchor_female` = Elena, `anchor_male` = Marcus (currently Renderpeople Claudia/Eric models, not
 MetaHumans; MetaHuman exports will replace them under the same roles).
 
+Desk news defaults to the `weekend_update` camera style (`plan_desk`): `desk_wide` only for open/close, `desk_ots_graphics` on story setups, the reader's locked-off eye-level single for the story, `desk_hero` for banter and handoffs, and a quick cutaway to the other anchor's single on `[REACTION:elena]` / `[REACTION:marcus]`. Anchors alternate stories; cuts land on line boundaries. Script tags (`[BANTER]`, `[SETUP]`, `[REACTION:x]`, `[VISUAL: path]`, `[WALK]`) must be removed with `studio_api.strip_tags` before TTS/captions (not wired into `news_voice.rs` yet).
+
+Story visuals: `set_story_visual("elena"|"marcus", path)` puts slides, photos, clips or lower thirds on the monitor behind the reader (Elena `SM_BS_Screen_38` left, Marcus `SM_BS_Screen_41` right); `[VISUAL: path]` is auto-assigned per story, else the CDN brand loop. `blender/story_cards.py` makes brand-kit headline cards (Midnight/Signal Cyan, Inter), lower thirds, and the brand loop. Thursday Throwback uses `plan_throwback` (desk open, walk on the `throwback_walk_*` cameras, then interview cameras).
+
 Rules:
 - Interviews (Thursday Throwback, weekly, 30 min max) use both anchors in the interview corner and only interview cameras. Never the desk.
-- Guests (public-domain cartoons) appear only on the `guest_feed` monitor, never in the studio.
+- Guests (public-domain cartoons) appear only on the `guest_feed` monitor, never in the studio and never on desk monitors.
 - No primitives: downloaded assets only.
 - Never edit the original .blend files; headless jobs open a copy, never the file open in a visible Blender.
 - Run `verify_studio.py` after any studio change; rename a name only together with `studio_manifest.json`.
@@ -187,6 +191,7 @@ cargo build --release    # Optimized (target/release/atlas.exe)
 | `crates/atlas-cli/src/produce.rs` | Whiteboard vertical slice (`cmd_produce`) |
 | `crates/atlas-cli/src/news.rs` | Clearly Drawn News episode pipeline |
 | `blender/studio_api.py` | Blender CDN studio helper; reads `AtlasStudioOffice\studio_manifest.json` |
+| `blender/story_cards.py` | Brand-kit headline cards, lower thirds, CDN brand loop |
 | `docs/BLENDER_STUDIO.md` | Blender studio reuse, camera roles, rules, Mermaid diagrams |
 | `.github/workflows/ci.yml` | CI: strict clippy, tests (with FFmpeg), Unreal script checks, office UI build |
 | `crates/atlas-analytics/src/youtube.rs` | YouTube OAuth + Analytics API |
