@@ -19,6 +19,7 @@ mod cache;
 mod daemon;
 mod memory;
 mod news;
+mod news_aired;
 mod news_health;
 mod news_preview;
 mod news_voice;

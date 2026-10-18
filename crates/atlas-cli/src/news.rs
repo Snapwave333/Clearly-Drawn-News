@@ -155,9 +155,15 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             timer.begin("research");
             println!("\n[PHASE 1: RESEARCH & FACT-CHECK]");
-            let (wire_origin, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "produce").await;
+            let (wire_origin, mut report) = checked_wire(&news_desk, &fact_checker, &news_dir, "produce").await;
+            if wire_origin == WireOrigin::LiveFeeds {
+                let dropped = news_aired::drop_already_aired(&news_dir, &mut report, Utc::now());
+                if dropped > 0 {
+                    println!("  Skipped {dropped} stories already aired in the last 7 days.");
+                }
+            }
             if report.passed_stories.is_empty() {
-                anyhow::bail!("Production halted: no stories passed fact-checking");
+                anyhow::bail!("Production halted: no fresh stories passed fact-checking");
             }
             write_json(&episode_dir.join("fact_check.json"), &report)?;
             println!(
@@ -292,6 +298,14 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                         FilmingOutcome::Filmed { video, .. } => Some(video.clone()),
                         FilmingOutcome::Skipped(_) => None,
                     },
+                    "render": match &filming {
+                        FilmingOutcome::Filmed { render_seconds, duration_seconds, .. } => serde_json::json!({
+                            "render_seconds": render_seconds,
+                            "realtime_factor": render_seconds / duration_seconds.max(1.0),
+                            "estimated_episodes_per_day": daily_capacity(*render_seconds),
+                        }),
+                        FilmingOutcome::Skipped(_) => serde_json::Value::Null,
+                    },
                     "unreal": match &filming {
                         FilmingOutcome::Filmed { handoff, .. } => handoff.clone(),
                         FilmingOutcome::Skipped(_) => serde_json::Value::Null,
@@ -302,6 +316,10 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                     "company": atlas_core::COMPANY_NAME,
                 }),
             )?;
+
+            if wire_origin == WireOrigin::LiveFeeds {
+                news_aired::record_aired(&news_dir, &episode_id, &report.passed_stories, Utc::now())?;
+            }
 
             println!("\n══════════════════════════════════════════════════════════════════");
             println!("  {} — {}", SHOW_TITLE, episode.episode_title);
@@ -322,6 +340,7 @@ enum FilmingOutcome {
     Filmed {
         video: PathBuf,
         duration_seconds: f64,
+        render_seconds: f64,
         handoff: serde_json::Value,
     },
     Skipped(String),
@@ -334,14 +353,22 @@ impl FilmingOutcome {
 
     fn summary(&self) -> String {
         match self {
-            Self::Filmed { video, duration_seconds, .. } => format!(
-                "Unreal Engine episode rendered: {} ({:.1} min)",
+            Self::Filmed { video, duration_seconds, render_seconds, .. } => format!(
+                "Unreal Engine episode rendered: {} ({:.1} min of video in {:.1} min, {:.1}x real time; about {} episodes/day fit on this PC)",
                 video.display(),
-                duration_seconds / 60.0
+                duration_seconds / 60.0,
+                render_seconds / 60.0,
+                render_seconds / duration_seconds.max(1.0),
+                daily_capacity(*render_seconds)
             ),
             Self::Skipped(reason) => format!("Unreal Engine filming skipped: {reason}"),
         }
     }
+}
+
+fn daily_capacity(render_seconds: f64) -> u32 {
+    let per_episode = render_seconds * 1.15 + 600.0;
+    (86_400.0 / per_episode).floor() as u32
 }
 
 fn unreal_scripts_dir() -> PathBuf {
@@ -406,8 +433,12 @@ async fn film_in_unreal(episode_dir: &Path, voiced: bool) -> anyhow::Result<Film
 
     let editor = editor_executable(&ue_cmd);
     let (width, height) = (env_number("ATLAS_RENDER_WIDTH", 1920), env_number("ATLAS_RENDER_HEIGHT", 1080));
-    println!("  Launching {} to dress the anchors, build the sequence, and render {width}x{height} with Movie Render Queue...", editor.display());
-    println!("  A full 15-30 minute episode can take hours to render; leave the Unreal window open until it closes itself.");
+    let preset = std::env::var("ATLAS_RENDER_PRESET")
+        .ok()
+        .filter(|p| matches!(p.as_str(), "fast" | "balanced" | "quality"))
+        .unwrap_or_else(|| "fast".into());
+    println!("  Launching {} to dress the anchors, build the sequence, and render {width}x{height} ({preset} preset) with Movie Render Queue...", editor.display());
+    println!("  Leave the Unreal window open; it closes itself when the render finishes.");
     let mut command = tokio::process::Command::new(&editor);
     command
         .arg(&uproject)
@@ -418,11 +449,14 @@ async fn film_in_unreal(episode_dir: &Path, voiced: bool) -> anyhow::Result<Film
         .env("CLEARLY_DRAWN_HANDOFF", &handoff_path)
         .env("CLEARLY_DRAWN_WIDTH", width.to_string())
         .env("CLEARLY_DRAWN_HEIGHT", height.to_string())
+        .env("CLEARLY_DRAWN_RENDER_PRESET", &preset)
         .kill_on_drop(true);
     if let Ok(map) = std::env::var("ATLAS_UE_MAP") {
         command.env("CLEARLY_DRAWN_MAP", map);
     }
+    let render_started = std::time::Instant::now();
     let status = command.status().await?;
+    let render_seconds = render_started.elapsed().as_secs_f64();
 
     let handoff: serde_json::Value = std::fs::read(&handoff_path)
         .ok()
@@ -471,7 +505,7 @@ async fn film_in_unreal(episode_dir: &Path, voiced: bool) -> anyhow::Result<Film
         .output()
         .await?;
     let duration_seconds = String::from_utf8_lossy(&probe.stdout).trim().parse::<f64>().unwrap_or(0.0);
-    Ok(FilmingOutcome::Filmed { video, duration_seconds, handoff })
+    Ok(FilmingOutcome::Filmed { video, duration_seconds, render_seconds, handoff })
 }
 
 fn outlet_name(url: &str) -> Option<String> {
@@ -702,6 +736,13 @@ mod tests {
         }
         assert_eq!(next_episode(&dir), ("EP-008".into(), 8));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn daily_capacity_accounts_for_overhead() {
+        assert_eq!(daily_capacity(3600.0), 18);
+        assert_eq!(daily_capacity(4.0 * 3600.0), 5);
+        assert_eq!(daily_capacity(12.0 * 3600.0), 1);
     }
 
     #[test]

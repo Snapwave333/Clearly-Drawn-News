@@ -96,10 +96,29 @@ enum NewsApproval {
     AutoApproved,
 }
 
-fn news_schedule_hour(lookup: impl Fn(&str) -> Option<String>) -> Option<u32> {
-    lookup("ATLAS_NEWS_DAILY_HOUR")
-        .and_then(|value| value.trim().parse::<u32>().ok())
+fn news_schedule_hours(lookup: impl Fn(&str) -> Option<String>) -> Vec<u32> {
+    let raw = lookup("ATLAS_NEWS_HOURS")
+        .or_else(|| lookup("ATLAS_NEWS_DAILY_HOUR"))
+        .unwrap_or_else(|| DEFAULT_NEWS_HOURS.to_string());
+    let mut hours = raw
+        .split(',')
+        .filter_map(|value| value.trim().parse::<u32>().ok())
         .filter(|hour| *hour < 24)
+        .collect::<Vec<_>>();
+    hours.sort_unstable();
+    hours.dedup();
+    hours
+}
+
+const DEFAULT_NEWS_HOURS: &str = "12,20";
+
+fn current_news_slot(hours: &[u32], now: chrono::NaiveDateTime) -> Option<String> {
+    use chrono::Timelike;
+    let today = now.date();
+    match hours.iter().rev().find(|hour| **hour <= now.hour()) {
+        Some(hour) => Some(format!("{today}@{hour:02}")),
+        None => hours.last().map(|hour| format!("{}@{hour:02}", today.pred_opt().unwrap_or(today))),
+    }
 }
 
 fn news_approval(lookup: impl Fn(&str) -> Option<String>) -> Option<NewsApproval> {
@@ -113,40 +132,34 @@ fn news_approval(lookup: impl Fn(&str) -> Option<String>) -> Option<NewsApproval
     }
 }
 
-fn news_due(last_run: Option<chrono::NaiveDate>, now: chrono::DateTime<Utc>, hour: u32) -> bool {
-    use chrono::Timelike;
-    now.hour() >= hour && last_run != Some(now.date_naive())
-}
-
-fn last_news_run(marker: &Path) -> Option<chrono::NaiveDate> {
-    std::fs::read_to_string(marker)
-        .ok()
-        .and_then(|value| chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok())
+fn last_news_slot(marker: &Path) -> Option<String> {
+    std::fs::read_to_string(marker).ok().map(|value| value.trim().to_string())
 }
 
 async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<Utc>) -> anyhow::Result<()> {
     let env = |name: &str| std::env::var(name).ok();
-    let Some(hour) = news_schedule_hour(env) else {
+    let local_now = now.with_timezone(&chrono::Local).naive_local();
+    let Some(slot) = current_news_slot(&news_schedule_hours(env), local_now) else {
         return Ok(());
     };
     let marker = daemon_dir.join("news_last_run");
-    if !news_due(last_news_run(&marker), now, hour) {
+    if last_news_slot(&marker).as_deref() == Some(slot.as_str()) {
         return Ok(());
     }
     let failures_path = daemon_dir.join("production_failures.json");
     let mut failures = ProductionFailureLedger::load(&failures_path);
-    let key = format!("news:{}", now.date_naive());
+    let key = format!("news:{slot}");
     if failures.is_blocked(&key, now) {
         return Ok(());
     }
     let Some(approval) = news_approval(env) else {
         eprintln!(
-            "Daily Clearly Drawn News is due but has no approval path: set TELEGRAM_BOT_TOKEN for editorial approval, or ATLAS_NEWS_AUTO_APPROVE=1 to run without it."
+            "Clearly Drawn News slot {slot} is due but has no approval path: set TELEGRAM_BOT_TOKEN for editorial approval, or ATLAS_NEWS_AUTO_APPROVE=1 to run without it."
         );
-        std::fs::write(&marker, now.date_naive().to_string())?;
+        std::fs::write(&marker, &slot)?;
         return Ok(());
     };
-    println!("Daily Clearly Drawn News is due ({approval:?}); producing today's episode.");
+    println!("Clearly Drawn News slot {slot} is due ({approval:?}); producing the episode.");
     let produced = news::cmd_news(
         store,
         NewsAction::Produce {
@@ -158,7 +171,7 @@ async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<
     .await;
     match produced {
         Ok(()) => {
-            std::fs::write(&marker, now.date_naive().to_string())?;
+            std::fs::write(&marker, &slot)?;
             if failures.clear(&key) {
                 failures.save(&failures_path)?;
             }
@@ -166,7 +179,7 @@ async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<
         Err(error) => {
             let attempts = failures.record_failure(&key, &error.to_string(), now);
             failures.save(&failures_path)?;
-            eprintln!("Daily news attempt {attempts}/{MAX_PRODUCTION_ATTEMPTS} failed; backing off: {error}");
+            eprintln!("News slot {slot} attempt {attempts}/{MAX_PRODUCTION_ATTEMPTS} failed; backing off: {error}");
         }
     }
     Ok(())
@@ -188,10 +201,12 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
             }
             println!("ATLAS continuous publisher started for YouTube and TikTok.");
             let env = |name: &str| std::env::var(name).ok();
-            match (news_schedule_hour(env), news_approval(env)) {
-                (Some(hour), Some(approval)) => println!("Daily Clearly Drawn News scheduled at {hour:02}:00 UTC ({approval:?})."),
-                (Some(hour), None) => println!("Daily Clearly Drawn News scheduled at {hour:02}:00 UTC but has no approval path yet."),
-                (None, _) => println!("Daily Clearly Drawn News is off (set ATLAS_NEWS_DAILY_HOUR to enable)."),
+            let hours = news_schedule_hours(env);
+            let listed = hours.iter().map(|h| format!("{h:02}:00")).collect::<Vec<_>>().join(", ");
+            match (hours.is_empty(), news_approval(env)) {
+                (true, _) => println!("Clearly Drawn News scheduling is off (set ATLAS_NEWS_HOURS, e.g. 12,20)."),
+                (false, Some(approval)) => println!("Clearly Drawn News: {} episodes/day at {listed} local time ({approval:?}).", hours.len()),
+                (false, None) => println!("Clearly Drawn News: {} slots/day at {listed} local time, but nothing will run until TELEGRAM_BOT_TOKEN or ATLAS_NEWS_AUTO_APPROVE=1 is set.", hours.len()),
             }
             loop {
                 if pause_path.is_file() {
@@ -543,13 +558,18 @@ mod tests {
         chrono::DateTime::parse_from_rfc3339(stamp).unwrap().with_timezone(&Utc)
     }
 
+    fn local(stamp: &str) -> chrono::NaiveDateTime {
+        at(stamp).naive_utc()
+    }
+
     #[test]
-    fn daily_news_is_due_once_after_the_scheduled_hour() {
-        let today = at("2026-10-17T15:05:00Z");
-        assert!(!news_due(None, at("2026-10-17T13:59:00Z"), 14));
-        assert!(news_due(None, today, 14));
-        assert!(!news_due(Some(today.date_naive()), today, 14));
-        assert!(news_due(Some(today.date_naive()), at("2026-10-18T14:00:00Z"), 14));
+    fn news_slots_follow_the_schedule() {
+        let hours = vec![0, 6, 12, 18];
+        assert_eq!(current_news_slot(&hours, local("2026-10-17T05:59:00Z")).as_deref(), Some("2026-10-17@00"));
+        assert_eq!(current_news_slot(&hours, local("2026-10-17T06:00:00Z")).as_deref(), Some("2026-10-17@06"));
+        assert_eq!(current_news_slot(&hours, local("2026-10-17T23:10:00Z")).as_deref(), Some("2026-10-17@18"));
+        assert_eq!(current_news_slot(&[14], local("2026-10-17T09:00:00Z")).as_deref(), Some("2026-10-16@14"));
+        assert_eq!(current_news_slot(&[], local("2026-10-17T09:00:00Z")), None);
     }
 
     #[test]
@@ -557,9 +577,11 @@ mod tests {
         let env = |pairs: &'static [(&'static str, &'static str)]| {
             move |name: &str| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| v.to_string())
         };
-        assert_eq!(news_schedule_hour(env(&[])), None);
-        assert_eq!(news_schedule_hour(env(&[("ATLAS_NEWS_DAILY_HOUR", "14")])), Some(14));
-        assert_eq!(news_schedule_hour(env(&[("ATLAS_NEWS_DAILY_HOUR", "25")])), None);
+        assert_eq!(news_schedule_hours(env(&[])), vec![12, 20]);
+        assert!(news_schedule_hours(env(&[("ATLAS_NEWS_HOURS", "off")])).is_empty());
+        assert_eq!(news_schedule_hours(env(&[("ATLAS_NEWS_DAILY_HOUR", "14")])), vec![14]);
+        assert!(news_schedule_hours(env(&[("ATLAS_NEWS_DAILY_HOUR", "25")])).is_empty());
+        assert_eq!(news_schedule_hours(env(&[("ATLAS_NEWS_HOURS", "18, 0,6,12,6,99")])), vec![0, 6, 12, 18]);
         assert_eq!(news_approval(env(&[])), None);
         assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", " ")])), None);
         assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", "1:x"), ("ATLAS_NEWS_AUTO_APPROVE", "1")])), Some(NewsApproval::Telegram));

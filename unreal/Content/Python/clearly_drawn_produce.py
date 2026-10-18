@@ -14,6 +14,7 @@ import clearly_drawn_newsroom_sequence as newsroom
 import clearly_drawn_wardrobe as wardrobe
 
 STATE = {}
+RENDER_PRESETS = {"fast": (1, 1), "balanced": (1, 4), "quality": (1, 8)}
 
 
 def env(name, default=None):
@@ -67,9 +68,10 @@ def configure_job(sequence_path, map_path, frames_dir, width, height):
     output.set_editor_property("override_existing_output", True)
     config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
     config.find_or_add_setting_by_class(unreal.MoviePipelineImageSequenceOutput_PNG)
+    spatial, temporal = RENDER_PRESETS.get(env("CLEARLY_DRAWN_RENDER_PRESET", "fast"), RENDER_PRESETS["fast"])
     anti_aliasing = config.find_or_add_setting_by_class(unreal.MoviePipelineAntiAliasingSetting)
-    anti_aliasing.set_editor_property("spatial_sample_count", int(env("CLEARLY_DRAWN_SPATIAL_SAMPLES", "1")))
-    anti_aliasing.set_editor_property("temporal_sample_count", int(env("CLEARLY_DRAWN_TEMPORAL_SAMPLES", "4")))
+    anti_aliasing.set_editor_property("spatial_sample_count", int(env("CLEARLY_DRAWN_SPATIAL_SAMPLES", str(spatial))))
+    anti_aliasing.set_editor_property("temporal_sample_count", int(env("CLEARLY_DRAWN_TEMPORAL_SAMPLES", str(temporal))))
     return subsystem
 
 
@@ -117,6 +119,7 @@ def main():
         os.makedirs(frames_dir, exist_ok=True)
         report["frames_dir"] = frames_dir
         report["resolution"] = [width, height]
+        report["render_preset"] = env("CLEARLY_DRAWN_RENDER_PRESET", "fast")
         subsystem = configure_job(report["sequence"], map_path, frames_dir, width, height)
         executor = subsystem.render_queue_with_executor(unreal.MoviePipelinePIEExecutor)
         STATE["executor"] = executor
