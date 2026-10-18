@@ -172,6 +172,9 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             }
         }
         NewsAction::YoutubeCheck => news_publish::youtube_check().await?,
+        NewsAction::TiktokCheck => crate::news_tiktok::tiktok_check().await?,
+        NewsAction::TiktokAuth => crate::news_tiktok::tiktok_auth()?,
+        NewsAction::TiktokAuthComplete { redirect } => crate::news_tiktok::tiktok_auth_complete(&redirect).await?,
         NewsAction::Publish { episode, dry_run, override_hold } => {
             let episode_dir = news_dir.join(&episode);
             if !episode_dir.join("status.json").is_file() {

@@ -24,6 +24,7 @@ mod news_health;
 mod news_lipsync;
 mod news_preview;
 mod news_publish;
+mod news_tiktok;
 mod news_voice;
 mod planning;
 mod produce;
@@ -348,6 +349,15 @@ enum NewsAction {
     },
     /// Read-only check that the stored YouTube login still works (channel info only).
     YoutubeCheck,
+    /// Read-only check of the TikTok app keys and token (account posting options only).
+    TiktokCheck,
+    /// Print the TikTok authorization URL (official Login Kit, PKCE).
+    TiktokAuth,
+    /// Finish TikTok authorization with the URL TikTok redirected to (or the bare code).
+    TiktokAuthComplete {
+        #[arg(long)]
+        redirect: String,
+    },
     /// Build the YouTube package for an existing episode and upload it when ATLAS_NEWS_PUBLISH=on.
     Publish {
         #[arg(long)]

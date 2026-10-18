@@ -5,6 +5,7 @@
 //! Uploads happen only when `ATLAS_NEWS_PUBLISH=on` and the run is not a dry run. Otherwise the
 //! package is built and the episode is marked ready, which is the default.
 use super::*;
+use crate::news_tiktok;
 use crate::news_voice::VoicedLine;
 use atlas_core::EpisodeDurationPolicy;
 use atlas_media::fact_checker::FactCheckReport;
@@ -441,9 +442,15 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
     let privacy = news_privacy(env);
     println!("\n[PHASE 7: PUBLISH ({mode:?}{}; privacy {privacy})]", if request.dry_run { ", dry run" } else { "" });
 
+    let tiktok = news_tiktok::tiktok_mode(env);
+    println!("  TikTok: {tiktok:?} (ATLAS_NEWS_TIKTOK)");
     let status = read_value(&episode_dir.join("status.json")).unwrap_or_default();
-    if let Some(existing) = status["publish"]["youtube_url"].as_str() {
-        println!("  Already on YouTube: {existing}");
+    let existing_youtube = status["publish"]["youtube_url"].as_str().map(str::to_string);
+    let existing_tiktok = status["publish"]["tiktok_publish_id"].as_str().map(str::to_string);
+    if let Some(url) = &existing_youtube {
+        println!("  Already on YouTube: {url}");
+    }
+    if existing_youtube.is_some() && (existing_tiktok.is_some() || tiktok == news_tiktok::TikTokMode::Off) {
         return Ok(());
     }
 
@@ -451,7 +458,14 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
     let publish_dir = episode_dir.join("publish");
     std::fs::create_dir_all(&publish_dir)?;
 
-    let mut package = serde_json::json!({ "mode": mode, "dry_run": request.dry_run, "privacy": privacy });
+    let mut package = match status.get("publish") {
+        Some(previous) if previous.is_object() && existing_youtube.is_some() => previous.clone(),
+        _ => serde_json::json!({}),
+    };
+    package["mode"] = serde_json::json!(mode);
+    package["dry_run"] = serde_json::json!(request.dry_run);
+    package["privacy"] = serde_json::json!(privacy);
+    package["tiktok_mode"] = serde_json::json!(tiktok);
     let script: Option<MasterEpisodeScript> = read_typed(&episode_dir.join("script.json")).ok();
     let report: Option<FactCheckReport> = read_typed(&episode_dir.join("fact_check.json")).ok();
     let timeline: Option<Timeline> = read_typed(&episode_dir.join("voice_timeline.json")).ok();
@@ -474,6 +488,23 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
             match build_thumbnail(&publish_dir, &headline, &format!("{} · {episode_id}", atlas_core::SHOW_TITLE)).await {
                 Ok(path) => println!("  Thumbnail: {}", path.display()),
                 Err(error) => holds.push(format!("thumbnail could not be built: {error}")),
+            }
+            let final_video = status["final_video"].as_str().map(PathBuf::from);
+            let caption = news_tiktok::build_caption(&headline, &episode_id, report, existing_youtube.as_deref());
+            match news_tiktok::build_package(episode_dir, final_video.as_deref(), &timeline.lines, caption).await {
+                Ok(cut) => {
+                    println!(
+                        "  TikTok cut: {} ({:.0}s 9:16{}, {} caption chars, {})",
+                        cut.video.display(),
+                        cut.duration_seconds,
+                        if cut.preview_source { ", from the preview animatic: review only" } else { "" },
+                        cut.caption.encode_utf16().count(),
+                        cut.privacy_level
+                    );
+                    package["tiktok_cut"] = serde_json::json!(cut.video);
+                }
+                Err(error) if tiktok == news_tiktok::TikTokMode::On => holds.push(format!("TikTok cut could not be built: {error}")),
+                Err(error) => println!("  TikTok cut skipped: {error}"),
             }
         }
         _ => holds.push("package incomplete: script.json, fact_check.json and voice_timeline.json are all required".into()),
@@ -501,15 +532,79 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
         package["overridden_holds"] = serde_json::json!(holds);
     }
 
-    if request.dry_run || mode == NewsPublishMode::Off {
-        let why = if request.dry_run { "dry run" } else { "ATLAS_NEWS_PUBLISH is off" };
+    let youtube_live = mode == NewsPublishMode::On && !request.dry_run && existing_youtube.is_none();
+    let tiktok_live = tiktok == news_tiktok::TikTokMode::On && !request.dry_run && existing_tiktok.is_none();
+    if !youtube_live && !tiktok_live {
+        let why = if request.dry_run { "dry run" } else { "ATLAS_NEWS_PUBLISH and ATLAS_NEWS_TIKTOK are off" };
         println!("  Ready to publish; not uploading ({why}).");
         update_status(episode_dir, &format!("ready to publish ({why})"), &[], package)?;
         return Ok(());
     }
 
+    let mut youtube_url = existing_youtube.clone();
+    if youtube_live {
+        match publish_youtube(store, episode_dir, &episode_id, &status, &metadata_path, &srt_path, &thumbnail_path, &mut package).await? {
+            Some(url) => youtube_url = Some(url),
+            None => return Ok(()), // held by the policy check; TikTok waits too
+        }
+    }
+    if tiktok_live {
+        publish_tiktok(episode_dir, &episode_id, &publish_dir, youtube_url.as_deref(), &mut package).await?;
+    }
+    Ok(())
+}
+
+async fn publish_tiktok(
+    episode_dir: &Path,
+    episode_id: &str,
+    publish_dir: &Path,
+    youtube_url: Option<&str>,
+    package: &mut serde_json::Value,
+) -> anyhow::Result<()> {
+    let mut cut: news_tiktok::TikTokPackage = read_typed(&publish_dir.join("tiktok_metadata.json"))?;
+    if let Some(url) = youtube_url {
+        cut.caption = cut.caption.replace(
+            "Full episode on YouTube: Clearly Drawn News",
+            &format!("Full episode on YouTube: {url}"),
+        );
+    }
+    match news_tiktok::post_package(&cut).await {
+        Ok((publish_id, state)) => {
+            package["tiktok_publish_id"] = serde_json::json!(publish_id);
+            package["tiktok_status"] = serde_json::json!(state);
+            package["tiktok_published_at"] = serde_json::json!(Utc::now());
+            update_status(episode_dir, "published", &[], package.clone())?;
+            println!("  Posted to TikTok ({}): {publish_id} [{state}]", cut.privacy_level);
+            notify_best_effort(&format!("✅ {episode_id} highlight posted to TikTok ({}) [{state}]", cut.privacy_level)).await;
+        }
+        Err(error) => {
+            package["tiktok_error"] = serde_json::json!(error.to_string());
+            let text = if package["youtube_url"].is_string() { "published (TikTok failed)" } else { "TikTok failed" };
+            update_status(episode_dir, text, &[], package.clone())?;
+            eprintln!("  TikTok post failed: {error}");
+            notify_best_effort(&format!(
+                "⚠️ {episode_id} TikTok post failed: {error}\nRetry: atlas news publish --episode {episode_id}"
+            ))
+            .await;
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn publish_youtube(
+    store: &Store,
+    episode_dir: &Path,
+    episode_id: &str,
+    status: &serde_json::Value,
+    metadata_path: &Path,
+    srt_path: &Path,
+    thumbnail_path: &Path,
+    package: &mut serde_json::Value,
+) -> anyhow::Result<Option<String>> {
+    let privacy = news_privacy(env);
     let video = PathBuf::from(status["final_video"].as_str().unwrap_or_default());
-    let metadata: NewsVideoMetadata = read_typed(&metadata_path)?;
+    let metadata: NewsVideoMetadata = read_typed(metadata_path)?;
     let credentials = load_youtube_credentials(youtube_credentials_path()).await?;
     let client = YouTubeAnalyticsClient::new(credentials);
     if !client.is_authenticated()? {
@@ -549,9 +644,9 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
             .filter(|check| check.status != CheckStatus::Pass)
             .map(|check| format!("policy {}: {}", check.name, check.detail))
             .collect::<Vec<_>>();
-        update_status(episode_dir, "held", &blocked, package)?;
+        update_status(episode_dir, "held", &blocked, package.clone())?;
         notify_best_effort(&format!("⏸ {episode_id} HELD by the policy check:\n• {}", blocked.join("\n• "))).await;
-        return Ok(());
+        return Ok(None);
     }
 
     let upload = YouTubeUploadMetadata {
@@ -567,15 +662,15 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
     package["youtube_url"] = serde_json::json!(result.url);
     package["published_at"] = serde_json::json!(Utc::now());
     update_status(episode_dir, "published", &[], package.clone())?;
-    if let Err(error) = client.upload_thumbnail(&result.video_id, &thumbnail_path).await {
+    if let Err(error) = client.upload_thumbnail(&result.video_id, thumbnail_path).await {
         eprintln!("  Thumbnail upload failed (video is live): {error}");
     }
-    if let Err(error) = client.upload_captions(&result.video_id, &srt_path, "en-US").await {
+    if let Err(error) = client.upload_captions(&result.video_id, srt_path, "en-US").await {
         eprintln!("  Caption upload failed (video is live): {error}");
     }
     println!("  Published to YouTube ({privacy}): {}", result.url);
     notify_best_effort(&format!("✅ {} {episode_id} is live on YouTube ({privacy}):\n{}\n{}", atlas_core::SHOW_TITLE, metadata.title, result.url)).await;
-    Ok(())
+    Ok(Some(result.url))
 }
 
 /// Read-only YouTube check: refreshes the stored OAuth token and reads the channel status
