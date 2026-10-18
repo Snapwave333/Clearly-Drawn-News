@@ -5,6 +5,7 @@ pub mod publishing;
 pub mod recommend;
 pub mod store;
 pub mod tiktok;
+pub mod tiktok_direct;
 pub mod youtube;
 
 pub use compensation::{MonetizationEvidence, SimulatedPayrollLedger, SimulatedPayrollRun};
@@ -20,6 +21,10 @@ pub use tiktok::{
     DEFAULT_TIKTOK_USER, DEFAULT_UPLOAD_POST_BASE_URL, TikTokClient, TikTokCredentials,
     TikTokPostMode, TikTokPrivacyLevel, TikTokUploadMetadata, TikTokUploadResult,
     TikTokUploadStatus, TikTokUserStatus, load_tiktok_credentials,
+};
+pub use tiktok_direct::{
+    TikTokAppConfig, TikTokCreatorInfo, TikTokDirectClient, TikTokPostInfo, TikTokPublishStatus,
+    TikTokToken,
 };
 pub use youtube::{
     TokenStore, YouTubeAnalyticsClient, YouTubeChannelStatus, YouTubeCredentials, YouTubeTokenSet,
