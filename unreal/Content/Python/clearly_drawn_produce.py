@@ -10,6 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import clearly_drawn_lipsync as lipsync
 import clearly_drawn_newsroom_sequence as newsroom
 import clearly_drawn_wardrobe as wardrobe
 
@@ -113,7 +114,14 @@ def main():
         report["cameras"] = sequence_report["cameras"]
         report["unmatched_cameras"] = sequence_report["unmatched_cameras"]
         report["duration_seconds"] = sequence_report["duration_seconds"]
-        report["lipsync"] = lipsync_status()
+        sequence_asset = unreal.EditorAssetLibrary.load_asset(report["sequence"].split(".")[0])
+        lip = lipsync.apply(sequence_asset, episode_dir) if env("CLEARLY_DRAWN_LIPSYNC", "1") == "1" else {"applied": False, "reason": "disabled"}
+        report["lipsync_detail"] = lip
+        report["lipsync"] = (
+            "procedural jaw animation: " + ", ".join("{} {}".format(k, v) for k, v in lip.get("anchors", {}).items())
+            if lip.get("applied")
+            else "not applied ({}); {}".format(lip.get("reason") or lip.get("anchors"), lipsync_status())
+        )
         unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
 
         os.makedirs(frames_dir, exist_ok=True)

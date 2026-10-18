@@ -212,6 +212,8 @@ pub(crate) async fn voice_episode(
             "lines": timeline,
         }))?,
     )?;
+    let lipsync = crate::news_lipsync::write_lipsync(episode_dir, &timeline, total_seconds).await?;
+    println!("  Lip-sync curves: {}", lipsync.display());
     Ok(VoiceOutcome::Voiced {
         narration,
         total_seconds,
