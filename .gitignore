@@ -16,6 +16,8 @@ upload_post_credentials.json
 tiktok_credentials.json
 *.pem
 *.key
+*.env
+.env*
 
 # IDE
 .vscode/
@@ -49,5 +51,6 @@ artifacts/
 
 # Temp
 tmp/
+temp/
 temp/__pycache__/
 *.pyc
