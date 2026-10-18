@@ -23,6 +23,7 @@ mod news_aired;
 mod news_health;
 mod news_lipsync;
 mod news_preview;
+mod news_publish;
 mod news_voice;
 mod planning;
 mod produce;
@@ -341,6 +342,20 @@ enum NewsAction {
         chat_id: Option<i64>,
         #[arg(long)]
         skip_telegram_wait: bool,
+        /// Build the YouTube package (metadata, thumbnail, captions) but never upload.
+        #[arg(long)]
+        dry_run_publish: bool,
+    },
+    /// Build the YouTube package for an existing episode and upload it when ATLAS_NEWS_PUBLISH=on.
+    Publish {
+        #[arg(long)]
+        episode: String,
+        /// Build the package and evaluate holds, but never upload.
+        #[arg(long)]
+        dry_run: bool,
+        /// Publish even though automatic holds apply (a human has reviewed them).
+        #[arg(long)]
+        override_hold: bool,
     },
 }
 
@@ -386,6 +401,9 @@ enum DaemonAction {
         privacy: PublishPrivacy,
         #[arg(long, default_value = DEFAULT_TIKTOK_USER)]
         tiktok_user: String,
+        /// Only run the Clearly Drawn News slots; skip the explainer YouTube/TikTok publisher.
+        #[arg(long)]
+        news_only: bool,
     },
     Pause,
 }

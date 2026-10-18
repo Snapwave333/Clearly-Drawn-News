@@ -7,6 +7,7 @@ use atlas_policy::copyright::{
 };
 use atlas_policy::telegram::{
     ApprovalDecision, EpisodeSlateProposal, ProposedNewsStory, TelegramApprovalGate,
+    notify_best_effort,
 };
 use atlas_storyboard::DirectorClient;
 use atlas_storyboard::story_script::{NewsroomWriter, ScriptMethod, StoryBrief};
@@ -17,6 +18,25 @@ const DEFAULT_UE_CMD: &str =
 const DEFAULT_UE_PROJECT: &str =
     r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject";
 const ANCHOR_WARDROBE: &str = include_str!("../../../unreal/wardrobe.json");
+/// Clearly Drawn News only airs stories confirmed by two independent outlets.
+const NEWS_MIN_SOURCES: usize = 2;
+
+/// Who signs off on a news slate before production continues.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum NewsApprovalMode {
+    /// Unattended (default): no Telegram gate, even when a bot token is set. Telegram only gets notices.
+    Auto,
+    /// Wait for a human to press Approve in Telegram (`ATLAS_NEWS_APPROVAL=telegram`).
+    Telegram,
+}
+
+pub(crate) fn news_approval_mode(lookup: impl Fn(&str) -> Option<String>) -> NewsApprovalMode {
+    match lookup("ATLAS_NEWS_APPROVAL").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        Some("telegram") => NewsApprovalMode::Telegram,
+        _ => NewsApprovalMode::Auto,
+    }
+}
 
 pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Result<()> {
     println!("══════════════════════════════════════════════════════════════════");
@@ -25,7 +45,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
     println!("══════════════════════════════════════════════════════════════════");
 
     let news_desk = AnimationNewsDesk::new();
-    let fact_checker = NewsFactChecker::default();
+    let fact_checker = NewsFactChecker::new(NEWS_MIN_SOURCES, true);
     let policy = EpisodeDurationPolicy::default();
     let news_dir = store.data_dir().join("news");
 
@@ -142,10 +162,18 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 res => println!("\nScan Result: {:?}", res),
             }
         }
+        NewsAction::Publish { episode, dry_run, override_hold } => {
+            let episode_dir = news_dir.join(&episode);
+            if !episode_dir.join("status.json").is_file() {
+                anyhow::bail!("no episode package at {}", episode_dir.display());
+            }
+            news_publish::publish_episode(store, &episode_dir, news_publish::PublishRequest { dry_run, override_hold }).await?;
+        }
         NewsAction::Produce {
             token,
             chat_id,
             skip_telegram_wait,
+            dry_run_publish,
         } => {
             let (episode_id, episode_number) = next_episode(&news_dir);
             let episode_dir = news_dir.join(&episode_id);
@@ -163,6 +191,10 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 }
             }
             if report.passed_stories.is_empty() {
+                notify_best_effort(&format!(
+                    "⚠️ {SHOW_TITLE} {episode_id}: no fresh stories confirmed by {NEWS_MIN_SOURCES} sources; nothing produced."
+                ))
+                .await;
                 anyhow::bail!("Production halted: no fresh stories passed fact-checking");
             }
             write_json(&episode_dir.join("fact_check.json"), &report)?;
@@ -173,12 +205,23 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             );
 
             timer.begin("approval");
-            println!("\n[PHASE 2: TELEGRAM HUMAN APPROVAL GATE]");
+            let mode = if skip_telegram_wait {
+                NewsApprovalMode::Auto
+            } else {
+                news_approval_mode(|name| std::env::var(name).ok())
+            };
+            println!("\n[PHASE 2: EDITORIAL APPROVAL ({mode:?})]");
             let proposal = slate_proposal(&episode_id, episode_number, &report);
             write_json(&episode_dir.join("slate.json"), &proposal)?;
-            let (approval, approved) = if skip_telegram_wait {
-                println!("  Approval gate bypassed by --skip-telegram-wait (recorded in package).");
-                (serde_json::json!({ "status": "bypassed", "at": Utc::now() }), true)
+            let (approval, approved) = if mode == NewsApprovalMode::Auto {
+                println!("  Auto-approved: {} stories passed {NEWS_MIN_SOURCES}-source fact-checking (Telegram gets a notice only).", report.passed_stories.len());
+                notify_best_effort(&format!(
+                    "🎬 {SHOW_TITLE} {episode_id} production started: {} stories ({}).",
+                    report.passed_stories.len(),
+                    report.passed_stories.iter().map(|s| s.title.as_str()).collect::<Vec<_>>().join(" | ")
+                ))
+                .await;
+                (serde_json::json!({ "status": "auto", "mode": mode, "at": Utc::now() }), true)
             } else {
                 let mut gate =
                     TelegramApprovalGate::new(token, chat_id).map_err(anyhow::Error::msg)?;
@@ -212,7 +255,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 let hint = if provenance["method"] == "director" {
                     ""
                 } else {
-                    " Set NVIDIA_API_KEY (or ATLAS_DIRECTOR_API_KEY) so the director writes full-length segments from live stories."
+                    " Set ATLAS_DIRECTOR_URL/ATLAS_DIRECTOR_API_KEY (Anthropic) or NVIDIA_API_KEY so the director writes full-length segments from live stories."
                 };
                 eprintln!("  ⚠ Script runtime {:.1} min: {error}.{hint}", episode.total_duration_secs / 60.0);
             }
@@ -229,12 +272,31 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             let manifest = newsroom_rights_manifest();
             write_json(&episode_dir.join("rights_manifest.json"), &manifest)?;
             std::fs::write(episode_dir.join("wardrobe.json"), ANCHOR_WARDROBE)?;
+            let local_date = chrono::Local::now().format("%Y-%m-%d").to_string();
             match CopyrightComplianceEngine::new().scan_production_manifest(&manifest) {
                 ScanResult::AllClear => println!(
                     "  {} assets scanned: all clear; third-party trailer audio muted.",
                     manifest.len()
                 ),
-                blocked => anyhow::bail!("Production halted by rights firewall: {blocked:?}"),
+                blocked => {
+                    let reason = format!("rights check is not all clear: {blocked:?}");
+                    println!("  HELD — {reason}");
+                    write_json(
+                        &episode_dir.join("status.json"),
+                        &serde_json::json!({
+                            "episode_id": episode_id,
+                            "title": episode.episode_title,
+                            "status": "held",
+                            "held": true,
+                            "hold_reasons": [reason],
+                            "rights_clear": false,
+                            "wire_origin": wire_origin,
+                            "local_date": local_date,
+                        }),
+                    )?;
+                    notify_best_effort(&format!("⏸ {SHOW_TITLE} {episode_id} is HELD before voicing: {reason}")).await;
+                    return Ok(());
+                }
             }
 
             timer.begin("voices");
@@ -262,7 +324,10 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             timer.begin("filming");
             println!("\n[PHASE 6: UNREAL ENGINE 5.8 VIRTUAL STUDIO FILMING]");
-            let filming = film_in_unreal(&episode_dir, voices.is_voiced()).await?;
+            let filming = match film_in_unreal(&episode_dir, voices.is_voiced()).await {
+                Ok(outcome) => outcome,
+                Err(error) => FilmingOutcome::Skipped(format!("failed: {error}")),
+            };
             println!("  {}", filming.summary());
 
             let timings = timer.finish();
@@ -311,6 +376,9 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                         FilmingOutcome::Skipped(_) => serde_json::Value::Null,
                     },
                     "runtime_compliant": runtime_check.is_ok(),
+                    "rights_clear": true,
+                    "local_date": local_date,
+                    "approval_mode": mode,
                     "wire_origin": wire_origin,
                     "script_method": provenance["method"],
                     "company": atlas_core::COMPANY_NAME,
@@ -319,6 +387,15 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             if wire_origin == WireOrigin::LiveFeeds {
                 news_aired::record_aired(&news_dir, &episode_id, &report.passed_stories, Utc::now())?;
+            }
+
+            let request = news_publish::PublishRequest { dry_run: dry_run_publish, override_hold: false };
+            if let Err(error) = news_publish::publish_episode(store, &episode_dir, request).await {
+                eprintln!("  Publish stage failed: {error}");
+                notify_best_effort(&format!(
+                    "❌ {SHOW_TITLE} {episode_id} publish failed: {error}\nRetry: atlas news publish --episode {episode_id}"
+                ))
+                .await;
             }
 
             println!("\n══════════════════════════════════════════════════════════════════");
@@ -736,6 +813,14 @@ mod tests {
         }
         assert_eq!(next_episode(&dir), ("EP-008".into(), 8));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn approval_is_automatic_unless_telegram_is_chosen() {
+        assert_eq!(news_approval_mode(|_| None), NewsApprovalMode::Auto);
+        assert_eq!(news_approval_mode(|_| Some("auto".into())), NewsApprovalMode::Auto);
+        assert_eq!(news_approval_mode(|_| Some(" Telegram ".into())), NewsApprovalMode::Telegram);
+        assert_eq!(news_approval_mode(|_| Some("whatever".into())), NewsApprovalMode::Auto);
     }
 
     #[test]

@@ -90,11 +90,6 @@ impl ProductionFailureLedger {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum NewsApproval {
-    Telegram,
-    AutoApproved,
-}
 
 fn news_schedule_hours(lookup: impl Fn(&str) -> Option<String>) -> Vec<u32> {
     let raw = lookup("ATLAS_NEWS_HOURS")
@@ -121,14 +116,13 @@ fn current_news_slot(hours: &[u32], now: chrono::NaiveDateTime) -> Option<String
     }
 }
 
-fn news_approval(lookup: impl Fn(&str) -> Option<String>) -> Option<NewsApproval> {
-    let set = |name: &str| lookup(name).is_some_and(|value| !value.trim().is_empty());
-    if set("TELEGRAM_BOT_TOKEN") {
-        Some(NewsApproval::Telegram)
-    } else if lookup("ATLAS_NEWS_AUTO_APPROVE").is_some_and(|value| value.trim() == "1") {
-        Some(NewsApproval::AutoApproved)
-    } else {
-        None
+/// The slot's approval path: automatic by default; `ATLAS_NEWS_APPROVAL=telegram` needs a bot token.
+fn news_approval(lookup: impl Fn(&str) -> Option<String>) -> Option<news::NewsApprovalMode> {
+    let mode = news::news_approval_mode(&lookup);
+    let token_set = lookup("TELEGRAM_BOT_TOKEN").is_some_and(|value| !value.trim().is_empty());
+    match mode {
+        news::NewsApprovalMode::Telegram if !token_set => None,
+        mode => Some(mode),
     }
 }
 
@@ -154,7 +148,7 @@ async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<
     }
     let Some(approval) = news_approval(env) else {
         eprintln!(
-            "Clearly Drawn News slot {slot} is due but has no approval path: set TELEGRAM_BOT_TOKEN for editorial approval, or ATLAS_NEWS_AUTO_APPROVE=1 to run without it."
+            "Clearly Drawn News slot {slot} is due but ATLAS_NEWS_APPROVAL=telegram has no TELEGRAM_BOT_TOKEN; set the token or use ATLAS_NEWS_APPROVAL=auto."
         );
         std::fs::write(&marker, &slot)?;
         return Ok(());
@@ -165,7 +159,8 @@ async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<
         NewsAction::Produce {
             token: None,
             chat_id: env("TELEGRAM_CHAT_ID").and_then(|value| value.trim().parse().ok()),
-            skip_telegram_wait: approval == NewsApproval::AutoApproved,
+            skip_telegram_wait: approval == news::NewsApprovalMode::Auto,
+            dry_run_publish: false,
         },
     )
     .await;
@@ -185,6 +180,10 @@ async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<
     Ok(())
 }
 
+fn env_var(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|value| !value.trim().is_empty())
+}
+
 pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::Result<()> {
     let daemon_dir = store.data_dir().join("daemon");
     let pause_path = daemon_dir.join("paused");
@@ -194,27 +193,39 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
             poll_seconds,
             privacy,
             tiktok_user,
+            news_only,
         } => {
             std::fs::create_dir_all(&daemon_dir)?;
             if pause_path.is_file() {
                 std::fs::remove_file(&pause_path)?;
             }
-            println!("ATLAS continuous publisher started for YouTube and TikTok.");
+            if news_only {
+                println!("ATLAS daemon started for Clearly Drawn News only (explainer publisher off).");
+            } else {
+                println!("ATLAS continuous publisher started for YouTube and TikTok.");
+            }
+            println!(
+                "Clearly Drawn News publishing: {:?} (ATLAS_NEWS_PUBLISH), privacy {} (ATLAS_NEWS_PRIVACY).",
+                news_publish::publish_mode(env_var),
+                news_publish::news_privacy(env_var)
+            );
             let env = |name: &str| std::env::var(name).ok();
             let hours = news_schedule_hours(env);
             let listed = hours.iter().map(|h| format!("{h:02}:00")).collect::<Vec<_>>().join(", ");
             match (hours.is_empty(), news_approval(env)) {
                 (true, _) => println!("Clearly Drawn News scheduling is off (set ATLAS_NEWS_HOURS, e.g. 12,20)."),
                 (false, Some(approval)) => println!("Clearly Drawn News: {} episodes/day at {listed} local time ({approval:?}).", hours.len()),
-                (false, None) => println!("Clearly Drawn News: {} slots/day at {listed} local time, but nothing will run until TELEGRAM_BOT_TOKEN or ATLAS_NEWS_AUTO_APPROVE=1 is set.", hours.len()),
+                (false, None) => println!("Clearly Drawn News: {} slots/day at {listed} local time, but ATLAS_NEWS_APPROVAL=telegram has no TELEGRAM_BOT_TOKEN, so nothing will run.", hours.len()),
             }
             loop {
                 if pause_path.is_file() {
                     println!("ATLAS continuous publisher paused.");
                     break;
                 }
-                if let Err(error) = run_daemon_cycle(store, privacy, &tiktok_user).await {
-                    eprintln!("Daemon cycle failed safely: {error}");
+                if !news_only {
+                    if let Err(error) = run_daemon_cycle(store, privacy, &tiktok_user).await {
+                        eprintln!("Daemon cycle failed safely: {error}");
+                    }
                 }
                 if let Err(error) = run_daily_news(store, &daemon_dir, Utc::now()).await {
                     eprintln!("Daily news step failed safely: {error}");
@@ -582,11 +593,12 @@ mod tests {
         assert_eq!(news_schedule_hours(env(&[("ATLAS_NEWS_DAILY_HOUR", "14")])), vec![14]);
         assert!(news_schedule_hours(env(&[("ATLAS_NEWS_DAILY_HOUR", "25")])).is_empty());
         assert_eq!(news_schedule_hours(env(&[("ATLAS_NEWS_HOURS", "18, 0,6,12,6,99")])), vec![0, 6, 12, 18]);
-        assert_eq!(news_approval(env(&[])), None);
-        assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", " ")])), None);
-        assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", "1:x"), ("ATLAS_NEWS_AUTO_APPROVE", "1")])), Some(NewsApproval::Telegram));
-        assert_eq!(news_approval(env(&[("ATLAS_NEWS_AUTO_APPROVE", "1")])), Some(NewsApproval::AutoApproved));
-        assert_eq!(news_approval(env(&[("ATLAS_NEWS_AUTO_APPROVE", "yes")])), None);
+        use news::NewsApprovalMode::{Auto, Telegram};
+        assert_eq!(news_approval(env(&[])), Some(Auto));
+        assert_eq!(news_approval(env(&[("TELEGRAM_BOT_TOKEN", "1:x")])), Some(Auto), "a token alone must not re-enable the gate");
+        assert_eq!(news_approval(env(&[("ATLAS_NEWS_APPROVAL", "telegram")])), None);
+        assert_eq!(news_approval(env(&[("ATLAS_NEWS_APPROVAL", "telegram"), ("TELEGRAM_BOT_TOKEN", " ")])), None);
+        assert_eq!(news_approval(env(&[("ATLAS_NEWS_APPROVAL", "telegram"), ("TELEGRAM_BOT_TOKEN", "1:x")])), Some(Telegram));
     }
 
     #[test]
