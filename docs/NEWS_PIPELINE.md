@@ -1,32 +1,106 @@
 # Clearly Drawn News pipeline
 
 `atlas news produce` builds one episode end to end. `atlas daemon start --news-only` runs it at each
-`ATLAS_NEWS_HOURS` slot (default `12,20`, PC local time). Nothing uploads unless `ATLAS_NEWS_PUBLISH=on` (YouTube) or `ATLAS_NEWS_TIKTOK=on` (TikTok); both are off by default.
+`ATLAS_NEWS_HOURS` slot (default `12` = one episode a day at 12:00, PC local time, MDT).
+Episodes target 30 minutes (`ATLAS_NEWS_TARGET_MINUTES`): verified news first, then animation-history
+retrospectives fill the rest. Nothing uploads unless `ATLAS_NEWS_PUBLISH=on` (YouTube) or `ATLAS_NEWS_TIKTOK=on` (TikTok); both are off by default.
 
 ```mermaid
 flowchart TD
-  R["Phase 1: research<br/>live RSS/Atom feeds, 7 days,<br/>fact-check: 2 sources per story"] -->|"no story passes"| STOP1["halt + notice"]
-  R --> A{"ATLAS_NEWS_APPROVAL"}
+  W1["Outlet feeds (RSS/Atom)<br/>US, Japan, UK/Europe, Korea, China, Canada<br/>region + language tags"] --> TR
+  W2["Official studio newsrooms<br/>MAPPA, Studio Ghibli"] --> TR
+  W3["Official accounts, keyless<br/>YouTube channel RSS, Bluesky AppView<br/>pinned IDs, announcements only"] --> TR
+  TR["Translate non-English entries<br/>(director; original headline, URL and text kept)"] --> G
+  G["Group across outlets and languages<br/>fuzzy headline match, 7 days"] --> AT
+  AT["Attribution from the original text<br/>known studios + JP/KR/CN names, then<br/>director quote check; official post = attribution"] --> FC
+  FC{"Fact check<br/>2 independent sources, OR a verified<br/>official account announcing its own project"} -->|"rejected"| X["dropped"]
+  FC --> RE["Retrospectives fill to the target<br/>Wikipedia + 1 reputable source, 60-day cooldown"]
+  RE -->|"news + retros short of the policy"| STOP1["halt + notice"]
+  RE --> A{"ATLAS_NEWS_APPROVAL"}
   A -->|"auto (default)"| S
   A -->|telegram| TG["wait for Approve button"] --> S
-  S["Phase 3: script<br/>Anthropic claude-sonnet-5-5<br/>(template fallback)"] --> RT["Phase 4: rights registry"]
+  S["Script<br/>director chain: Anthropic claude-sonnet-5-5<br/>-> NVIDIA NIM kimi-k2.6 -> deepseek-v4.1-flash<br/>(template fallback)<br/>credits: via Natalie, Japan / Pixar's official channel"] --> RT["Rights registry"]
   RT -->|"blocked"| HOLD
-  RT --> V["Phase 5: voices<br/>Voicebox if ATLAS_TTS_ENGINE=voicebox,<br/>else / on failure Kokoro"]
-  V --> F["Phase 6: filming in Unreal<br/>(Blender studio not wired)"]
+  RT --> V["Voices<br/>Voicebox if ATLAS_TTS_ENGINE=voicebox,<br/>else / on failure Kokoro"]
+  V --> F["Filming in Unreal<br/>(Blender studio not wired)"]
   F --> H{"auto-holds"}
-  H -->|"not live feeds / runtime outside 15-30 min /<br/>filming skipped or failed / rights not clear /<br/>guest caveat without rights_confirmed"| HOLD["status held + notice<br/>atlas news publish --episode EP-NNN --override-hold"]
+  H -->|"not live feeds / runtime outside policy /<br/>filming skipped or failed / rights not clear /<br/>guest caveat without rights_confirmed"| HOLD["status held + notice<br/>atlas news publish --episode EP-NNN --override-hold"]
   H --> P["YouTube package: youtube_metadata.json,<br/>captions_en.srt, thumbnail.png"]
   P --> TC["TikTok highlight: tiktok_cut.mp4 9:16,<br/>caption + hashtags, is_aigc"]
-  TC --> G{"publish gates<br/>ATLAS_NEWS_PUBLISH / ATLAS_NEWS_TIKTOK"}
-  G -->|"both off (default) or --dry-run-publish"| READY["status: ready to publish"]
-  G -->|"ATLAS_NEWS_PUBLISH=on"| PG["Policy Guardian<br/>(no 24 h Studio review for news)"]
+  TC --> PG2{"publish gates<br/>ATLAS_NEWS_PUBLISH / ATLAS_NEWS_TIKTOK"}
+  PG2 -->|"both off (default) or --dry-run-publish"| READY["status: ready to publish"]
+  PG2 -->|"ATLAS_NEWS_PUBLISH=on"| PG["Policy Guardian<br/>(no 24 h Studio review for news)"]
   PG --> YT["YouTube upload (ATLAS_NEWS_PRIVACY, default public)<br/>+ thumbnail + captions"]
   YT --> DONE["status published + notice with link"]
-  G -->|"ATLAS_NEWS_TIKTOK=on"| TT["TikTok Content Posting API<br/>creator_info -> init -> chunks -> status"]
+  PG2 -->|"ATLAS_NEWS_TIKTOK=on"| TT["TikTok Content Posting API<br/>creator_info -> init -> chunks -> status"]
   YT -->|"YouTube link in caption"| TT
   TT --> DONE
   N["Telegram notices<br/>best effort, never fail a run"] -.-> STOP1 & HOLD & DONE
 ```
+
+## Sources
+
+Outlet feeds live in `crates/atlas-media/src/news_wire.rs` (`FEEDS`), each with a region tag and a language.
+General-news feeds (Yonhap, Soompi, The Korea Herald, Sixth Tone, Playback) only contribute animation stories.
+Every feed path is allowed by the site's robots.txt; requests use an identifiable User-Agent.
+
+| Region | Working (checked 2026-10-18) | Blocked or no feed |
+| --- | --- | --- |
+| US / global | Anime News Network, Cartoon Brew, Animation Magazine, Crunchyroll News, AWN, Variety, THR, Deadline, IndieWire, The Animation Guild | |
+| Japan | Anime Corner (English), MAPPA newsroom (ja), Studio Ghibli newsroom (ja); official YouTube: Toei Animation, MAPPA, Aniplex (JP + USA), TOHO Animation, Kadokawa | Natalie (405 to non-browser clients), Animate Times (no feed), MANTANWEB (empty feed / 403), Oricon (410 Gone), Famitsu (no feed), Toho / Toei / Aniplex / Kadokawa newsrooms (no RSS; their YouTube channels are followed) |
+| Europe | Skwigly (UK), Animation Magazine Europe; Cartoon Saloon (official YouTube) | Annecy (no feed), AWN Europe (403), Cartoon Brew Europe tag (empty) |
+| Korea | Yonhap culture, Soompi, The Korea Herald (animation stories only) | |
+| China | Sixth Tone (animation stories only) | SCMP (404) |
+| Canada / LatAm | Playback (Canada), Animation Magazine | no reputable Latin American animation feed found yet |
+
+Non-English entries are translated by the director before grouping (`news_translate.rs`, cache in
+`news/translations.json`). The original headline and summary stay on the entry and the article text is never
+translated, so attribution, rumour checks and the quoted evidence use the original. An entry that cannot be
+translated (no director) is dropped, never aired untranslated. A translation only makes a story groupable with
+other coverage; it still needs a real second source.
+
+### Official accounts
+
+`crates/atlas-media/data/official_accounts.json` (override with `ATLAS_NEWS_ACCOUNTS=<file>`) pins each account
+by platform ID (YouTube channel ID, Bluesky DID) with how it was verified (verified badge, domain handle, or a
+link from the studio's own website). A fetch fails if the platform reports another channel or handle for that ID.
+`atlas news accounts-check` re-verifies them all (read-only, no keys).
+
+- YouTube channel RSS (no key): Adult Swim, Pixar, Walt Disney Animation Studios, Cartoon Network, Nickelodeon,
+  Netflix Anime, Sony Pictures Animation, Illumination, LAIKA, Cartoon Saloon, Crunchyroll, Toei Animation,
+  MAPPA, Aniplex, Aniplex USA, TOHO Animation, Kadokawa. Only announcements (trailer, teaser, PV, release date,
+  予告, 解禁, 決定, ...) become stories.
+- Bluesky public AppView (no key): Netflix (`netflix.com`), Crunchyroll (`crunchyroll.com`), both
+  Bluesky-verified. The other studios have no verified Bluesky account yet.
+- Not followed: DreamWorks Animation (no verifiable main channel), Studio Ghibli YouTube (none; its newsroom
+  feed is used), a dedicated Netflix Animation channel (none). X is not used at all. Instagram, TikTok and
+  Threads need logins or app tokens and are not used. No logged-in page is ever scraped.
+
+### The two-source rule
+
+`NEWS_MIN_SOURCES` is 2 and not configurable. `fact_checker::qualifies_as_official_primary` makes the exception explicit:
+
+- Two independent sources always qualify: two outlets, or an official account plus one independent outlet.
+  An organisation's own channels and newsroom count as one source between them; sources can be in different languages.
+- One source qualifies only as a primary source: a pinned, verified official account or newsroom of the
+  attributed organisation announcing its own project. It is credited on air as such ("Pixar announced it on its
+  official YouTube channel").
+- Anything else with one source fails, and official status never rescues a rumour or an unattributed story.
+
+On air and in the description each source is credited with its region ("via Natalie, Japan"); stories carry a
+region tag, so an episode mixes regions. Official trailers are linked from the description, never re-uploaded.
+
+### Director chain
+
+`DirectorClient` tries Anthropic first (Eli's Claude credits, `ANTHROPIC_API_KEY`), then NVIDIA NIM's free
+models at `integrate.api.nvidia.com/v1` with `NVIDIA_API_KEY`: `moonshotai/kimi-k2.6` (scripts and translation),
+then `deepseek-ai/deepseek-v4.1-flash`. Billing, quota, credit or key errors (402, 401, 403, or 400/429 that
+mention credits or quota) take a provider out for the rest of the run; rate limits, overload, 5xx and timeouts
+fail over for that call only. Quirks: Claude gets no `temperature` or `response_format` and `max_tokens` 8192;
+NIM gets `max_tokens` 8192, temperature clamped to 0..1 (Kimi K2 pinned at 0.6), no JSON mode for Kimi,
+DeepSeek or reasoning models, and `<think>` blocks are stripped. Every call logs
+`[director] <purpose>: <provider>:<model> <outcome> (<ms>)` to stderr and, with `ATLAS_DIRECTOR_LOG=<file>`,
+one JSON line per call. `atlas news director-check` shows the chain and which keys exist (never their values).
 
 ## Settings
 
@@ -35,10 +109,17 @@ flowchart TD
 | `ATLAS_NEWS_PUBLISH` | `off` | `on` uploads; anything else stops at the package (dry run) |
 | `ATLAS_NEWS_PRIVACY` | `public` | `public`, `unlisted` or `private` |
 | `ATLAS_NEWS_APPROVAL` | `auto` | `telegram` waits for the Approve button |
-| `ATLAS_NEWS_MIN_SOURCES` | `2` | sources per story (1 to 3); lower only for testing |
-| `ATLAS_NEWS_HOURS` | `12,20` | daemon slots in local time; `off` disables |
-| `ATLAS_DIRECTOR_URL` / `_MODEL` / `_API_KEY` | Anthropic, `claude-sonnet-5-5` | script writer; `ANTHROPIC_API_KEY` also accepted |
-| `ATLAS_DIRECTOR_TIMEOUT_SECS` | `180` (Anthropic) | request timeout |
+| `ATLAS_NEWS_HOURS` | `12` | daemon slots in local time (comma-separated); `off` disables |
+| `ATLAS_NEWS_TARGET_MINUTES` | `30` | runtime target (10 to 60); retrospectives fill to it |
+| `ATLAS_NEWS_MIN_MINUTES` / `ATLAS_NEWS_MAX_MINUTES` | target -5 / +5 | runtime policy; outside it the episode is held |
+| `ATLAS_NEWS_ACCOUNTS` | built-in list | JSON file of official accounts to follow |
+| `ANTHROPIC_API_KEY` | set | primary director (Claude credits) |
+| `NVIDIA_API_KEY` | unset | NVIDIA NIM fallback once Claude credits or quota run out |
+| `ATLAS_DIRECTOR_FALLBACK_MODELS` | `moonshotai/kimi-k2.6,deepseek-ai/deepseek-v4.1-flash` | NIM fallback order |
+| `ATLAS_DIRECTOR_FALLBACK` | on | `off` disables the NIM fallback |
+| `ATLAS_DIRECTOR_URL` / `_MODEL` / `_API_KEY` | Anthropic, `claude-sonnet-5-5` | primary provider override |
+| `ATLAS_DIRECTOR_TIMEOUT_SECS` | `180` (60 for a NIM-only chain) | request timeout |
+| `ATLAS_DIRECTOR_LOG` | unset | JSONL file with one line per director call |
 | `ATLAS_TTS_ENGINE` | `kokoro` | `voicebox` to opt in (falls back to Kokoro) |
 | `ATLAS_CASTING_CSV` | `AtlasStudioOffice/casting/CDN_Interview_Bookings_Month1.csv` | guest bookings; add a `rights_confirmed` column (`yes`) to clear a trademark caveat |
 | `ATLAS_NEWS_TIKTOK` | `off` | `on` posts the TikTok highlight |
@@ -55,8 +136,9 @@ flowchart TD
 
 - Title `Clearly Drawn News <episode title>` (100 characters max), category 1 (Film & Animation: the show is
   an animated program, and News & Politics would invite news-publisher scrutiny for an entertainment-industry show).
-- Description: story source links, the AI and synthetic-media disclosure, and a sourcing line that only claims
-  two sources when every story has a second one.
+- Description: per story the source links, region tag, original headline (translated stories), official
+  announcement line and "Via" credits; the AI and synthetic-media disclosure; a sourcing line that only claims
+  two sources (or a studio's own announcement) when every story has one.
 - Captions `captions_en.srt` from the voice timeline (84 characters per cue, 42 per line).
 - Thumbnail: `blender/story_cards.py card` brand card (plain Python, no Blender), scaled to a 1280x720 PNG of 2 MB or less.
 
@@ -89,6 +171,8 @@ atlas news produce --dry-run-publish                 # full run, stops before up
 atlas news publish --episode EP-004 --dry-run        # rebuild the package only
 atlas news publish --episode EP-004 [--override-hold]
 atlas news youtube-check                             # read-only token + channel check
+atlas news accounts-check                            # re-verify followed official accounts (no keys)
+atlas news director-check                            # director failover chain + which keys exist
 atlas news tiktok-check                              # read-only TikTok account check
 atlas daemon start --news-only                       # scheduled slots, no explainer publishing
 ```
