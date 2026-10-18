@@ -15,8 +15,10 @@ Full usage guide: `AtlasStudioOffice\PIPELINE_STUDIO_README.md`.
 
 - Desk news defaults to the `weekend_update` camera style (`plan_desk`): wide for open/close only, OTS graphics on
   setups, the reader's locked-off single, `desk_hero` for banter/handoffs, reaction cutaways on `[REACTION:x]`.
-  Anchors alternate stories; tags `[BANTER]`, `[SETUP]`, `[REACTION:elena|marcus]`, `[VISUAL: path]`, `[WALK]` must be
-  removed with `strip_tags` before TTS and captions (not wired into the Rust voice step yet).
+  Anchors alternate stories; tags `[BANTER]`, `[SETUP]`, `[REACTION:elena|marcus]`, `[VISUAL: path]`, `[WALK]` are removed
+  before Kokoro by `strip_stage_tags` in `crates/atlas-cli/src/news_voice.rs` (any `[bracket]` tag; tag-only lines are
+  skipped); `studio_api.strip_tags` is the Python equivalent. Preview captions (`news_preview.rs`) still need it.
+- Desk logo slot: material `CDN_DESK_EMBLEM` (pending rename; legacy `Unreal_Medallion_Mat` used meanwhile).
 - Story visuals: `set_story_visual("elena"|"marcus", path)` on `SM_BS_Screen_38` (Elena, left) / `SM_BS_Screen_41`
   (Marcus, right); brand loop fallback; guest feeds are refused on desk screens.
 - Thursday Throwback: `plan_throwback` (desk open, `throwback_walk_wide` / `throwback_walk_track`, interview cameras).
