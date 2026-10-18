@@ -18,15 +18,18 @@ const DEFAULT_UE_CMD: &str =
 const DEFAULT_UE_PROJECT: &str =
     r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject";
 const ANCHOR_WARDROBE: &str = include_str!("../../../unreal/wardrobe.json");
-/// Clearly Drawn News only airs stories confirmed by two independent outlets
-/// (`ATLAS_NEWS_MIN_SOURCES` overrides, 1-3, for testing).
+/// Clearly Drawn News only airs stories confirmed by two independent outlets. Not configurable.
 const NEWS_MIN_SOURCES: usize = 2;
 
-fn news_min_sources(lookup: impl Fn(&str) -> Option<String>) -> usize {
-    lookup("ATLAS_NEWS_MIN_SOURCES")
-        .and_then(|value| value.trim().parse::<usize>().ok())
-        .filter(|n| (1..=3).contains(n))
-        .unwrap_or(NEWS_MIN_SOURCES)
+/// Episode runtime policy: target `ATLAS_NEWS_TARGET_MINUTES` (default 30, 10 to 60). Episodes are
+/// held below `ATLAS_NEWS_MIN_MINUTES` (default target - 5) or above `ATLAS_NEWS_MAX_MINUTES`
+/// (default target + 5).
+pub(crate) fn news_policy(lookup: impl Fn(&str) -> Option<String>) -> EpisodeDurationPolicy {
+    let minutes = |name: &str| lookup(name).and_then(|v| v.trim().parse::<f64>().ok()).filter(|m| (5.0..=90.0).contains(m));
+    let target = minutes("ATLAS_NEWS_TARGET_MINUTES").filter(|m| (10.0..=60.0).contains(m)).unwrap_or(30.0);
+    let min = minutes("ATLAS_NEWS_MIN_MINUTES").filter(|m| *m <= target).unwrap_or(target - 5.0);
+    let max = minutes("ATLAS_NEWS_MAX_MINUTES").filter(|m| *m >= target).unwrap_or(target + 5.0);
+    EpisodeDurationPolicy { min_seconds: min * 60.0, max_seconds: max * 60.0, target_seconds: target * 60.0 }
 }
 
 /// Who signs off on a news slate before production continues.
@@ -53,15 +56,15 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
     println!("══════════════════════════════════════════════════════════════════");
 
     let news_desk = AnimationNewsDesk::new();
-    let min_sources = news_min_sources(|name| std::env::var(name).ok());
+    let min_sources = NEWS_MIN_SOURCES;
     let fact_checker = NewsFactChecker::new(min_sources, true);
-    let policy = EpisodeDurationPolicy::default();
+    let policy = news_policy(|name| std::env::var(name).ok());
     let news_dir = store.data_dir().join("news");
 
     match action {
         NewsAction::Research => {
             println!("\n[1/3] Ingesting developing animation industry wire...");
-            let (_, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "research").await;
+            let (_, report, _) = checked_wire(&news_desk, &fact_checker, &news_dir, "research").await;
 
             println!("\n[2/3] Fact-Checking & Corroboration Engine results:");
             println!("  Passed:   {} verified stories", report.passed_stories.len());
@@ -82,21 +85,24 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 );
             }
             println!(
-                "\nEstimated Full Episode Runtime: {:.1} minutes (Target: 15–30 min)",
-                report.estimated_total_minutes
+                "\nEstimated Full Episode Runtime: {:.1} minutes (Target: {:.0} min, {:.0} to {:.0} allowed)",
+                report.estimated_total_minutes,
+                policy.target_seconds / 60.0,
+                policy.min_seconds / 60.0,
+                policy.max_seconds / 60.0
             );
         }
         NewsAction::Slate => {
-            let (origin, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "slate").await;
+            let (origin, report, _) = checked_wire(&news_desk, &fact_checker, &news_dir, "slate").await;
             let (episode_id, _) = next_episode(&news_dir);
             let title = episode_title(&episode_id, &report);
             println!("\nWriting the two-anchor broadcast script from {} verified stories...", report.passed_stories.len());
-            let (episode, provenance) = draft_script(origin, &report, &title, &policy).await;
+            let (episode, provenance) = draft_script(origin, &report, &[], &title, &policy).await;
 
             println!("\nEpisode Slate: {}", episode.episode_title);
             println!("Script method: {}", provenance["method"].as_str().unwrap_or("unknown"));
             let compliance = match episode.validate_duration(&policy) {
-                Ok(()) => "Compliant with 15–30 min constraint".to_string(),
+                Ok(()) => format!("Compliant with the {:.0}–{:.0} min policy", policy.min_seconds / 60.0, policy.max_seconds / 60.0),
                 Err(error) => format!("NOT COMPLIANT: {error}"),
             };
             println!(
@@ -119,7 +125,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
         }
         NewsAction::Telegram { token, chat_id } => {
             let mut gate = TelegramApprovalGate::new(token, chat_id).map_err(anyhow::Error::msg)?;
-            let (_, report) = checked_wire(&news_desk, &fact_checker, &news_dir, "telegram").await;
+            let (_, report, _) = checked_wire(&news_desk, &fact_checker, &news_dir, "telegram").await;
             let (episode_id, episode_number) = next_episode(&news_dir);
 
             println!("\nConnecting to Telegram Bot API...");
@@ -172,6 +178,8 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             }
         }
         NewsAction::YoutubeCheck => news_publish::youtube_check().await?,
+        NewsAction::AccountsCheck => accounts_check().await?,
+        NewsAction::DirectorCheck => director_check(),
         NewsAction::TiktokCheck => crate::news_tiktok::tiktok_check().await?,
         NewsAction::TiktokAuth => crate::news_tiktok::tiktok_auth()?,
         NewsAction::TiktokAuthComplete { redirect } => crate::news_tiktok::tiktok_auth_complete(&redirect).await?,
@@ -196,7 +204,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             timer.begin("research");
             println!("\n[PHASE 1: RESEARCH & FACT-CHECK]");
-            let (wire_origin, mut report) = checked_wire(&news_desk, &fact_checker, &news_dir, "produce").await;
+            let (wire_origin, mut report, wire_stories) = checked_wire(&news_desk, &fact_checker, &news_dir, "produce").await;
             if wire_origin == WireOrigin::LiveFeeds {
                 let dropped = news_aired::drop_already_aired(&news_dir, &mut report, Utc::now());
                 if dropped > 0 {
@@ -210,12 +218,31 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 .await;
                 anyhow::bail!("Production halted: no fresh stories passed fact-checking");
             }
-            write_json(&episode_dir.join("fact_check.json"), &report)?;
             println!(
                 "  Curated {} verified stories ({} rejected).",
                 report.passed_stories.len(),
                 report.rejected_stories.len()
             );
+
+            // News first; animation-history retrospectives fill the rest of the runtime.
+            let retros_wanted = if wire_origin == WireOrigin::LiveFeeds {
+                atlas_storyboard::story_script::retros_needed(report.passed_stories.len(), &policy)
+            } else {
+                0
+            };
+            let today_local = chrono::Local::now().date_naive();
+            let throwback_guest = thursday_throwback_guest(today_local);
+            let retro_research = if retros_wanted > 0 {
+                println!("\n[PHASE 1b: RETROSPECTIVES ({retros_wanted} needed to reach the runtime target)]");
+                news_retro::research_retros(&news_dir, retros_wanted, today_local, throwback_guest.as_deref()).await
+            } else {
+                news_retro::RetroResearch { retros: Vec::new(), rejected: Vec::new() }
+            };
+            let retros = retro_research.retros.clone();
+            if retros.len() < retros_wanted {
+                eprintln!("  ⚠ Only {} of {retros_wanted} retrospectives could be grounded; the runtime hold may apply.", retros.len());
+            }
+            write_json(&episode_dir.join("fact_check.json"), &fact_check_record(&report, &wire_stories, &retro_research))?;
 
             timer.begin("approval");
             let mode = if skip_telegram_wait {
@@ -260,7 +287,7 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             timer.begin("script");
             println!("\n[PHASE 3: SCRIPT & DIALOGUE GENERATION]");
             let title = episode_title(&episode_id, &report);
-            let (episode, provenance) = draft_script(wire_origin, &report, &title, &policy).await;
+            let (episode, provenance) = draft_script(wire_origin, &report, &retros, &title, &policy).await;
             write_json(&episode_dir.join("script.json"), &episode)?;
             write_json(&episode_dir.join("script_provenance.json"), &provenance)?;
             println!("  Script method: {}", provenance["method"].as_str().unwrap_or("unknown"));
@@ -356,8 +383,8 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
             }
             let status = match (filming.is_filmed(), voices.is_voiced(), runtime_check.is_ok()) {
                 (true, _, true) => "FILMED — final/episode.mp4 ready for review and fine-tuning",
-                (true, _, false) => "FILMED — runtime outside the 15–30 minute policy; needs a longer script",
-                (false, true, false) => "VOICED — runtime outside the 15–30 minute policy; needs a longer script",
+                (true, _, false) => "FILMED — runtime outside the runtime policy (ATLAS_NEWS_TARGET_MINUTES); needs a different script length",
+                (false, true, false) => "VOICED — runtime outside the runtime policy (ATLAS_NEWS_TARGET_MINUTES); needs a different script length",
                 (false, true, true) => "VOICED — Unreal filming pending",
                 (false, false, _) => "SCRIPT PACKAGE READY — voices and Unreal filming pending",
             };
@@ -398,8 +425,10 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                 }),
             )?;
 
-            if wire_origin == WireOrigin::LiveFeeds {
+            // A dry run never uses up stories or retrospective topics.
+            if wire_origin == WireOrigin::LiveFeeds && !dry_run_publish {
                 news_aired::record_aired(&news_dir, &episode_id, &report.passed_stories, Utc::now())?;
+                news_retro::record_aired(&news_dir, &episode_id, &retros, Utc::now())?;
             }
 
             let request = news_publish::PublishRequest { dry_run: dry_run_publish, override_hold: false };
@@ -616,17 +645,68 @@ fn story_briefs(report: &FactCheckReport) -> Vec<StoryBrief> {
             summary: story.factual_summary.clone(),
             category: story.category.as_str().to_string(),
             organization: story.studio_or_organization.clone(),
-            outlets: std::iter::once(story.primary_source_url.as_str())
-                .chain(story.secondary_source_url.as_deref())
-                .filter_map(outlet_name)
-                .collect(),
+            outlets: if story.sourcing.credits.is_empty() {
+                std::iter::once(story.primary_source_url.as_str())
+                    .chain(story.secondary_source_url.as_deref())
+                    .filter_map(outlet_name)
+                    .collect()
+            } else {
+                story.sourcing.credits.clone()
+            },
+            region: story.sourcing.region.clone(),
+            official_announcement: story.sourcing.official_primary.clone(),
+            original_headline: story.sourcing.original_headline.clone(),
+            retrospective: None,
         })
         .collect()
+}
+
+/// Thursday Throwback guest booked for today (casting CSV), so a retrospective can lead into it.
+fn thursday_throwback_guest(today: chrono::NaiveDate) -> Option<String> {
+    if chrono::Datelike::weekday(&today) != chrono::Weekday::Thu {
+        return None;
+    }
+    let csv = std::fs::read_to_string(news_publish::casting_csv_path()).ok()?;
+    let date = today.format("%Y-%m-%d").to_string();
+    news_publish::parse_bookings(&csv).into_iter().find(|b| b.date == date).map(|b| b.character)
+}
+
+/// fact_check.json: the fact-check report plus the attribution evidence and outlets of every
+/// passed story and the full citation record of every retrospective.
+fn fact_check_record(
+    report: &FactCheckReport,
+    stories: &[atlas_media::news_wire::WireStory],
+    retros: &news_retro::RetroResearch,
+) -> serde_json::Value {
+    let mut record = serde_json::to_value(report).unwrap_or_default();
+    record["min_sources"] = serde_json::json!(NEWS_MIN_SOURCES);
+    record["attribution"] = serde_json::json!(report
+        .passed_stories
+        .iter()
+        .filter_map(|passed| stories.iter().find(|s| s.item.id == passed.id))
+        .map(|s| serde_json::json!({
+            "story_id": s.item.id,
+            "title": s.item.title,
+            "organization": s.item.studio_or_organization,
+            "evidence": s.attribution_evidence,
+            "method": s.attribution_method,
+            "outlets": s.outlets,
+            "source_urls": s.source_urls,
+        }))
+        .collect::<Vec<_>>());
+    record["retrospectives"] = serde_json::json!(retros.retros);
+    record["retrospectives_rejected"] = serde_json::json!(retros
+        .rejected
+        .iter()
+        .map(|(topic, reason)| serde_json::json!({ "topic": topic, "reason": reason }))
+        .collect::<Vec<_>>());
+    record
 }
 
 async fn draft_script(
     origin: WireOrigin,
     report: &FactCheckReport,
+    retros: &[news_retro::Retrospective],
     title: &str,
     policy: &EpisodeDurationPolicy,
 ) -> (MasterEpisodeScript, serde_json::Value) {
@@ -634,7 +714,8 @@ async fn draft_script(
         let script = TwoAnchorScriptWriter::new().generate_broadcast_episode(title, &today());
         return (script, serde_json::json!({ "method": "curated", "note": "hand-written script for the curated fallback stories" }));
     }
-    let briefs = story_briefs(report);
+    let mut briefs = story_briefs(report);
+    briefs.extend(retros.iter().map(news_retro::Retrospective::brief));
     let writer = NewsroomWriter::new();
     let drafted = match DirectorClient::from_env() {
         Some(director) => writer.director_episode(&director, title, &today(), &briefs, policy).await,
@@ -667,23 +748,86 @@ async fn checked_wire(
     fact_checker: &NewsFactChecker,
     news_dir: &Path,
     command: &str,
-) -> (WireOrigin, FactCheckReport) {
+) -> (WireOrigin, FactCheckReport, Vec<atlas_media::news_wire::WireStory>) {
     let skip = news_health::feeds_to_skip(news_dir, Utc::now());
     for (feed, retry) in &skip {
         println!("  Skipping {feed}: failed repeatedly; next retry after {}", retry.format("%Y-%m-%d %H:%M UTC"));
     }
     let skip = skip.into_iter().map(|(feed, _)| feed).collect::<Vec<_>>();
-    let wire = load_wire(news_desk, &skip).await;
+    let mut wire = load_wire(news_desk, &skip, news_dir).await;
     println!("  Found {} candidate industry stories.", wire.items.len());
+    if wire.origin == WireOrigin::LiveFeeds {
+        let by_text = wire.stories.iter().filter(|s| !s.item.studio_or_organization.is_empty()).count();
+        let by_director = news_attribution::attribute_missing(&mut wire.stories).await;
+        println!(
+            "  Attribution: {by_text} from feed text, {by_director} quoted by the director, {} still unattributed.",
+            wire.stories.iter().filter(|s| s.item.studio_or_organization.is_empty()).count()
+        );
+        wire.items = wire.stories.iter().map(|s| s.item.clone()).collect();
+        let corroborated = wire.stories.iter().filter(|s| s.item.sourcing.independent_sources >= NEWS_MIN_SOURCES).count();
+        let official = wire.stories.iter().filter(|s| s.item.sourcing.official_primary.is_some()).count();
+        println!(
+            "  Corroborated by {NEWS_MIN_SOURCES}+ independent sources: {corroborated} of {}; official studio announcements: {official}.",
+            wire.stories.len()
+        );
+        let mut regions: Vec<(String, usize)> = Vec::new();
+        for story in &wire.stories {
+            match regions.iter_mut().find(|(r, _)| *r == story.item.sourcing.region) {
+                Some((_, n)) => *n += 1,
+                None => regions.push((story.item.sourcing.region.clone(), 1)),
+            }
+        }
+        println!("  Regions: {}", regions.iter().map(|(r, n)| format!("{r} {n}")).collect::<Vec<_>>().join(", "));
+    }
     let report = fact_checker.verify_candidates(wire.items);
     if let Err(error) = news_health::record(news_dir, command, wire.origin, &wire.feeds, &report) {
         eprintln!("  Wire health log not updated: {error}");
     }
-    (wire.origin, report)
+    (wire.origin, report, wire.stories)
 }
 
-async fn load_wire(news_desk: &AnimationNewsDesk, skip: &[String]) -> NewsWire {
-    let wire = news_desk.fetch_wire_skipping(skip).await;
+/// `atlas news accounts-check`: every pinned official account, re-verified against its platform.
+async fn accounts_check() -> anyhow::Result<()> {
+    let accounts = atlas_media::news_social::load_accounts(|n| std::env::var(n).ok());
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?;
+    println!("\nOfficial accounts followed: {} (keyless: YouTube channel RSS, Bluesky public AppView)", accounts.len());
+    let checks = atlas_media::news_social::check_accounts(&client, &accounts).await;
+    for check in &checks {
+        println!("  {} {} — {}", if check.ok { "✓" } else { "✗" }, check.account, check.detail);
+    }
+    let failed = checks.iter().filter(|c| !c.ok).count();
+    println!("\n{} verified, {failed} failed. X is not used; Instagram, TikTok and Threads need logins or app tokens and are not used.", checks.len() - failed);
+    if failed > 0 {
+        anyhow::bail!("{failed} official account(s) failed verification");
+    }
+    Ok(())
+}
+
+/// `atlas news director-check`: the failover chain and which keys exist (never their values).
+fn director_check() {
+    let has = |name: &str| std::env::var(name).is_ok_and(|v| !v.trim().is_empty());
+    println!("\nDirector keys: ANTHROPIC_API_KEY {}, NVIDIA_API_KEY {}, ATLAS_DIRECTOR_API_KEY {}",
+        if has("ANTHROPIC_API_KEY") { "set" } else { "missing" },
+        if has("NVIDIA_API_KEY") { "set" } else { "missing" },
+        if has("ATLAS_DIRECTOR_API_KEY") { "set" } else { "not set" });
+    match DirectorClient::from_env() {
+        Some(director) => println!("Director chain: {}", director.chain()),
+        None => println!("Director chain: none (no key); scripts use the template writer and non-English entries are skipped."),
+    }
+    if !has("NVIDIA_API_KEY") {
+        println!("No NVIDIA NIM fallback: when the Claude credits run out the director stops (set NVIDIA_API_KEY).");
+    }
+}
+
+async fn load_wire(news_desk: &AnimationNewsDesk, skip: &[String], news_dir: &Path) -> NewsWire {
+    let (mut entries, feeds) = news_desk.fetch_entries(skip).await;
+    let official = feeds.iter().filter(|f| f.source.contains(" (YouTube ") || f.source.contains(" (Bluesky ")).count();
+    println!("  Following {official} official studio/network accounts (YouTube RSS, Bluesky).");
+    let (translated, dropped) = news_translate::translate_entries(&mut entries, news_dir, news_desk.max_age_days()).await;
+    if translated + dropped > 0 {
+        println!("  Translated {translated} non-English entries with the director; {dropped} dropped (could not translate).");
+    }
+    let wire = news_desk.wire_from_entries(entries, feeds).await;
     for feed in &wire.feeds {
         if let Some(error) = &feed.error {
             eprintln!("  Feed unavailable: {error}");
@@ -837,10 +981,21 @@ mod tests {
     }
 
     #[test]
-    fn news_requires_two_sources_by_default() {
-        assert_eq!(news_min_sources(|_| None), 2);
-        assert_eq!(news_min_sources(|_| Some("1".into())), 1);
-        assert_eq!(news_min_sources(|_| Some("9".into())), 2);
+    fn news_requires_two_sources() {
+        assert_eq!(NEWS_MIN_SOURCES, 2);
+    }
+
+    #[test]
+    fn runtime_policy_defaults_to_30_minutes_and_is_configurable() {
+        let policy = news_policy(|_| None);
+        assert_eq!((policy.min_seconds, policy.target_seconds, policy.max_seconds), (1500.0, 1800.0, 2100.0));
+        let custom = news_policy(|name| match name {
+            "ATLAS_NEWS_TARGET_MINUTES" => Some("20".into()),
+            "ATLAS_NEWS_MIN_MINUTES" => Some("15".into()),
+            _ => None,
+        });
+        assert_eq!((custom.min_seconds, custom.target_seconds, custom.max_seconds), (900.0, 1200.0, 1500.0));
+        assert_eq!(news_policy(|_| Some("999".into())).target_seconds, 1800.0);
     }
 
     #[test]
@@ -854,7 +1009,8 @@ mod tests {
     fn outlets_are_named_from_source_urls() {
         assert_eq!(outlet_name("https://www.cartoonbrew.com/anime/csm").as_deref(), Some("Cartoon Brew"));
         assert_eq!(outlet_name("https://www.animenewsnetwork.com/news/x").as_deref(), Some("Anime News Network"));
-        assert_eq!(outlet_name("https://variety.com/2026/film").as_deref(), Some("variety.com"));
+        assert_eq!(outlet_name("https://variety.com/2026/film").as_deref(), Some("Variety"));
+        assert_eq!(outlet_name("https://example.org/2026/film").as_deref(), Some("example.org"));
         assert_eq!(outlet_name("not a url"), None);
     }
 

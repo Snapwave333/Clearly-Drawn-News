@@ -105,7 +105,8 @@ fn news_schedule_hours(lookup: impl Fn(&str) -> Option<String>) -> Vec<u32> {
     hours
 }
 
-const DEFAULT_NEWS_HOURS: &str = "12,20";
+/// One quality episode a day at noon local time (ATLAS_NEWS_HOURS overrides, e.g. "12,20").
+const DEFAULT_NEWS_HOURS: &str = "12";
 
 fn current_news_slot(hours: &[u32], now: chrono::NaiveDateTime) -> Option<String> {
     use chrono::Timelike;
@@ -213,7 +214,7 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
             let hours = news_schedule_hours(env);
             let listed = hours.iter().map(|h| format!("{h:02}:00")).collect::<Vec<_>>().join(", ");
             match (hours.is_empty(), news_approval(env)) {
-                (true, _) => println!("Clearly Drawn News scheduling is off (set ATLAS_NEWS_HOURS, e.g. 12,20)."),
+                (true, _) => println!("Clearly Drawn News scheduling is off (set ATLAS_NEWS_HOURS, e.g. 12)."),
                 (false, Some(approval)) => println!("Clearly Drawn News: {} episodes/day at {listed} local time ({approval:?}).", hours.len()),
                 (false, None) => println!("Clearly Drawn News: {} slots/day at {listed} local time, but ATLAS_NEWS_APPROVAL=telegram has no TELEGRAM_BOT_TOKEN, so nothing will run.", hours.len()),
             }
@@ -588,7 +589,7 @@ mod tests {
         let env = |pairs: &'static [(&'static str, &'static str)]| {
             move |name: &str| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| v.to_string())
         };
-        assert_eq!(news_schedule_hours(env(&[])), vec![12, 20]);
+        assert_eq!(news_schedule_hours(env(&[])), vec![12]);
         assert!(news_schedule_hours(env(&[("ATLAS_NEWS_HOURS", "off")])).is_empty());
         assert_eq!(news_schedule_hours(env(&[("ATLAS_NEWS_DAILY_HOUR", "14")])), vec![14]);
         assert!(news_schedule_hours(env(&[("ATLAS_NEWS_DAILY_HOUR", "25")])).is_empty());

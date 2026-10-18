@@ -105,6 +105,7 @@ mod tests {
             is_verified: true,
             is_rumor: false,
             estimated_duration_mins: 3.0,
+            sourcing: Default::default(),
         }
     }
 

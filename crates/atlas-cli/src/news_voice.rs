@@ -372,6 +372,10 @@ mod tests {
             category: "Anime".into(),
             organization: "Studio Ghibli".into(),
             outlets: vec!["Anime News Network".into()],
+            region: String::new(),
+            official_announcement: None,
+            original_headline: None,
+            retrospective: None,
         };
         NewsroomWriter::new()
             .template_episode("EP-009", "2026-10-17", &[brief], &EpisodeDurationPolicy::default())

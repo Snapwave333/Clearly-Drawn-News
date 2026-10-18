@@ -20,10 +20,13 @@ mod daemon;
 mod memory;
 mod news;
 mod news_aired;
+mod news_attribution;
+mod news_translate;
 mod news_health;
 mod news_lipsync;
 mod news_preview;
 mod news_publish;
+mod news_retro;
 mod news_tiktok;
 mod news_voice;
 mod planning;
@@ -335,7 +338,7 @@ enum NewsAction {
     },
     /// Run copyright pre-render compliance checks and statutory fair use analysis.
     Copyright,
-    /// Execute the complete autonomous 15-30 minute newsroom broadcast production pipeline.
+    /// Execute the complete autonomous newsroom broadcast production pipeline (30 min target by default).
     Produce {
         #[arg(long, env = "TELEGRAM_BOT_TOKEN", hide_env_values = true)]
         token: Option<String>,
@@ -349,6 +352,10 @@ enum NewsAction {
     },
     /// Read-only check that the stored YouTube login still works (channel info only).
     YoutubeCheck,
+    /// Re-verify every followed official studio/network account (keyless, read-only).
+    AccountsCheck,
+    /// Show the director provider chain (Anthropic, then NVIDIA NIM) and which keys are present.
+    DirectorCheck,
     /// Read-only check of the TikTok app keys and token (account posting options only).
     TiktokCheck,
     /// Print the TikTok authorization URL (official Login Kit, PKCE).

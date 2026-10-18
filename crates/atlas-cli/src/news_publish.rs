@@ -214,7 +214,13 @@ fn clip_chars(text: &str, max: usize) -> String {
     format!("{}…", cut.trim_end())
 }
 
-pub(crate) fn build_metadata(script: &MasterEpisodeScript, report: &FactCheckReport, transcript: String, privacy: &str) -> NewsVideoMetadata {
+pub(crate) fn build_metadata(
+    script: &MasterEpisodeScript,
+    report: &FactCheckReport,
+    retros: &[crate::news_retro::Retrospective],
+    transcript: String,
+    privacy: &str,
+) -> NewsVideoMetadata {
     let title = clip_chars(&format!("{} {}", atlas_core::SHOW_TITLE, script.episode_title), TITLE_LIMIT);
     let mut description = format!(
         "{} — {}\n{}\n\nIn this episode:\n",
@@ -222,11 +228,16 @@ pub(crate) fn build_metadata(script: &MasterEpisodeScript, report: &FactCheckRep
         atlas_core::SHOW_TAGLINE,
         script.episode_date
     );
-    let corroborated = report.passed_stories.iter().all(|s| s.secondary_source_url.is_some());
+    let corroborated = report.passed_stories.iter().all(|s| s.secondary_source_url.is_some() || s.sourcing.official_primary.is_some());
     let sourcing = if corroborated {
-        "Every story comes from the outlets linked above and was confirmed by at least two of them"
+        "Every story comes from the sources linked above and was confirmed by at least two independent outlets, or announced by the studio itself on its verified official account"
     } else {
         "Every story comes from the outlets linked above"
+    };
+    let sourcing = if retros.is_empty() {
+        sourcing.to_string()
+    } else {
+        format!("{sourcing}. The look-back segments are retrospectives, not news; their facts come from Wikipedia and the sources linked with them")
     };
     let disclosure = format!(
         "\nAbout this video: {show} is produced by {company} with AI. The anchors Marcus and Elena, \
@@ -236,7 +247,20 @@ pub(crate) fn build_metadata(script: &MasterEpisodeScript, report: &FactCheckRep
         company = atlas_core::COMPANY_NAME,
     );
     for story in &report.passed_stories {
-        let mut entry = format!("• {}\n  Source: {}\n", story.title, story.primary_source_url);
+        let region = match story.sourcing.region.as_str() {
+            "" | "US" | "Global" => String::new(),
+            region => format!(" [{region}]"),
+        };
+        let mut entry = format!("• {}{region}\n  Source: {}\n", story.title, story.primary_source_url);
+        if let Some(original) = &story.sourcing.original_headline {
+            entry.push_str(&format!("  Original headline: {original}\n"));
+        }
+        if let Some(official) = &story.sourcing.official_primary {
+            entry.push_str(&format!("  {official}.\n"));
+        }
+        if !story.sourcing.credits.is_empty() {
+            entry.push_str(&format!("  Via {}\n", story.sourcing.credits.join("; ")));
+        }
         if let Some(second) = &story.secondary_source_url {
             entry.push_str(&format!("  Also reported: {second}\n"));
         }
@@ -245,6 +269,19 @@ pub(crate) fn build_metadata(script: &MasterEpisodeScript, report: &FactCheckRep
             break;
         }
         description.push_str(&entry);
+    }
+    if !retros.is_empty() {
+        description.push_str("\nLooking back (retrospectives):\n");
+        for retro in retros {
+            let mut entry = format!("• {}: {}\n", retro.framing, retro.title);
+            for url in &retro.citations {
+                entry.push_str(&format!("  {url}\n"));
+            }
+            if description.chars().count() + entry.chars().count() + disclosure.chars().count() > DESCRIPTION_LIMIT {
+                break;
+            }
+            description.push_str(&entry);
+        }
     }
     description.push_str(&disclosure);
 
@@ -436,7 +473,7 @@ fn update_status(episode_dir: &Path, status_text: &str, holds: &[String], publis
 
 /// Builds the package, applies holds, and (only when publishing is on) uploads to YouTube.
 pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: PublishRequest) -> anyhow::Result<()> {
-    let policy = EpisodeDurationPolicy::default();
+    let policy = crate::news::news_policy(env);
     let episode_id = episode_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let mode = publish_mode(env);
     let privacy = news_privacy(env);
@@ -480,7 +517,10 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
             let srt = build_srt(&timeline.lines);
             std::fs::write(&srt_path, &srt)?;
             let transcript = timeline.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n");
-            let metadata = build_metadata(script, report, transcript, privacy);
+            let retros: Vec<crate::news_retro::Retrospective> = read_value(&episode_dir.join("fact_check.json"))
+                .and_then(|v| serde_json::from_value(v["retrospectives"].clone()).ok())
+                .unwrap_or_default();
+            let metadata = build_metadata(script, report, &retros, transcript, privacy);
             std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
             println!("  Metadata: {} ({} chars description, {} tags, category {})", metadata.title, metadata.description.chars().count(), metadata.tags.len(), metadata.category_id);
             println!("  Captions: {} cues", srt.matches(" --> ").count());
