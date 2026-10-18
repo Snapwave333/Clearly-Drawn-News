@@ -78,6 +78,38 @@ atlas-studio/
 | `.\Launch_Unreal_3D_Office.bat` | 1-Click Launch Standalone Unreal Engine 5.8 Virtual Spectator View Window |
 | `cd office-ui && npm start` | Launch 24/7 Electron Three.js Office Visualizer & Tray app |
 
+## Blender Broadcast Studio (CDN)
+
+The CDN broadcast studio (`AtlasStudioOffice\BroadcastStudio_NewsroomSet_v3_polished.blend`) is reused by every Blender
+shoot through one manifest and one helper. Never hardcode studio camera, screen, anchor, or file names.
+
+| Piece | Path |
+|-------|------|
+| Manifest (source of truth) | `C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\studio_manifest.json` (override: `ATLAS_STUDIO_MANIFEST`) |
+| Helper | `blender/studio_api.py`: `open_studio(copy_to=)`, `use_camera(role)`, `camera_for_cut(cut, kind)`, `anchor(role)`, `set_guest_feed(path)`, `set_brand_screens()`, `setup_shot(kind)`, `plan_episode(dir, kind)`, `apply_render_preset(name)` |
+| Dry-run test | `blender -b <copy>.blend --python blender/verify_studio.py -- --report out.json` (`py blender/verify_studio.py` for static checks) |
+| Docs | `docs/BLENDER_STUDIO.md`, `AtlasStudioOffice\PIPELINE_STUDIO_README.md` (Mermaid pipeline flow and camera map) |
+
+Camera roles: `desk_hero`, `desk_wide`, `desk_closeup_elena`, `desk_closeup_marcus`, `desk_ots_graphics`,
+`interview_two_shot`, `interview_reverse`, `interview_monitor`, `bts_wide`, `bts_handheld`.
+Anchor roles: `anchor_female` = Elena, `anchor_male` = Marcus (currently Renderpeople Claudia/Eric models, not
+MetaHumans; MetaHuman exports will replace them under the same roles).
+
+Rules:
+- Interviews (Thursday Throwback, weekly, 30 min max) use both anchors in the interview corner and only interview cameras. Never the desk.
+- Guests (public-domain cartoons) appear only on the `guest_feed` monitor, never in the studio.
+- No primitives: downloaded assets only.
+- Never edit the original .blend files; headless jobs open a copy, never the file open in a visible Blender.
+- Run `verify_studio.py` after any studio change; rename a name only together with `studio_manifest.json`.
+
+`atlas news produce` Phase 6 still films in Unreal; selecting the Blender studio as the Phase 6 engine is not wired yet.
+
+## Legacy: Office Simulation
+
+The UE office simulation (`docs/OFFICE_SIMULATION.md`, `office-ui/`, `Launch_Unreal_3D_Office.bat`,
+`AtlasStudioOffice\Content\Python\office_runtime_bridge.py`, `setup_spectator_office.py`, the 38-agent MetaHuman crowd)
+is legacy overhead. Don't build new pipeline work on it or add dependencies to it, and don't delete it without asking.
+
 ## Crate Overview
 
 | Crate | Module | Responsibility |
@@ -154,6 +186,8 @@ cargo build --release    # Optimized (target/release/atlas.exe)
 | `crates/atlas-cli/src/main.rs` | CLI definitions and command dispatch |
 | `crates/atlas-cli/src/produce.rs` | Whiteboard vertical slice (`cmd_produce`) |
 | `crates/atlas-cli/src/news.rs` | Clearly Drawn News episode pipeline |
+| `blender/studio_api.py` | Blender CDN studio helper; reads `AtlasStudioOffice\studio_manifest.json` |
+| `docs/BLENDER_STUDIO.md` | Blender studio reuse, camera roles, rules, Mermaid diagrams |
 | `.github/workflows/ci.yml` | CI: strict clippy, tests (with FFmpeg), Unreal script checks, office UI build |
 | `crates/atlas-analytics/src/youtube.rs` | YouTube OAuth + Analytics API |
 | `crates/atlas-kokoro/src/lib.rs` | Kokoro TTS + credentials loading |

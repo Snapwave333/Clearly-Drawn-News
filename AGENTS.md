@@ -1,5 +1,8 @@
 # Clearly Drawn Studios — ATLAS Autonomous Production Engine & 3D MetaHuman Office
 
+> **Studio:** Blender shoots reuse the CDN broadcast studio via `AtlasStudioOffice\studio_manifest.json` and `blender/studio_api.py` (see `docs/BLENDER_STUDIO.md`). The UE office simulation and 38-agent MetaHuman crowd below are **legacy**: don't extend or depend on them.
+
+
 ## Project Status: Milestone 1 Verified Locally; UE 5.8 3D Office Simulation Live
 
 **Last Updated:** 2026-10-16  
