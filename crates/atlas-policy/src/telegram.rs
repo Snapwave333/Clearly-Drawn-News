@@ -276,6 +276,23 @@ impl TelegramApprovalGate {
         Ok(ApprovalDecision::Pending)
     }
 
+    /// Sends a plain informational message (no buttons, nothing to approve).
+    pub async fn send_notice(&mut self, text: &str) -> Result<i64, String> {
+        let chat_id = self.resolve_chat_id().await?;
+        let url = format!("https://api.telegram.org/bot{}/sendMessage", self.bot_token);
+        let payload = serde_json::json!({
+            "chat_id": chat_id,
+            "text": clip(text, TELEGRAM_MESSAGE_BUDGET),
+        });
+        let resp = self.client.post(&url).json(&payload).send().await.map_err(redact_error)?;
+        let json: serde_json::Value = resp.json().await.map_err(redact_error)?;
+        if json.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            Ok(json["result"]["message_id"].as_i64().unwrap_or(0))
+        } else {
+            Err("Telegram rejected the notice".to_string())
+        }
+    }
+
     async fn resolve_chat_id(&mut self) -> Result<i64, String> {
         if let Some(id) = self.chat_id {
             return Ok(id);
@@ -310,6 +327,18 @@ impl TelegramApprovalGate {
 }
 
 const TELEGRAM_MESSAGE_BUDGET: usize = 3900;
+const NOTICE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Best-effort Telegram notice for unattended runs. Never fails: a missing or placeholder
+/// `TELEGRAM_BOT_TOKEN`, an unlinked chat, a network error, or a slow API (20 s cap) only
+/// returns `false`. Uses `TELEGRAM_CHAT_ID` when set.
+pub async fn notify_best_effort(text: &str) -> bool {
+    let chat_id = std::env::var("TELEGRAM_CHAT_ID").ok().and_then(|id| id.trim().parse().ok());
+    let Ok(mut gate) = TelegramApprovalGate::new(None, chat_id) else {
+        return false;
+    };
+    matches!(tokio::time::timeout(NOTICE_TIMEOUT, gate.send_notice(text)).await, Ok(Ok(_)))
+}
 
 fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
