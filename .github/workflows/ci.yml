@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile
-        run: python -m py_compile unreal/Content/Python/*.py
+        run: python -m py_compile unreal/Content/Python/*.py blender/*.py
       - name: Validate JSON specs
         run: for f in unreal/*.json; do python -m json.tool "$f" > /dev/null; done
 
