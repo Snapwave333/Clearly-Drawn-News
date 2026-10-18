@@ -159,6 +159,11 @@ def screen_materials(role, manifest=None):
         material = bpy.data.materials.get(name)
         if material is not None:
             found.append(material)
+    if not found:
+        for name in spec.get("legacy_materials", []):
+            material = bpy.data.materials.get(name)
+            if material is not None:
+                found.append(material)
     prefix = spec.get("material_prefix")
     tag = spec.get("tag")
     excluded = set(spec.get("exclude_materials", []))
@@ -410,8 +415,9 @@ def parse_tags(*texts):
 
 
 def strip_tags(text):
-    """Remove camera tags so they are never spoken by TTS or shown in captions."""
-    return re.sub(r"\s{2,}", " ", TAG_PATTERN.sub("", text or "")).strip()
+    """Remove every [bracket] tag so it is never spoken or captioned (same rule as news_voice.rs strip_stage_tags)."""
+    text = re.sub(r"\[[^\]]*\]", " ", text or "")
+    return re.sub(r"\s+([,.!?;:])", r"\1", " ".join(text.split()))
 
 
 def _line_tags(line):
@@ -655,6 +661,8 @@ def validate(manifest=None):
     for role, spec in anchor_specs(manifest).items():
         check("anchor {} ({}) object {}".format(role, spec["name"], spec["object"]), spec["object"] in bpy.data.objects)
     for role, spec in manifest["screens"].items():
+        for name in spec.get("materials", []):
+            check("screen {} material {}".format(role, name), name in bpy.data.materials)
         materials = screen_materials(role, manifest)
         check("screen {} materials ({})".format(role, ", ".join(m.name for m in materials[:4]) or "none"), bool(materials))
         if spec.get("object"):
