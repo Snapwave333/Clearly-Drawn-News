@@ -215,7 +215,7 @@ def set_screen_media(role, path, manifest=None):
         material["brand_image"] = image.filepath
         changed.append(material.name)
     if not changed:
-        raise LookupError("no materials found for screen role '{}'".format(role))
+        raise LookupError("screen role '{}' has no material with a swappable image node".format(role))
     return changed
 
 
@@ -232,8 +232,13 @@ def set_brand_screens(images=None, manifest=None):
         if role == "guest_feed":
             continue
         path = images.get(role) or spec.get("default_image")
-        if path:
-            result[role] = set_screen_media(role, path, manifest)
+        if not path:
+            continue
+        swappable = [m for m in screen_materials(role, manifest) if _image_node(m, spec.get("image_node")) is not None]
+        if not swappable and role not in images:
+            result[role] = []  # baked into the set (e.g. a vector desk emblem); nothing to swap
+            continue
+        result[role] = set_screen_media(role, path, manifest)
     return result
 
 
