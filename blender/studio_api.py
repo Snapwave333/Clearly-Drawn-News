@@ -693,3 +693,32 @@ def validate(manifest=None):
         if spec.get("seat_marker"):
             check("anchor {} seat marker {}".format(role, spec["seat_marker"]), spec["seat_marker"] in bpy.data.objects)
     return report
+
+
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def outfit_for(anchor, episode_date, manifest=None):
+    """Return the wardrobe entry for an anchor on an episode date.
+
+    anchor: role ("anchor_female"/"anchor_male") or character name ("Elena"/"Marcus").
+    episode_date: datetime.date/datetime or "YYYY-MM-DD". Keyed by weekday only, so the
+    AM and PM videos of the same day always get the same outfit.
+    """
+    import datetime
+    manifest = manifest or load_manifest()
+    wardrobe = manifest["wardrobe_rotation"]["anchors"]
+    role = anchor
+    if role not in wardrobe:
+        matches = [r for r, v in wardrobe.items() if v.get("character", "").lower() == str(anchor).lower()]
+        if not matches:
+            raise KeyError("no wardrobe for '{}'; known: {}".format(anchor, ", ".join(wardrobe)))
+        role = matches[0]
+    if isinstance(episode_date, str):
+        episode_date = datetime.date.fromisoformat(episode_date[:10])
+    elif isinstance(episode_date, datetime.datetime):
+        episode_date = episode_date.date()
+    day = _WEEKDAYS[episode_date.weekday()]
+    entry = dict(wardrobe[role]["rotation"][day])
+    entry.update(weekday=day, role=role, character=wardrobe[role].get("character"))
+    return entry
