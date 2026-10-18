@@ -157,7 +157,8 @@ impl Provider {
     ///   `response_format`; both are omitted and `max_tokens` is set.
     /// * NVIDIA NIM: `max_tokens` is set (the default is short enough to cut a script off), the
     ///   temperature is clamped to the model's accepted range (Kimi K2 models are pinned at their
-    ///   recommended 0.6), and `response_format` is sent only to models that support it.
+    ///   recommended 0.6), and `response_format` is never sent: several NIM models answer JSON mode
+    ///   with an empty content, and the reply is fence-stripped anyway.
     fn body(&self, system: &str, user: &str, temperature: f64) -> serde_json::Value {
         let mut body = serde_json::json!({
             "model": self.model,
@@ -171,9 +172,6 @@ impl Provider {
         } else if self.is_nim() {
             body["max_tokens"] = serde_json::json!(NIM_MAX_TOKENS);
             body["temperature"] = serde_json::json!(nim_temperature(&self.model, temperature));
-            if nim_supports_json_mode(&self.model) {
-                body["response_format"] = serde_json::json!({"type": "json_object"});
-            }
         } else {
             body["temperature"] = serde_json::json!(temperature);
             body["response_format"] = serde_json::json!({"type": "json_object"});
@@ -186,12 +184,6 @@ impl Provider {
 /// everything else is clamped to 0..=1, since several NIM models reject values above 1.
 fn nim_temperature(model: &str, requested: f64) -> f64 {
     if model.contains("kimi-k2") { 0.6 } else { requested.clamp(0.0, 1.0) }
-}
-
-/// JSON mode is unreliable on NIM's reasoning models, which then answer with an empty content.
-/// The reply is fence-stripped either way, so it is only requested where it is known to work.
-fn nim_supports_json_mode(model: &str) -> bool {
-    !(model.contains("reasoning") || model.contains("deepseek") || model.contains("kimi"))
 }
 
 /// Why a provider call failed, and whether the chain should move on.
@@ -212,7 +204,8 @@ fn classify(status: u16, body: &str) -> Failure {
         .iter()
         .any(|w| lower.contains(w));
     match status {
-        401 | 402 => Failure::Exhausted,
+        // 404 on NIM: the model is listed but not deployed for this account ("Function ... Not found").
+        401 | 402 | 404 => Failure::Exhausted,
         400 | 403 | 429 if billing => Failure::Exhausted,
         403 => Failure::Exhausted,
         408 | 409 | 425 | 429 | 500..=599 => Failure::Transient,
@@ -243,8 +236,8 @@ impl DirectorClient {
     ///   `NVIDIA_API_KEY`. With no URL set, Anthropic is primary when `ANTHROPIC_API_KEY` exists,
     ///   otherwise NVIDIA NIM.
     /// * Fallbacks: NVIDIA NIM (`integrate.api.nvidia.com/v1`) with `NVIDIA_API_KEY`, models from
-    ///   `ATLAS_DIRECTOR_FALLBACK_MODELS` (comma-separated; default Kimi K2.6 then DeepSeek V4.1
-    ///   Flash). `ATLAS_DIRECTOR_FALLBACK=off` disables them.
+    ///   `ATLAS_DIRECTOR_FALLBACK_MODELS` (comma-separated; default Nemotron 3 Ultra, GLM 5.3
+    ///   Flash, gpt-oss-20b). `ATLAS_DIRECTOR_FALLBACK=off` disables them.
     /// * `ATLAS_DIRECTOR_TIMEOUT_SECS` overrides the request timeout (180 s; 60 s for a NIM-only chain).
     /// * `ATLAS_DIRECTOR_LOG` names a JSONL file that gets one line per call (provider, model,
     ///   outcome, milliseconds); every call is also logged to stderr.
@@ -323,7 +316,7 @@ impl DirectorClient {
         self.active().next().is_some_and(|(_, p)| p.is_anthropic())
     }
 
-    /// "anthropic:claude-sonnet-5-5 -> nvidia-nim:moonshotai/kimi-k2.6 -> ..." (no keys).
+    /// "anthropic:claude-sonnet-5-5 -> nvidia-nim:nvidia/nemotron-3-ultra-550b-a55b -> ..." (no keys).
     pub fn chain(&self) -> String {
         self.providers.iter().map(|p| format!("{}:{}", p.name, p.model)).collect::<Vec<_>>().join(" -> ")
     }
@@ -532,10 +525,12 @@ fn is_anthropic_endpoint(endpoint: &str) -> bool {
 
 const DEFAULT_DIRECTOR_URL: &str = "https://integrate.api.nvidia.com/v1/chat/completions";
 const ANTHROPIC_URL: &str = "https://api.anthropic.com/v1/chat/completions";
-/// NIM fallbacks for scripts and translation, strongest first: Kimi K2.6 (strong long-form
-/// writing and Japanese/Korean/Chinese), then DeepSeek V4.1 Flash.
-const DEFAULT_NIM_FALLBACK_MODELS: &[&str] = &["moonshotai/kimi-k2.6", "deepseek-ai/deepseek-v4.1-flash"];
-const DEFAULT_NVIDIA_MODEL: &str = "moonshotai/kimi-k2.6";
+/// NIM fallbacks for scripts and translation, strongest first. Probed with Eli's key on 2026-10-18
+/// (Japanese headline translation): Nemotron 3 Ultra answered best and fastest (3 s), GLM 5.3 Flash
+/// and gpt-oss-20b were correct. Kimi K2.6, Mistral Large 2 and Nemotron Ultra 253B are listed but
+/// return 404 for the account; DeepSeek V4.1 Flash timed out; GLM 5.3 returned empty content.
+const DEFAULT_NIM_FALLBACK_MODELS: &[&str] = &["nvidia/nemotron-3-ultra-550b-a55b", "z-ai/glm-5.3-flash", "openai/gpt-oss-20b"];
+const DEFAULT_NVIDIA_MODEL: &str = "nvidia/nemotron-3-ultra-550b-a55b";
 const NIM_MAX_TOKENS: u32 = 8192;
 const DEFAULT_ANTHROPIC_MODEL: &str = "claude-sonnet-5-5";
 const ANTHROPIC_MAX_TOKENS: u32 = 8192;
@@ -601,11 +596,15 @@ mod tests {
     fn nim_only_chain_handles_temperature_quirks() {
         let director = DirectorClient::from_lookup(lookup(&[("NVIDIA_API_KEY", "k")])).unwrap();
         assert!(!director.is_anthropic());
-        assert_eq!(director.chain(), "nvidia-nim:moonshotai/kimi-k2.6 -> nvidia-nim:deepseek-ai/deepseek-v4.1-flash");
-        let body = director.chat_body("sys", "user", 0.9);
-        assert_eq!(body["temperature"], 0.6, "Kimi K2 is pinned at 0.6");
+        assert_eq!(
+            director.chain(),
+            "nvidia-nim:nvidia/nemotron-3-ultra-550b-a55b -> nvidia-nim:z-ai/glm-5.3-flash -> nvidia-nim:openai/gpt-oss-20b"
+        );
+        let body = director.chat_body("sys", "user", 1.3);
+        assert_eq!(body["temperature"], 1.0, "NIM temperatures are clamped to 0..1");
         assert!(body.get("response_format").is_none());
         assert_eq!(body["max_tokens"], NIM_MAX_TOKENS);
+        assert_eq!(nim_temperature("moonshotai/kimi-k2.6", 0.9), 0.6, "Kimi K2 is pinned at 0.6");
         assert_eq!(nim_temperature("deepseek-ai/deepseek-v4.1-flash", 1.4), 1.0);
         assert_eq!(nim_temperature("z-ai/glm-5.3", 0.2), 0.2);
     }
@@ -615,7 +614,7 @@ mod tests {
         let director = DirectorClient::from_lookup(lookup(&[("ANTHROPIC_API_KEY", "a"), ("NVIDIA_API_KEY", "n")])).unwrap();
         assert_eq!(
             director.chain(),
-            "anthropic:claude-sonnet-5-5 -> nvidia-nim:moonshotai/kimi-k2.6 -> nvidia-nim:deepseek-ai/deepseek-v4.1-flash"
+            "anthropic:claude-sonnet-5-5 -> nvidia-nim:nvidia/nemotron-3-ultra-550b-a55b -> nvidia-nim:z-ai/glm-5.3-flash -> nvidia-nim:openai/gpt-oss-20b"
         );
         assert!(director.is_anthropic());
         // Anthropic alone (no NVIDIA key yet) still works, with no fallback.
@@ -636,6 +635,7 @@ mod tests {
         assert_eq!(classify(401, "invalid x-api-key"), Failure::Exhausted);
         assert_eq!(classify(429, "rate limited, slow down"), Failure::Transient);
         assert_eq!(classify(529, "overloaded"), Failure::Transient);
+        assert_eq!(classify(404, "Function not found for account"), Failure::Exhausted);
         assert_eq!(classify(400, "unknown field"), Failure::Other);
         assert_eq!(strip_think("<think>hmm</think>\n{\"a\":1}"), "{\"a\":1}");
     }

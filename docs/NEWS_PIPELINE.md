@@ -19,7 +19,7 @@ flowchart TD
   RE --> A{"ATLAS_NEWS_APPROVAL"}
   A -->|"auto (default)"| S
   A -->|telegram| TG["wait for Approve button"] --> S
-  S["Script<br/>director chain: Anthropic claude-sonnet-5-5<br/>-> NVIDIA NIM kimi-k2.6 -> deepseek-v4.1-flash<br/>(template fallback)<br/>credits: via Natalie, Japan / Pixar's official channel"] --> RT["Rights registry"]
+  S["Script<br/>director chain: Anthropic claude-sonnet-5-5<br/>-> NVIDIA NIM nemotron-3-ultra -> glm-5.3-flash -> gpt-oss-20b<br/>(template fallback)<br/>credits: via Natalie, Japan / Pixar's official channel"] --> RT["Rights registry"]
   RT -->|"blocked"| HOLD
   RT --> V["Voices<br/>Voicebox if ATLAS_TTS_ENGINE=voicebox,<br/>else / on failure Kokoro"]
   V --> F["Filming in Unreal<br/>(Blender studio not wired)"]
@@ -93,12 +93,14 @@ region tag, so an episode mixes regions. Official trailers are linked from the d
 ### Director chain
 
 `DirectorClient` tries Anthropic first (Eli's Claude credits, `ANTHROPIC_API_KEY`), then NVIDIA NIM's free
-models at `integrate.api.nvidia.com/v1` with `NVIDIA_API_KEY`: `moonshotai/kimi-k2.6` (scripts and translation),
-then `deepseek-ai/deepseek-v4.1-flash`. Billing, quota, credit or key errors (402, 401, 403, or 400/429 that
-mention credits or quota) take a provider out for the rest of the run; rate limits, overload, 5xx and timeouts
+models at `integrate.api.nvidia.com/v1` with `NVIDIA_API_KEY`: `nvidia/nemotron-3-ultra-550b-a55b` (scripts and
+translation), then `z-ai/glm-5.3-flash`, then `openai/gpt-oss-20b` (probed with Eli's key 2026-10-18; Kimi K2.6,
+Mistral Large 2 and Nemotron Ultra 253B are listed but 404 for the account, DeepSeek V4.1 Flash timed out).
+Billing, quota, credit or key errors (402, 401, 403, 404 model-not-deployed, or 400/429 that mention credits or
+quota) take a provider out for the rest of the run; rate limits, overload, 5xx and timeouts
 fail over for that call only. Quirks: Claude gets no `temperature` or `response_format` and `max_tokens` 8192;
-NIM gets `max_tokens` 8192, temperature clamped to 0..1 (Kimi K2 pinned at 0.6), no JSON mode for Kimi,
-DeepSeek or reasoning models, and `<think>` blocks are stripped. Every call logs
+NIM gets `max_tokens` 8192, temperature clamped to 0..1 (Kimi K2 pinned at 0.6), never JSON mode (some NIM
+models then return empty content), and `<think>` blocks are stripped. Every call logs
 `[director] <purpose>: <provider>:<model> <outcome> (<ms>)` to stderr and, with `ATLAS_DIRECTOR_LOG=<file>`,
 one JSON line per call. `atlas news director-check` shows the chain and which keys exist (never their values).
 
@@ -115,7 +117,7 @@ one JSON line per call. `atlas news director-check` shows the chain and which ke
 | `ATLAS_NEWS_ACCOUNTS` | built-in list | JSON file of official accounts to follow |
 | `ANTHROPIC_API_KEY` | set | primary director (Claude credits) |
 | `NVIDIA_API_KEY` | unset | NVIDIA NIM fallback once Claude credits or quota run out |
-| `ATLAS_DIRECTOR_FALLBACK_MODELS` | `moonshotai/kimi-k2.6,deepseek-ai/deepseek-v4.1-flash` | NIM fallback order |
+| `ATLAS_DIRECTOR_FALLBACK_MODELS` | `nvidia/nemotron-3-ultra-550b-a55b,z-ai/glm-5.3-flash,openai/gpt-oss-20b` | NIM fallback order |
 | `ATLAS_DIRECTOR_FALLBACK` | on | `off` disables the NIM fallback |
 | `ATLAS_DIRECTOR_URL` / `_MODEL` / `_API_KEY` | Anthropic, `claude-sonnet-5-5` | primary provider override |
 | `ATLAS_DIRECTOR_TIMEOUT_SECS` | `180` (60 for a NIM-only chain) | request timeout |
