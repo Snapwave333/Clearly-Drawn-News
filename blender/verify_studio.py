@@ -63,6 +63,92 @@ def exercise_api(manifest, report):
     attempt("rule: guests only on the interview monitor", guest_at_desk_is_rejected)
 
 
+def sample_episode(folder):
+    """Tiny synthetic episode: open, an Elena story with a visual and punchline, a Marcus story with banter, close."""
+    os.makedirs(folder, exist_ok=True)
+    plan = [
+        (1, "Open", "open", [("Duo", "Good evening.", "wide_two_shot")]),
+        (2, "Story A", "news", [("Counterpart", "Setup. [VISUAL: news_intro/assets/brand_screens/brand_led_worldmap.png]", "elena_close_up"),
+                                 ("Counterpart", "Detail.", "elena_close_up"),
+                                 ("Counterpart", "Punchline. [REACTION:marcus]", "elena_close_up")]),
+        (3, "Story B", "news", [("Enthusiast", "Setup.", "marcus_close_up"), ("Enthusiast", "Detail.", "marcus_close_up"),
+                                 ("Counterpart", "[BANTER] Sure, Marcus.", "wide_two_shot")]),
+        (4, "Close", "close", [("Duo", "Good night.", "wide_two_shot")]),
+    ]
+    segments, lines, clock = [], [], 0.0
+    for number, title, category, rows in plan:
+        script_lines = []
+        for index, (speaker, text, cut) in enumerate(rows):
+            script_lines.append({"speaker": speaker, "camera_cut": cut, "spoken_text": text, "broll_visual_cue": None})
+            lines.append({"segment_number": number, "line_index": index, "speaker": speaker, "file": "x.wav",
+                          "start_seconds": clock, "duration_seconds": 4.0})
+            clock += 4.2
+        segments.append({"segment_number": number, "segment_title": title, "segment_category": category, "lines": script_lines})
+    with open(os.path.join(folder, "script.json"), "w", encoding="utf-8") as handle:
+        json.dump({"segments": segments}, handle)
+    with open(os.path.join(folder, "voice_timeline.json"), "w", encoding="utf-8") as handle:
+        json.dump({"lines": lines}, handle)
+    return folder
+
+
+def exercise_styles(manifest, report, folder):
+    def attempt(label, func):
+        try:
+            func()
+            report["ok"].append("style " + label)
+        except LookupError as error:
+            report["pending"].append("style {}: {}".format(label, error))
+        except Exception as error:
+            report["failed"].append("style {}: {}: {}".format(label, type(error).__name__, error))
+
+    episode = sample_episode(folder)
+    plan = studio.plan_desk(episode, manifest=manifest)
+
+    def weekend_update_shape():
+        beats = [c["beat"] for c in plan["cuts"]]
+        roles = [c["role"] for c in plan["cuts"]]
+        assert beats[0] == "OPEN" and beats[-1] == "CLOSE", beats
+        assert "desk_wide" not in roles[1:-1], "wide used outside the open and close"
+        assert {"SETUP", "STORY", "BANTER", "REACTION"} <= set(beats), beats
+        assert [s["reader"] for s in plan["stories"]] == ["anchor_female", "anchor_male"]
+        assert all(a["end"] == b["start"] for a, b in zip(plan["cuts"], plan["cuts"][1:]))
+        assert studio.plan_episode(episode, manifest=manifest)[0]["role"] == "desk_wide", "weekend_update is not the desk default"
+        assert studio.plan_episode(episode, kind="interview", manifest=manifest)[0]["role"].startswith("interview_")
+
+    attempt("weekend_update plan (open/setup/story/banter/reaction, alternating readers)", weekend_update_shape)
+    if studio.bpy is None:
+        return
+
+    def visuals_follow_reader():
+        for story in plan["stories"]:
+            studio.apply_story_visual(story, manifest)
+        studio.set_story_visual("marcus", None, manifest)
+
+    def guest_never_on_desk():
+        casting = studio.resolve(manifest["story_visuals"]["guest_media_dirs"][0], manifest)
+        clip = next((os.path.join(casting, f) for f in os.listdir(casting)), None) if os.path.isdir(casting) else None
+        if clip is None:
+            raise LookupError("no casting media to test with")
+        try:
+            studio.set_story_visual("elena", clip, manifest)
+        except ValueError:
+            return
+        raise AssertionError("guest media was allowed on a desk monitor")
+
+    attempt("set_story_visual on both reader monitors (+ brand loop fallback)", visuals_follow_reader)
+    attempt("rule: guest feeds never on desk monitors", guest_never_on_desk)
+    attempt("apply_cuts timeline markers", lambda: studio.apply_cuts(plan["cuts"], manifest))
+
+    def throwback():
+        tb = studio.plan_throwback(episode, manifest=manifest)
+        phases = [c["beat"] for c in tb["cuts"]]
+        assert phases[0] == "DESK_OPEN" and "WALK" in phases and phases[-1] == "INTERVIEW", phases
+        if tb["pending_cameras"]:
+            raise LookupError("throwback cameras pending: " + ", ".join(tb["pending_cameras"]))
+
+    attempt("thursday_throwback sequence (desk open -> walk -> interview)", throwback)
+
+
 def main():
     options = parse_args(sys.argv)
     manifest = studio.load_manifest(options["manifest"])
@@ -76,6 +162,7 @@ def main():
             report["failed"].append("verify must run on a copy, not the live studio file")
         else:
             exercise_api(manifest, report)
+    exercise_styles(manifest, report, os.path.join(os.environ.get("TEMP", "/tmp"), "studio_verify_episode"))
     for section in ("ok", "pending", "failed"):
         print("[{}] {}".format(section.upper(), len(report[section])))
         if section != "ok":
