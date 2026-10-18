@@ -127,6 +127,7 @@ pub(crate) async fn cmd_publish(store: &Store, options: PublishOptions<'_>) -> a
                     long_uploads_status: channel.long_uploads_status,
                     privacy_status: channel.privacy_status,
                     browser_review,
+                    require_browser_review: true,
                 },
                 &format!("{}_{}", project.video_id, profile.slug),
             )

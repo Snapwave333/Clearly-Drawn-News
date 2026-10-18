@@ -113,6 +113,10 @@ pub struct ChannelPreflight {
     pub long_uploads_status: Option<String>,
     pub privacy_status: Option<String>,
     pub browser_review: Option<ChannelBrowserReview>,
+    /// Require a fresh (< 24 h) manual YouTube Studio review matching this channel. Explainer
+    /// projects keep this on; unattended Clearly Drawn News publishing turns it off, and then a
+    /// recorded review (if any) still blocks on a visible strike or unremediated warning.
+    pub require_browser_review: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -421,6 +425,17 @@ pub fn channel_checks(channel: &ChannelPreflight) -> Vec<PolicyCheck> {
         channel.privacy_status.is_some(),
         "YouTube channel status must include a privacy state",
     );
+    if !channel.require_browser_review {
+        if let Some(review) = &channel.browser_review {
+            add_check(
+                &mut checks,
+                "community_guidelines_channel_state",
+                review_is_clear(review),
+                "The last recorded YouTube Studio review must show no active strike or unremediated warning",
+            );
+        }
+        return checks;
+    }
     let review_matches = channel
         .browser_review
         .as_ref()
@@ -431,19 +446,7 @@ pub fn channel_checks(channel: &ChannelPreflight) -> Vec<PolicyCheck> {
         .as_ref()
         .map(|review| Utc::now() - review.reviewed_at <= chrono::Duration::hours(24))
         .unwrap_or(false);
-    let channel_clear = channel
-        .browser_review
-        .as_ref()
-        .map(|review| {
-            let warning_remediated = review.warning_visible
-                && review.training_completed
-                && review
-                    .warning_expires_at
-                    .map(|expires_at| expires_at > Utc::now())
-                    .unwrap_or(false);
-            !review.strike_visible && (!review.warning_visible || warning_remediated)
-        })
-        .unwrap_or(false);
+    let channel_clear = channel.browser_review.as_ref().map(review_is_clear).unwrap_or(false);
     add_check(
         &mut checks,
         "browser_channel_identity",
@@ -463,6 +466,16 @@ pub fn channel_checks(channel: &ChannelPreflight) -> Vec<PolicyCheck> {
         "YouTube Studio must show no active strike, and any warning must have completed training with a future expiry",
     );
     checks
+}
+
+fn review_is_clear(review: &ChannelBrowserReview) -> bool {
+    let warning_remediated = review.warning_visible
+        && review.training_completed
+        && review
+            .warning_expires_at
+            .map(|expires_at| expires_at > Utc::now())
+            .unwrap_or(false);
+    !review.strike_visible && (!review.warning_visible || warning_remediated)
 }
 
 pub fn tiktok_content_checks(preflight: &TikTokPreflight) -> Vec<PolicyCheck> {
@@ -700,6 +713,7 @@ mod tests {
                 restricted_policy: Some("third_party_content_live_streams".into()),
                 source_url: "https://studio.youtube.com/channel/channel-1".into(),
             }),
+            require_browser_review: true,
         };
         assert!(channel_checks(&channel).iter().any(|check| {
             check.name == "community_guidelines_channel_state" && check.status == CheckStatus::Fail
@@ -724,12 +738,46 @@ mod tests {
                 restricted_policy: Some("third_party_content_live_streams".into()),
                 source_url: "https://studio.youtube.com/channel/channel-1".into(),
             }),
+            require_browser_review: true,
         };
         assert!(
             channel_checks(&channel)
                 .iter()
                 .all(|check| check.status == CheckStatus::Pass)
         );
+    }
+
+    #[test]
+    fn news_publishing_skips_the_manual_review_but_honors_a_recorded_strike() {
+        let mut channel = ChannelPreflight {
+            channel_id: "channel-1".into(),
+            available: true,
+            linked: Some(true),
+            long_uploads_status: Some("allowed".into()),
+            privacy_status: Some("public".into()),
+            browser_review: None,
+            require_browser_review: false,
+        };
+        assert!(channel_checks(&channel).iter().all(|check| check.status == CheckStatus::Pass));
+        assert!(!channel_checks(&channel).iter().any(|check| check.name.starts_with("browser_")));
+        channel.require_browser_review = true;
+        assert!(channel_checks(&channel).iter().any(|check| {
+            check.name == "browser_channel_review_freshness" && check.status == CheckStatus::Fail
+        }));
+        channel.require_browser_review = false;
+        channel.browser_review = Some(ChannelBrowserReview {
+            channel_id: "channel-1".into(),
+            reviewed_at: Utc::now() - chrono::Duration::days(10),
+            warning_visible: false,
+            strike_visible: true,
+            training_completed: false,
+            warning_expires_at: None,
+            restricted_policy: None,
+            source_url: "https://studio.youtube.com/channel/channel-1".into(),
+        });
+        assert!(channel_checks(&channel).iter().any(|check| {
+            check.name == "community_guidelines_channel_state" && check.status == CheckStatus::Fail
+        }));
     }
 
     #[test]
