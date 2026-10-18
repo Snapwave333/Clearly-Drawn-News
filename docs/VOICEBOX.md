@@ -5,8 +5,20 @@ cloning, 8 TTS engines (Qwen3-TTS, Chatterbox, Chatterbox Turbo, LuxTTS, TADA, K
 effects, Whisper STT, a REST API on `127.0.0.1:17493`, and an MCP server at `/mcp`.
 
 It is an **optional** voice backend next to the built-in Kokoro path (`atlas-kokoro`, `news_voice.rs`). The
-Rust pipeline does not call it yet; use the CLI to produce line WAVs and the manifest, then feed them to
-lip sync / the Blender studio.
+news pipeline uses it when `ATLAS_TTS_ENGINE=voicebox` (default `kokoro`). `atlas news produce` then
+checks `VOICEBOX_URL` (default `http://127.0.0.1:17493`), writes `audio/voicebox/script.json`, runs
+`py vbcli.py batch ... --cast marcus="CDN Marcus" --cast elena="CDN Elena" --cast duo="CDN Marcus" --gap 0 --concat`
+and reads `manifest.json`. If the app is closed or a line fails, the whole episode falls back to Kokoro, so a
+missing Voicebox never breaks a run. `voice_timeline.json` records which engine voiced the episode.
+
+| Setting | Default |
+| --- | --- |
+| `ATLAS_TTS_ENGINE` | `kokoro` (`voicebox` to opt in) |
+| `VOICEBOX_URL` | `http://127.0.0.1:17493` |
+| `ATLAS_VOICEBOX_CLI` | `C:\Users\chrom\Tools\voicebox-cli\vbcli.py`, then `integrations/voicebox-cli/vbcli.py` |
+| `ATLAS_VOICEBOX_MARCUS` / `ATLAS_VOICEBOX_ELENA` | `CDN Marcus` / `CDN Elena` |
+
+You can still run the CLI by hand to produce line WAVs and the manifest for lip sync or the Blender studio.
 
 - App: `C:\Users\chrom\Tools\voicebox\voicebox.exe` - must be open for the API (`vb-status --start`)
 - CLI: `C:\Users\chrom\Tools\voicebox-cli\vb-*.cmd` (source mirrored in `integrations/voicebox-cli/`, see its README)

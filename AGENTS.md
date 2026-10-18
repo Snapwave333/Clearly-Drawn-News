@@ -84,6 +84,8 @@ flowchart TD
     end
 ```
 
+Clearly Drawn News has its own flow (research with 2 sources, auto approval, Anthropic script, voices, Unreal filming, auto-holds, YouTube and TikTok publish gates). See [docs/NEWS_PIPELINE.md](docs/NEWS_PIPELINE.md).
+
 ---
 
 ## 38 AI Agent Workstations & 7 Department Outfit Styles

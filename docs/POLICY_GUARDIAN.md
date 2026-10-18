@@ -13,6 +13,8 @@ The Policy & Channel Guardian is a mandatory pre-publish agent. ATLAS cannot upl
 5. Query the authenticated YouTube channel through the YouTube Data API and verify that the channel exists, is linked, reports upload eligibility, and returns a privacy state.
 6. Require a matching YouTube Studio browser review from the last 24 hours with no visible Community Guidelines warning or active strike.
 
+Step 6 is per publish request (`ChannelPreflight.require_browser_review`). Explainer uploads (`atlas publish`) keep it on. Clearly Drawn News (`atlas news publish` and the daemon's news slots) turns it off so the twice-daily show can run unattended: the browser identity and freshness checks are skipped, and a recorded review is still enforced (warning or strike blocks) when one exists. Every other check above still runs for news.
+
 Any failed check, unavailable official page, changed policy page, missing channel status, or high-risk content review blocks publication.
 
 ## Policy change workflow
