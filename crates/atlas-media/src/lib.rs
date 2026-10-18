@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 pub mod fact_checker;
 pub mod news_desk;
+pub mod news_social;
 pub mod news_wire;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

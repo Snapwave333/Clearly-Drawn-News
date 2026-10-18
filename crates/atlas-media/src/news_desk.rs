@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnimationCategory {
     Anime,
     Cartoons,
     AdultAnimation,
+    #[default]
     Industry,
     UpcomingReleases,
 }
@@ -36,6 +37,29 @@ pub struct VerifiedNewsItem {
     pub is_verified: bool,
     pub is_rumor: bool,
     pub estimated_duration_mins: f64,
+    /// Where the story came from: region, on-air credits, official-account status, original
+    /// headline when it was translated.
+    #[serde(default)]
+    pub sourcing: Sourcing,
+}
+
+/// Sourcing detail carried with every live story.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Sourcing {
+    /// Region tag of the primary source ("US", "Japan", ...), so episodes can mix regions.
+    pub region: String,
+    /// On-air credits, one per independent source: "Natalie, Japan", "Pixar's official YouTube channel".
+    pub credits: Vec<String>,
+    /// Number of independent sources (an organisation's official accounts and newsroom count once).
+    pub independent_sources: usize,
+    /// Set when a verified official account or newsroom of the attributed organisation announced
+    /// its own project; the on-air credit line, e.g. "Pixar announced it on its official YouTube channel".
+    pub official_primary: Option<String>,
+    /// Headline as published and its language, when the story was translated into English.
+    pub original_headline: Option<String>,
+    pub original_language: Option<String>,
+    /// Official trailer/clip link from the studio's own channel (linked, never re-uploaded).
+    pub official_video_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +73,9 @@ pub enum WireOrigin {
 pub struct NewsWire {
     pub origin: WireOrigin,
     pub items: Vec<VerifiedNewsItem>,
+    /// Per-story detail for live feeds (outlets, source text, attribution evidence); empty for
+    /// the curated fallback.
+    pub stories: Vec<crate::news_wire::WireStory>,
     pub feeds: Vec<crate::news_wire::FeedStatus>,
 }
 
@@ -73,7 +100,7 @@ impl AnimationNewsDesk {
                 .build()
                 .unwrap_or_default(),
             max_age_days: 7,
-            max_stories: 8,
+            max_stories: 24,
         }
     }
 
@@ -82,18 +109,55 @@ impl AnimationNewsDesk {
     }
 
     pub async fn fetch_wire_skipping(&self, skip: &[String]) -> NewsWire {
-        let (entries, feeds) = crate::news_wire::fetch_feeds(&self.client, skip).await;
-        let items = crate::news_wire::build_wire(entries, chrono::Utc::now(), self.max_age_days, self.max_stories);
+        let (entries, feeds) = self.fetch_entries(skip).await;
+        self.wire_from_entries(entries, feeds).await
+    }
+
+    /// Raw entries from every outlet feed, newsroom and followed official account (built-in
+    /// account list; see `fetch_entries_with`).
+    pub async fn fetch_entries(&self, skip: &[String]) -> (Vec<crate::news_wire::FeedEntry>, Vec<crate::news_wire::FeedStatus>) {
+        self.fetch_entries_with(skip, &crate::news_social::load_accounts(|n| std::env::var(n).ok())).await
+    }
+
+    pub async fn fetch_entries_with(
+        &self,
+        skip: &[String],
+        accounts: &[crate::news_social::OfficialAccount],
+    ) -> (Vec<crate::news_wire::FeedEntry>, Vec<crate::news_wire::FeedStatus>) {
+        let (feeds, social) = tokio::join!(
+            crate::news_wire::fetch_feeds(&self.client, skip),
+            crate::news_social::fetch_official(&self.client, accounts, skip)
+        );
+        let (mut entries, mut statuses) = feeds;
+        entries.extend(social.0);
+        statuses.extend(social.1);
+        (entries, statuses)
+    }
+
+    pub fn max_age_days(&self) -> i64 {
+        self.max_age_days
+    }
+
+    /// Groups entries into stories; falls back to the curated wire when nothing is live.
+    pub async fn wire_from_entries(
+        &self,
+        entries: Vec<crate::news_wire::FeedEntry>,
+        feeds: Vec<crate::news_wire::FeedStatus>,
+    ) -> NewsWire {
+        let stories = crate::news_wire::build_wire_detailed(entries, chrono::Utc::now(), self.max_age_days, self.max_stories);
+        let items: Vec<VerifiedNewsItem> = stories.iter().map(|story| story.item.clone()).collect();
         if items.is_empty() {
             return NewsWire {
                 origin: WireOrigin::CuratedFallback,
                 items: self.fetch_curated_wire().await,
+                stories: Vec::new(),
                 feeds,
             };
         }
         NewsWire {
             origin: WireOrigin::LiveFeeds,
             items,
+            stories,
             feeds,
         }
     }
@@ -115,6 +179,7 @@ impl AnimationNewsDesk {
                 is_verified: true,
                 is_rumor: false,
                 estimated_duration_mins: 4.0,
+                sourcing: Default::default(),
             },
             VerifiedNewsItem {
                 id: "cartoon_spider_beyond".into(),
@@ -129,6 +194,7 @@ impl AnimationNewsDesk {
                 is_verified: true,
                 is_rumor: false,
                 estimated_duration_mins: 3.5,
+                sourcing: Default::default(),
             },
             VerifiedNewsItem {
                 id: "adult_arcane_spinoff".into(),
@@ -143,6 +209,7 @@ impl AnimationNewsDesk {
                 is_verified: true,
                 is_rumor: false,
                 estimated_duration_mins: 3.5,
+                sourcing: Default::default(),
             },
             VerifiedNewsItem {
                 id: "industry_ghibli_museum".into(),
@@ -157,6 +224,7 @@ impl AnimationNewsDesk {
                 is_verified: true,
                 is_rumor: false,
                 estimated_duration_mins: 3.0,
+                sourcing: Default::default(),
             },
             VerifiedNewsItem {
                 id: "anime_dandadan_s2".into(),
@@ -171,6 +239,7 @@ impl AnimationNewsDesk {
                 is_verified: true,
                 is_rumor: false,
                 estimated_duration_mins: 3.0,
+                sourcing: Default::default(),
             },
             VerifiedNewsItem {
                 id: "rapid_headlines_roundup".into(),
@@ -185,6 +254,7 @@ impl AnimationNewsDesk {
                 is_verified: true,
                 is_rumor: false,
                 estimated_duration_mins: 2.0,
+                sourcing: Default::default(),
             },
         ]
     }

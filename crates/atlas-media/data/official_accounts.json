@@ -1,0 +1,195 @@
+{
+  "_comment": "Official studio and network accounts the news researcher follows. Each entry is pinned by its platform ID (YouTube channel ID, Bluesky DID) and was verified as the organisation's real account. Remove an entry to stop following it; add one only after checking it with `atlas news accounts-check`. Not followed (no verifiable official account found 2026-10-18): DreamWorks Animation (no verified main YouTube channel; dreamworks.com Bluesky handle has no posts), Studio Ghibli (no official YouTube; ghibli.jp newsroom RSS is in the wire), Netflix Animation (no dedicated channel; Netflix Anime and netflix.com Bluesky cover it). X is not used. Instagram, TikTok and Threads need logins or app tokens and are not used.",
+  "accounts": [
+    {
+      "organization": "Adult Swim",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCgPClNr5VSYC3syrDUIlzLw",
+      "handle": "@adultswim",
+      "name": "Adult Swim",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Pixar",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UC_IRYSp4auq7hKLvziWVH6w",
+      "handle": "@Pixar",
+      "name": "Pixar",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Walt Disney Animation Studios",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UC_976xMxPgzIa290Hqtk-9g",
+      "handle": "@disneyanimation",
+      "name": "Walt Disney Animation Studios",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Cartoon Network",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCMsgXPD3wzzt8RxHJmXH7hQ",
+      "handle": "@cartoonnetwork",
+      "name": "Cartoon Network",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Nickelodeon",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UC5M_h2S8Ldoc9M6f7B-_m6A",
+      "handle": "@Nickelodeon",
+      "name": "Nickelodeon",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Netflix",
+      "region": "Global",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCBSs9x2KzSLhyyA9IKyt4YA",
+      "handle": "@NetflixAnime",
+      "name": "Netflix Anime",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Sony Pictures Animation",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCnLuLSV-Oi0ctqjxGgxFlmg",
+      "handle": "@SonyAnimation",
+      "name": "Sony Pictures Animation",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Illumination",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCq7OHvWO6Z3u-LztFdrcU-g",
+      "handle": "@illumination",
+      "name": "Illumination",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Laika",
+      "region": "US",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCBnyjFhOn23xjsqOUW4j6OQ",
+      "handle": "@LAIKAStudios",
+      "name": "LAIKA Studios",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Cartoon Saloon",
+      "region": "Ireland",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCpF_pjPj0wujDwbeN6NP6yQ",
+      "handle": "@cartoonsaloon",
+      "name": "Cartoon Saloon",
+      "verification": "linked from cartoonsaloon.ie (checked 2026-10-18)"
+    },
+    {
+      "organization": "Crunchyroll",
+      "region": "Global",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UC6pGDc4bFGD1_36IKv3FnYg",
+      "handle": "@Crunchyroll",
+      "name": "Crunchyroll",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Toei Animation",
+      "region": "Japan",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCQYYekTKCb1y12sas08T6gQ",
+      "handle": "@ToeiAnimationOfficial",
+      "name": "Toei Animation",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "MAPPA",
+      "region": "Japan",
+      "language": "ja",
+      "platform": "youtube",
+      "id": "UCjfAEJZdfbIjVHdo5yODfyQ",
+      "handle": "@MAPPACHANNEL",
+      "name": "MAPPA CHANNEL",
+      "verification": "linked from mappa.co.jp (checked 2026-10-18)"
+    },
+    {
+      "organization": "Aniplex",
+      "region": "Japan",
+      "language": "ja",
+      "platform": "youtube",
+      "id": "UC14QT5j2nQI8lKBCGtrrBQA",
+      "handle": "@aniplex",
+      "name": "アニプレックス チャンネル",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Aniplex",
+      "region": "Japan",
+      "language": "en",
+      "platform": "youtube",
+      "id": "UCDb0peSmF5rLX7BvuTcJfCw",
+      "handle": "@AniplexUSA",
+      "name": "Aniplex USA",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "TOHO Animation",
+      "region": "Japan",
+      "language": "ja",
+      "platform": "youtube",
+      "id": "UC14Yc2Qv92DMuyNRlHvpo2Q",
+      "handle": "@TOHOanimation",
+      "name": "TOHO animation チャンネル",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Kadokawa",
+      "region": "Japan",
+      "language": "ja",
+      "platform": "youtube",
+      "id": "UCY5fcqgSrQItPAX_Z5Frmwg",
+      "handle": "@KADOKAWAanime",
+      "name": "KADOKAWAanime",
+      "verification": "YouTube verified badge (checked 2026-10-18)"
+    },
+    {
+      "organization": "Netflix",
+      "region": "Global",
+      "language": "en",
+      "platform": "bluesky",
+      "id": "did:plc:gka25twx6lxnydg2ecenih2b",
+      "handle": "netflix.com",
+      "name": "Netflix",
+      "verification": "Bluesky verified + domain handle netflix.com (checked 2026-10-18)"
+    },
+    {
+      "organization": "Crunchyroll",
+      "region": "Global",
+      "language": "en",
+      "platform": "bluesky",
+      "id": "did:plc:4cwxfvgzwh2kwon7b2dset32",
+      "handle": "crunchyroll.com",
+      "name": "Crunchyroll",
+      "verification": "Bluesky verified + domain handle crunchyroll.com (checked 2026-10-18)"
+    }
+  ]
+}
