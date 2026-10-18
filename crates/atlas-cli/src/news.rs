@@ -16,7 +16,6 @@ const DEFAULT_UE_CMD: &str =
     r"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe";
 const DEFAULT_UE_PROJECT: &str =
     r"C:\Users\chrom\Desktop\Marker\AtlasStudioOffice\AtlasStudioOffice.uproject";
-const UE_NEWSROOM_SCRIPT: &str = r"Content\Python\setup_newsroom_studio.py";
 const ANCHOR_WARDROBE: &str = include_str!("../../../unreal/wardrobe.json");
 
 pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Result<()> {
@@ -257,25 +256,26 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 
             timer.begin("filming");
             println!("\n[PHASE 6: UNREAL ENGINE 5.8 VIRTUAL STUDIO FILMING]");
-            let filming = film_in_unreal().await?;
+            let filming = film_in_unreal(&episode_dir, voices.is_voiced()).await?;
             println!("  {}", filming.summary());
 
             let timings = timer.finish();
             write_json(&episode_dir.join("stage_timings.json"), &timings)?;
-            let runtime_seconds = match &voices {
-                news_voice::VoiceOutcome::Voiced { total_seconds, .. } => f64::from(*total_seconds),
-                news_voice::VoiceOutcome::Skipped(_) => episode.total_duration_secs,
+            let (runtime_seconds, runtime_source) = match (&filming, &voices) {
+                (FilmingOutcome::Filmed { duration_seconds, .. }, _) => (*duration_seconds, "final_video"),
+                (_, news_voice::VoiceOutcome::Voiced { total_seconds, .. }) => (f64::from(*total_seconds), "synthesized_audio"),
+                _ => (episode.total_duration_secs, "script_estimate"),
             };
             let runtime_check = policy.validate(runtime_seconds);
             if let Err(problem) = &runtime_check {
                 eprintln!("  ⚠ Runtime check: {problem}");
             }
-            let status = match (voices.is_voiced(), runtime_check.is_ok(), filming.is_filmed()) {
-                (true, false, _) => "VOICED — runtime outside the 15–30 minute policy; needs a longer script",
-                (true, true, true) => "VOICED & FILMED — ready for broadcast mastering",
-                (true, true, false) => "VOICED — Unreal filming pending",
-                (false, _, true) => "FILMED — anchor voices pending",
-                (false, _, false) => "SCRIPT PACKAGE READY — voices and Unreal filming pending",
+            let status = match (filming.is_filmed(), voices.is_voiced(), runtime_check.is_ok()) {
+                (true, _, true) => "FILMED — final/episode.mp4 ready for review and fine-tuning",
+                (true, _, false) => "FILMED — runtime outside the 15–30 minute policy; needs a longer script",
+                (false, true, false) => "VOICED — runtime outside the 15–30 minute policy; needs a longer script",
+                (false, true, true) => "VOICED — Unreal filming pending",
+                (false, false, _) => "SCRIPT PACKAGE READY — voices and Unreal filming pending",
             };
             write_json(
                 &episode_dir.join("status.json"),
@@ -287,7 +287,15 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
                     "preview_animatic": animatic,
                     "filming": filming.summary(),
                     "runtime_seconds": runtime_seconds,
-                    "runtime_source": if voices.is_voiced() { "synthesized_audio" } else { "script_estimate" },
+                    "runtime_source": runtime_source,
+                    "final_video": match &filming {
+                        FilmingOutcome::Filmed { video, .. } => Some(video.clone()),
+                        FilmingOutcome::Skipped(_) => None,
+                    },
+                    "unreal": match &filming {
+                        FilmingOutcome::Filmed { handoff, .. } => handoff.clone(),
+                        FilmingOutcome::Skipped(_) => serde_json::Value::Null,
+                    },
                     "runtime_compliant": runtime_check.is_ok(),
                     "wire_origin": wire_origin,
                     "script_method": provenance["method"],
@@ -311,24 +319,58 @@ pub(crate) async fn cmd_news(store: &Store, action: NewsAction) -> anyhow::Resul
 }
 
 enum FilmingOutcome {
-    Filmed,
+    Filmed {
+        video: PathBuf,
+        duration_seconds: f64,
+        handoff: serde_json::Value,
+    },
     Skipped(String),
 }
 
 impl FilmingOutcome {
     fn is_filmed(&self) -> bool {
-        matches!(self, Self::Filmed)
+        matches!(self, Self::Filmed { .. })
     }
 
     fn summary(&self) -> String {
         match self {
-            Self::Filmed => "Unreal Engine filming completed".into(),
+            Self::Filmed { video, duration_seconds, .. } => format!(
+                "Unreal Engine episode rendered: {} ({:.1} min)",
+                video.display(),
+                duration_seconds / 60.0
+            ),
             Self::Skipped(reason) => format!("Unreal Engine filming skipped: {reason}"),
         }
     }
 }
 
-async fn film_in_unreal() -> anyhow::Result<FilmingOutcome> {
+fn unreal_scripts_dir() -> PathBuf {
+    std::env::var("ATLAS_UNREAL_SCRIPTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../unreal/Content/Python"))
+}
+
+fn editor_executable(ue_cmd: &Path) -> PathBuf {
+    if let Ok(explicit) = std::env::var("ATLAS_UE_EDITOR") {
+        return PathBuf::from(explicit);
+    }
+    let windowed = ue_cmd.with_file_name(
+        ue_cmd
+            .file_name()
+            .map(|name| name.to_string_lossy().replace("-Cmd", ""))
+            .unwrap_or_default(),
+    );
+    if windowed.is_file() { windowed } else { ue_cmd.to_path_buf() }
+}
+
+fn env_number(name: &str, default: u32) -> u32 {
+    std::env::var(name).ok().and_then(|v| v.trim().parse().ok()).filter(|v| *v > 0).unwrap_or(default)
+}
+
+async fn film_in_unreal(episode_dir: &Path, voiced: bool) -> anyhow::Result<FilmingOutcome> {
+    if !voiced {
+        return Ok(FilmingOutcome::Skipped("needs synthesized anchor voices first".into()));
+    }
     let ue_cmd = PathBuf::from(std::env::var("ATLAS_UE_CMD").unwrap_or_else(|_| DEFAULT_UE_CMD.into()));
     let uproject = PathBuf::from(
         std::env::var("ATLAS_UE_PROJECT").unwrap_or_else(|_| DEFAULT_UE_PROJECT.into()),
@@ -345,22 +387,91 @@ async fn film_in_unreal() -> anyhow::Result<FilmingOutcome> {
             uproject.display()
         )));
     }
-    let script = uproject
-        .parent()
-        .map(|dir| dir.join(UE_NEWSROOM_SCRIPT))
-        .unwrap_or_else(|| PathBuf::from(UE_NEWSROOM_SCRIPT));
-    println!("  Executing Unreal Engine command-line automation...");
-    let status = tokio::process::Command::new(&ue_cmd)
+    let script = unreal_scripts_dir().join("clearly_drawn_produce.py");
+    if !script.is_file() {
+        return Ok(FilmingOutcome::Skipped(format!(
+            "production script not found at {} (set ATLAS_UNREAL_SCRIPTS)",
+            script.display()
+        )));
+    }
+
+    let render_dir = episode_dir.join("render");
+    let frames_dir = render_dir.join("frames");
+    let handoff_path = render_dir.join("handoff.json");
+    if frames_dir.is_dir() {
+        std::fs::remove_dir_all(&frames_dir)?;
+    }
+    std::fs::create_dir_all(&frames_dir)?;
+    let _ = std::fs::remove_file(&handoff_path);
+
+    let editor = editor_executable(&ue_cmd);
+    let (width, height) = (env_number("ATLAS_RENDER_WIDTH", 1920), env_number("ATLAS_RENDER_HEIGHT", 1080));
+    println!("  Launching {} to dress the anchors, build the sequence, and render {width}x{height} with Movie Render Queue...", editor.display());
+    println!("  A full 15-30 minute episode can take hours to render; leave the Unreal window open until it closes itself.");
+    let mut command = tokio::process::Command::new(&editor);
+    command
         .arg(&uproject)
         .arg(format!("-ExecutePythonScript={}", script.display()))
-        .args(["-nullrhi", "-unattended", "-nosplash"])
-        .kill_on_drop(true)
-        .status()
-        .await?;
-    if !status.success() {
-        anyhow::bail!("Unreal Engine filming failed with {status}");
+        .args(["-unattended", "-nosplash", "-log"])
+        .env("CLEARLY_DRAWN_EPISODE", episode_dir)
+        .env("CLEARLY_DRAWN_FRAMES", &frames_dir)
+        .env("CLEARLY_DRAWN_HANDOFF", &handoff_path)
+        .env("CLEARLY_DRAWN_WIDTH", width.to_string())
+        .env("CLEARLY_DRAWN_HEIGHT", height.to_string())
+        .kill_on_drop(true);
+    if let Ok(map) = std::env::var("ATLAS_UE_MAP") {
+        command.env("CLEARLY_DRAWN_MAP", map);
     }
-    Ok(FilmingOutcome::Filmed)
+    let status = command.status().await?;
+
+    let handoff: serde_json::Value = std::fs::read(&handoff_path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .ok_or_else(|| anyhow::anyhow!("Unreal exited ({status}) without a production handoff; check the project's Saved/Logs"))?;
+    if handoff["ok"] != true {
+        anyhow::bail!(
+            "Unreal production failed: {}",
+            handoff["error"].as_str().unwrap_or("unknown error (see render/handoff.json)")
+        );
+    }
+    if let Some(lipsync) = handoff["lipsync"].as_str() {
+        println!("  Lip sync: {lipsync}");
+    }
+
+    let frames = std::fs::read_dir(&frames_dir)?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".png"))
+        .count();
+    if frames == 0 {
+        anyhow::bail!("Movie Render Queue finished but wrote no frames to {}", frames_dir.display());
+    }
+    println!("  ✓ {frames} rendered frames; muxing with the anchor narration...");
+
+    let final_dir = episode_dir.join("final");
+    std::fs::create_dir_all(&final_dir)?;
+    let video = final_dir.join("episode.mp4");
+    let fps = env_number("ATLAS_RENDER_FPS", 30).to_string();
+    let muxed = tokio::process::Command::new("ffmpeg")
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-framerate", &fps, "-i"])
+        .arg(frames_dir.join("frame.%06d.png"))
+        .arg("-i")
+        .arg(episode_dir.join("audio").join("episode_narration.wav"))
+        .args(["-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p"])
+        .args(["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart"])
+        .arg(&video)
+        .kill_on_drop(true)
+        .output()
+        .await?;
+    if !muxed.status.success() || !video.is_file() {
+        anyhow::bail!("FFmpeg could not assemble the episode: {}", String::from_utf8_lossy(&muxed.stderr).trim());
+    }
+    let probe = tokio::process::Command::new("ffprobe")
+        .args(["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0"])
+        .arg(&video)
+        .output()
+        .await?;
+    let duration_seconds = String::from_utf8_lossy(&probe.stdout).trim().parse::<f64>().unwrap_or(0.0);
+    Ok(FilmingOutcome::Filmed { video, duration_seconds, handoff })
 }
 
 fn outlet_name(url: &str) -> Option<String> {

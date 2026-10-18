@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 const WORDS_PER_SECOND: f64 = 2.6;
 const LINE_PAUSE_SECONDS: f64 = 0.5;
 const MIN_WORDS_PER_STORY: usize = 180;
-const MAX_WORDS_PER_STORY: usize = 650;
+const MAX_WORDS_PER_STORY: usize = 900;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoryBrief {
@@ -459,6 +459,8 @@ mod tests {
         let policy = EpisodeDurationPolicy::default();
         assert_eq!(words_budget(8, &policy), 404);
         assert_eq!(words_budget(1, &policy), MAX_WORDS_PER_STORY);
+        let three_story_seconds = 3.0 * words_budget(3, &policy) as f64 / WORDS_PER_SECOND + 75.0;
+        assert!(three_story_seconds >= policy.min_seconds, "{three_story_seconds}");
         assert_eq!(words_budget(40, &policy), MIN_WORDS_PER_STORY);
     }
 }
