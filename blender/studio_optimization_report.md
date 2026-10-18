@@ -94,3 +94,30 @@ Textures: dark_wooden_planks, concrete_floor_worn_001, smooth_concrete_floor, bl
 - Friday is casual (Elena: knit sweater and jeans; Marcus: denim jacket and knit, no tie). The other six days are polished anchor wear.
 - Rules: solid fabrics only (no moire), no cyan/teal or chroma colours, and warm jewel and earth tones against the walnut.
 - These will be built as MetaHuman Creator wardrobe (Outfit) items when Eli builds Elena and Marcus.
+
+## Kitchen set (16_KITCHEN_SET), cartoon-cooking segment
+
+- **Location:** NW studio zone at (-7.45, 2.75), facing south, behind the newsroom set's west wall (x -4.9). It sits on the BTS/walk floor and shows up in BTS_WIDE_CAM and on the throwback walk track (about frames 390-510).
+- **Floor:** a kit riser (SM_BS_Stage_Base216 mesh) with KITCHEN_FLOOR_SatinWalnut. Roughness is 0.42 with low specular, so the finish is satin with no glare.
+- **Island:** built from the same kit desk modules as the news desk (walnut trim plus cyan glow), in the order cap / mid / cooktop / mid / cap. The CC0 electric_stove sits in the centre, front facing camera. Counter height is 0.87 m above the riser.
+- **Back wall:** kit panels with KITCHEN_Backsplash_Tile (ambientCG Tiles074, CDN midnight mix). The west return wall keeps the walnut slats.
+- **Back counter:** Poly Haven modern_wooden_cabinet and drawer_cabinet. The bodies are tinted CDN midnight and the wood doors are kept as walnut accents.
+- **Taste-test counter:** a kit cap module east of the island holding carved_wooden_plate and strawberry_chocolate_cake.
+- **Props:** all Poly Haven CC0 linked duplicates: wooden_cutting_board, wooden_spoon, pot_enamel_01 x2, brass_pan_01, jug_01, yellow_onion, lemon, food_avocado_01, sweet_potato, tea_set_01. The pendants are 2 instances of hanging_industrial_lamp.
+- **Reference screen:** KITCHEN_REF_SCREEN on a kit Screen_02 mesh, using UVmap_1 and image node REF_IMAGE. The default art is news_intro/assets/decor/kitchen_reference_default.jpg (original). Swap the image per episode.
+- **Cameras:**
+  - kitchen_wide: KITCHEN_WIDE_CAM, 20 mm
+  - kitchen_three_shot: KITCHEN_THREE_SHOT_CAM, 40 mm. The old alias kitchen_two_shot points to the same camera.
+  - kitchen_single_chef: KITCHEN_SINGLE_CHEF_CAM, 75 mm
+  - kitchen_overhead: KITCHEN_OVERHEAD_CAM, 50 mm, straight down. There is no mirror, and the pendants sit outside its frustum.
+  - kitchen_hero_plate: KITCHEN_HERO_PLATE_CAM, 60 mm
+- **Stand markers:** STAND_MARKER_Kitchen_Elena (camera-left), STAND_MARKER_Chef (centre, behind the cooktop) and STAND_MARKER_Kitchen_Marcus (camera-right).
+- **Chef:** the manifest role anchors.kitchen_chef has object Armature_Chef, which is pending. It will be a real MetaHuman later.
+- **Gaps:** KITCHEN_FRIDGE_SLOT and KITCHEN_MIXER_SLOT are empty markers. No CC0 refrigerator or stand mixer exists on Poly Haven or ambientCG, and Sketchfab CC0 downloads need a login.
+- **Moved BTS gear:** worn_metal_rack .006 and .007 and the ladder moved down the west wall, and rack .008 moved to the east part of the north wall. Acoustic panels were cleared from the kitchen walls; c_crafty.py now skips that zone.
+- **Audit:**
+  - No kitchen geometry is visible in any desk or interview camera.
+  - No crew marks are visible in the kitchen cameras.
+  - 0 collisions.
+  - Crafty and decor audits are unchanged.
+  - verify_studio on a temp copy: PASS, 0 failed, 3 pending (Armature_Elena, Armature_Marcus and Armature_Chef).
