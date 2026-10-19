@@ -1,5 +1,7 @@
 # CLAUDE.md — Clearly Drawn Studios (ATLAS engine) Development Guide
 
+**Continuing this work? Read [`HANDOFF.md`](HANDOFF.md) first** (mirror: `Marker\HANDOFF.md`): Eli's rules, workstream state, prioritized TODO with acceptance criteria, dry-run and go-live steps. Studio details: [`blender/STUDIO_HANDOFF.md`](blender/STUDIO_HANDOFF.md). Publishing stays OFF until Eli says go.
+
 ## Brand Identity
 
 | Layer | Name | Source of truth |
@@ -68,7 +70,7 @@ atlas-studio/
 | `atlas cache stats` | Disk usage of narration, render, B-roll, and vector caches |
 | `atlas cache prune --older-than-days 30 --dry-run` | Preview or delete stale cache entries (exports are never touched); the daemon runs this weekly with 30-day retention |
 | `atlas daemon start` | Autonomous loop; failed productions back off 30m, then 1h, and are quarantined after the 3rd failure in `daemon/production_failures.json` (delete an entry to retry); skips production while `atlas doctor` reports required tools missing |
-| `atlas daemon start [--news-only]` (news) | Produces Clearly Drawn News at `ATLAS_NEWS_HOURS` in the PC's local time (default `12` = one 30-minute episode a day at 12:00 MDT; comma-separated hours for more; `off` to disable). Runtime target `ATLAS_NEWS_TARGET_MINUTES` (30; policy ±5 via `ATLAS_NEWS_MIN_MINUTES`/`ATLAS_NEWS_MAX_MINUTES`). Each slot runs once with the `ATLAS_NEWS_APPROVAL` mode (default `auto`; `telegram` without a token skips the slot); prints the publish mode and privacy at start; failures back off per slot; `daemon/news_last_run` holds the last slot. `--news-only` skips the explainer cycle (which publishes explainers to YouTube and TikTok). Launcher `scripts/cdn-news-daemon.cmd`; Task Scheduler task `CDN News Daemon` (at logon, registered disabled) |
+| `atlas daemon start [--news-only]` (news) | Produces Clearly Drawn News at `ATLAS_NEWS_HOURS` in the PC's local time (default `12` = one 30-minute episode a day at 12:00 MDT; comma-separated hours for more; `off` to disable). Runtime target `ATLAS_NEWS_TARGET_MINUTES` (30; policy ±5 via `ATLAS_NEWS_MIN_MINUTES`/`ATLAS_NEWS_MAX_MINUTES`). Each slot runs once with the `ATLAS_NEWS_APPROVAL` mode (default `auto`; `telegram` without a token skips the slot); prints the publish mode and privacy at start; failures back off per slot; `daemon/news_last_run` holds the last slot. `--news-only` skips the explainer cycle (which publishes explainers to YouTube and TikTok). Launcher `scripts/cdn-news-daemon.cmd` is a self-healing supervisor (restarts with back-off, rotates `daemon.log` at 20 MB, Telegram notice per crash via `atlas daemon notify`, stops on pause); single instance via loopback lock (`ATLAS_DAEMON_LOCK_PORT`, default 47613; exit 3); `daemon/heartbeat` each loop; slot failures also send a Telegram notice. Task Scheduler task `CDN News Daemon` (at logon, restart 999x/1 min, registered DISABLED) via `scripts/register-cdn-daemon.ps1` (`-Enable` only at go-live) |
 | `news/aired_stories.json` | Live-wire stories aired in the last 7 days (by id, source URL, or headline) are skipped so daily episodes never repeat news |
 | `stage_timings.json` | Written next to each `final.mp4`; per-stage seconds plus the slowest stage |
 | `audio/segments/<hash>.wav` | Narration cache keyed by text, voice, speed, and language; delete to force re-synthesis |
@@ -241,3 +243,5 @@ git push
 Kitchen set: 16_KITCHEN_SET (NW zone, faces south; cams kitchen_* incl. kitchen_single_chef; STAND_MARKER_Chef + STAND_MARKER_Kitchen_Elena/Marcus; screen kitchen_reference image node REF_IMAGE; chef role anchors.kitchen_chef -> Armature_Chef pending MetaHuman). Build script polish/c_kitchen.py (idempotent).
 
 **Studio handoff:** see [blender/STUDIO_HANDOFF.md](blender/STUDIO_HANDOFF.md) (mirror of AtlasStudioOffice\STUDIO_HANDOFF.md).
+
+Debate Corner: 17_DEBATE_CORNER (cams debate_*, screens debate_question/debate_score, STAND_MARKER_Debate_*; polish/c_debate.py). Crew lockers: BTS_Crew_Lockers (CC0 Innerscene LOCK 3; polish/c_lockers.py).

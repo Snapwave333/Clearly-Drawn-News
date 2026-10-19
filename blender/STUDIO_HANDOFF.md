@@ -58,12 +58,16 @@ Updated 2026-10-18, 6:10 PM MDT. Read this first if you are picking up the studi
 | Craft services + BTS wall decor (+ bible story props) | DONE, committed 0ae58f5 | BTS_Craft_Services, BTS_Wall_Decor; renders crafty_area_*, wall_decor_* |
 | Wardrobe rotation (7 outfits per anchor, Friday casual) | DONE, committed 0ae58f5 | manifest wardrobe_rotation; studio_api.outfit_for() |
 | Kitchen set with chef marker | DONE, committed ebb6de6 (docs); blend saved | 16_KITCHEN_SET; renders kitchen_set_*.png |
-| Debate Corner | BUILT + audited + saved; manifest written; docs/commit in progress | 17_DEBATE_CORNER; renders polish\dfinal\DEBATE_* |
-| Crew lockers (CC0 Innerscene LOCK 3, 3 units = 18 lockers, 3 doors ajar + crew items) | BUILT + audited + saved; manifest written | BTS_Crew_Lockers (east crew wall by crafty); render polish\dfinal\REVIEW_LOCKERS.png |
+| Debate Corner | DONE, committed (docs+manifest); blend saved | 17_DEBATE_CORNER; renders polish\dfinal\DEBATE_* |
+| Crew lockers (CC0 Innerscene LOCK 3, 3 units = 18 lockers, 3 doors ajar + crew items) | DONE, committed; blend saved | BTS_Crew_Lockers (east crew wall by crafty); render polish\dfinal\REVIEW_LOCKERS.png |
 
 ## Remaining queue and acceptance criteria
 
-1. **Debate Corner: finish.**
+0. **Shelf dressing (Eli: "the shelves are too empty").**
+   - Densely dress every shelf (set, crew and kitchen) with CC0 or credited CC BY items: books, binders, trophies, original toy figurines, VHS/DVD cases, boxes, film cans, cables and mugs, plus jars and cookware in the kitchen.
+   - Use collection instances and vary rotation and scale. No plants. Save often.
+   - Deliver before and after renders.
+1. **Debate Corner: DONE.**
    - Copy `dfinal` renders to `/workspace/news-intro/polish/debate_corner_{wide,single_elena,single_marcus,question_screen}.png`.
    - Add a docs section and a CLAUDE.md line, then commit.
    - Accept when:
@@ -71,7 +75,7 @@ Updated 2026-10-18, 6:10 PM MDT. Read this first if you are picking up the studi
      - Collisions are internal only: podium parts, props resting on podiums, adjoining backdrop panels.
      - verify_studio passes.
      - The manifest has debate_* cameras, the `debate` group, the debate_question and debate_score screens, and the STAND_MARKER_Debate_Elena/Marcus markers.
-2. **Lockers: finish.**
+2. **Lockers: DONE.**
    - Render `crew_lockers_*.png`, add docs, commit.
    - Accept when c_lchk shows FORBIDDEN {} (desk, interview, kitchen and debate cams), the lockers are visible in BTS_WIDE_CAM and on the walk track, and the only collisions are items resting on shelves.
 3. **Fab CC BY 4.0 props.** Source: `AtlasStudioOffice\assets\fab_cc_by\` and CREDITS_CC_BY.md. All are reported "AI use allowed"; confirm that per asset.
@@ -100,3 +104,13 @@ Updated 2026-10-18, 6:10 PM MDT. Read this first if you are picking up the studi
    - Name the rigs Armature_Elena, Armature_Marcus and Armature_Chef, or update `anchors.<role>.object`.
    - Snap the rigs to the SEAT/STAND markers: SEAT_MARKER_*, IV_SEAT_MARKER_*, STAND_MARKER_Kitchen_*, STAND_MARKER_Chef, STAND_MARKER_Debate_*.
    - Re-run verify_studio. The pending items should go to 0.
+
+## Crash note, 2026-10-18 6:07 PM MDT
+- Event log: Application Hang 1002. Blender stopped responding while a 96-sample full-studio BTS_WIDE render ran in the GUI thread, and Windows closed it.
+- Nothing was lost: the 5:49 PM save holds every build.
+- Relaunched as PID 30716.
+- To avoid a repeat:
+  - Render only at low settings, and never while importing.
+  - Import heavy assets one at a time and save after each.
+  - Decimate meshes and keep textures at 2K or below.
+  - Prefer collection instances.

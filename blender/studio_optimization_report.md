@@ -121,3 +121,37 @@ Textures: dark_wooden_planks, concrete_floor_worn_001, smooth_concrete_floor, bl
   - 0 collisions.
   - Crafty and decor audits are unchanged.
   - verify_studio on a temp copy: PASS, 0 failed, 3 pending (Armature_Elena, Armature_Marcus and Armature_Chef).
+
+## Debate Corner (17_DEBATE_CORNER)
+
+- **Location:** SE zone at (7.2, -9.6), facing north. The cameras sit at y -7.25..-7.4, in front of Hollis's stand-in mark, so no crew marks fall in frame.
+- **Floor:** kit riser x0.8 with DEBATE_FLOOR_SatinMidnight (roughness 0.42).
+- **Backdrop:** 4 kit walnut-slat panels at x 3.2..11.2. They hide the S-wall show posters.
+- **Podiums:** kit desk cap modules (walnut trim plus cyan glow), 1.08 m tall, mirrored. Elena's is camera-left (x 8.4) and Marcus's camera-right (x 6.0). Each has an LED nameplate, plus a Poly Haven CC0 binder_notebook and a brass goblet on top.
+- **Screens:**
+  - DEBATE_QUESTION_SCREEN: image node QUESTION_IMAGE, default debate_question_default.jpg. Plain question text only, no franchise imagery.
+  - DEBATE_SCORE_SCREEN: an LED strip, image node SCORE_IMAGE, default debate_score_default.jpg.
+- **Cameras:** debate_wide 24 mm, debate_single_elena 70 mm, debate_single_marcus 70 mm, debate_question_screen 40 mm.
+- **Markers:** STAND_MARKER_Debate_Elena and STAND_MARKER_Debate_Marcus.
+- **Moved BTS gear:** hand truck, tool cart and toolbox, generator, a crate, and road cases 04/05.
+- **Audit:**
+  - Not visible in any desk, interview or kitchen camera.
+  - No crew leak.
+  - The only collisions are internal: podium parts, props resting on podiums, and adjoining panels.
+
+## Crew lockers (BTS_Crew_Lockers)
+
+- **Asset:** "LOCK 3 - Office Locker Bank" from the Innerscene Free Parts Library (an original Innerscene model), CC0 1.0: https://www.innerscene.com/tools/library/3d-parts/lock-3-office-locker-bank-c5ce4b13
+  - The library terms were checked on 2026-10-18: no AI-use restriction, and the model is not marked AI-generated.
+  - Skipped: the 3dassets.dev locker. It is CC0 but its contributor reports it as AI-generated.
+- **Placement:** 3 linked-duplicate units (18 lockers) on the east crew wall by crafty (x 13.4-13.9, y -9.2..-6.1), facing west.
+- **Doors ajar:** 3, each dressed with crew items:
+  - a crew cap (fishermans_hat)
+  - a call-sheet binder
+  - a thermos and gaffer tape (medical_tape)
+  - rubber boots on the floor
+  - These are all Poly Haven CC0.
+- **Audit:**
+  - Seen in BTS_WIDE_CAM and on the walk track (frames 750-1050).
+  - Not visible in any desk, interview, kitchen or debate camera.
+  - The only collisions are items resting on shelves.
