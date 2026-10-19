@@ -239,3 +239,5 @@ git push
 `youtube_credentials.json` exists in the initial Git commit. Rotate the OAuth client and remove the tracked copy only as an explicitly authorized security cleanup.
 
 Kitchen set: 16_KITCHEN_SET (NW zone, faces south; cams kitchen_* incl. kitchen_single_chef; STAND_MARKER_Chef + STAND_MARKER_Kitchen_Elena/Marcus; screen kitchen_reference image node REF_IMAGE; chef role anchors.kitchen_chef -> Armature_Chef pending MetaHuman). Build script polish/c_kitchen.py (idempotent).
+
+**Studio handoff:** see [blender/STUDIO_HANDOFF.md](blender/STUDIO_HANDOFF.md) (mirror of AtlasStudioOffice\STUDIO_HANDOFF.md).
