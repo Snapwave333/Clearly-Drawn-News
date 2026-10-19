@@ -49,3 +49,18 @@ vb-batch episode.txt -o news\EP-012\audio\voicebox --cast MARCUS="CDN Marcus" --
 ```
 
 Tag stripping matches `studio_api.strip_tags` and `news_voice.rs strip_stage_tags`.
+
+## Anchor voice consistency gate (required for every episode)
+Lesson from the v2 audition (Oct 18): with Chatterbox Turbo clones, two renders sent to one Voicebox server at the same time swapped speaker
+conditioning (Marcus lines came out in Elena's voice), and emotion tags such as `[whispering]`/`[sarcastic]`/`[happy]`/`[surprised]` shift timbre.
+Rules for any anchor render:
+1. **One Voicebox request at a time.** Never run two vb-say/vb-batch jobs against the same server.
+2. Fixed seed list per speaker (reference script: Elena 5100+, Marcus 6100+). Only `[laugh]` and `[chuckle]` are allowed as tags.
+3. **Gate every take** with `casting\voices\tools\speaker_gate.py` (Resemblyzer d-vectors, CPU). Compare each take to the canonical references
+   (`casting\voices\anchors\{elena,marcus}\*_v2_reference.wav`): own-reference cosine >= 0.80, and own minus other >= 0.10. This also proves the
+   take matches the speaker in the script. Re-render failing takes with the next seed.
+4. Final check: average-linkage cosine clustering (cut 0.25) over all picked lines must give **exactly 2 clusters**, one per anchor.
+5. Script sanity: an anchor's own name may appear only in a self-intro ("I'm Marcus"), never as an addressee. Spell Elena "Elayna" in TTS text
+   (Whisper heard "Alina").
+Reference implementation: `AtlasStudioOffice\casting\audition\banter_v3\render_v3.py` (writes the per-line table to `render_report.json`).
+TODO: port this gate into `news_voice.rs` (call speaker_gate.py after vb-batch; fail the voice step if `all_pass` is false).
