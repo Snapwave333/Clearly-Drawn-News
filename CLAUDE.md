@@ -1,6 +1,6 @@
 # CLAUDE.md — Clearly Drawn Studios (ATLAS engine) Development Guide
 
-**Continuing this work? Read [`HANDOFF.md`](HANDOFF.md) first** (mirror: `Marker\HANDOFF.md`): Eli's rules, workstream state, prioritized TODO with acceptance criteria, dry-run and go-live steps. Studio details: [`blender/STUDIO_HANDOFF.md`](blender/STUDIO_HANDOFF.md). Publishing stays OFF until Eli says go.
+**Continuing this work? Start at the master index `Marker\START_HERE_CDN.md` (tracked mirror [`START_HERE_CDN.md`](START_HERE_CDN.md)), then [`HANDOFF.md`](HANDOFF.md)** (mirror: `Marker\HANDOFF.md`): Eli's rules, workstream state, prioritized TODO with acceptance criteria, dry-run and go-live steps. Studio details: [`blender/STUDIO_HANDOFF.md`](blender/STUDIO_HANDOFF.md). Publishing stays OFF until Eli says go.
 
 ## Brand Identity
 

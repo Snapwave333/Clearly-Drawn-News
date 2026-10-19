@@ -1,5 +1,7 @@
 # Clearly Drawn Studios — ATLAS Autonomous Production Engine & 3D MetaHuman Office
 
+> **Start here:** master index `Marker\START_HERE_CDN.md` (tracked mirror: [`START_HERE_CDN.md`](START_HERE_CDN.md)), then [`HANDOFF.md`](HANDOFF.md) (pipeline), [`blender/STUDIO_HANDOFF.md`](blender/STUDIO_HANDOFF.md) (studio) and `AtlasStudioOffice\casting\voices\VOICE_HANDOFF.md` (voices). Publishing stays OFF until Eli says go.
+
 > **Studio:** Blender shoots reuse the CDN broadcast studio via `AtlasStudioOffice\studio_manifest.json` and `blender/studio_api.py` (see `docs/BLENDER_STUDIO.md`). The UE office simulation and 38-agent MetaHuman crowd below are **legacy**: don't extend or depend on them.
 
 
