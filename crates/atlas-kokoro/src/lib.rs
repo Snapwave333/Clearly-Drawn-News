@@ -206,6 +206,11 @@ impl KokoroPipeline {
 
         let output = Command::new(&self.kokoro_exe)
             .args(&args)
+            // kokoro-tts is a Python 3.11 script whose deps (librosa) can live in the 3.11 user site. A Store-Python
+            // parent (the `py` launcher) exports PYTHONUSERBASE for 3.13, which hides that site, so drop it here.
+            // UTF-8 stdout keeps its progress spinner from crashing on cp1252 consoles.
+            .env_remove("PYTHONUSERBASE")
+            .env("PYTHONIOENCODING", "utf-8")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
