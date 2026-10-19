@@ -134,8 +134,9 @@ The YouTube OAuth files `youtube_credentials.json` and `youtube_token.json` sit 
   - `scripts/cdn-news-daemon.cmd` and `scripts/register-cdn-daemon.ps1`.
   - The task has been re-registered; it is **Disabled**, restart 999x every 1 minute.
 
+- A1 asset credits: `crates/atlas-cli/src/news_credits.rs`, `news_publish::build_metadata(.., credits)`, `news_tiktok::caption_with_credits`. Done, with tests.
+
 **Not started yet (no code):**
-- A1: asset credits.
 - P1: matching. Start in `news_wire.rs` at `AMBIGUOUS_ORGANIZATIONS`, `organization()`, `pattern_organization()` and `attribute_organization()`; add an outlet/streamer exclusion list built from `FEEDS` outlet names.
 - P2–P5.
 

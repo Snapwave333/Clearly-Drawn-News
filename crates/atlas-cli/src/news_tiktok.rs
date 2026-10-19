@@ -123,6 +123,27 @@ pub(crate) async fn build_vertical_cut(source: &Path, out: &Path, start: f32, du
     Ok(())
 }
 
+/// Puts the CC BY credits into the caption before the hashtags when the whole caption fits
+/// TikTok's limit; otherwise returns the caption unchanged plus a pinned-comment text
+/// (the Content Posting API cannot post comments, so it is pinned by hand after posting).
+pub(crate) fn caption_with_credits(caption: String, credits: &[crate::news_credits::AssetCredit]) -> (String, Option<String>) {
+    let block = crate::news_credits::compact_block(credits);
+    if block.is_empty() {
+        return (caption, None);
+    }
+    let (body, tags) = match caption.rfind("\n\n") {
+        Some(at) => (caption[..at].to_string(), caption[at..].to_string()),
+        None => (caption.clone(), String::new()),
+    };
+    let combined = format!("{body}\n{block}{tags}");
+    if combined.encode_utf16().count() <= atlas_analytics::tiktok_direct::TIKTOK_CAPTION_MAX_UTF16 {
+        return (combined, None);
+    }
+    let pointer = format!("{body}\nAsset credits in the pinned comment.{tags}");
+    let caption = if pointer.encode_utf16().count() <= atlas_analytics::tiktok_direct::TIKTOK_CAPTION_MAX_UTF16 { pointer } else { caption };
+    (clip_caption(&caption), Some(block))
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TikTokPackage {
     pub(crate) video: PathBuf,
@@ -275,6 +296,24 @@ pub(crate) async fn tiktok_auth_complete(redirect: &str) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asset_credits_go_in_the_caption_or_the_pinned_comment() {
+        use crate::news_credits::AssetCredit;
+        let one = vec![AssetCredit { title: "Frying Pan".into(), creator: "dimension Dazzle".into(), url: "https://www.fab.com/listings/4ab9".into(), license: "CC BY 4.0".into() }];
+        let (caption, pinned) = caption_with_credits("Headline\n\nCDN EP-007.\n\n#AnimationNews".into(), &one);
+        assert!(pinned.is_none());
+        assert!(caption.contains("Asset credits: \"Frying Pan\" by dimension Dazzle https://www.fab.com/listings/4ab9 (CC BY 4.0)"));
+        assert!(caption.ends_with("#AnimationNews"));
+        let many: Vec<AssetCredit> = (0..40)
+            .map(|i| AssetCredit { title: format!("Prop number {i} with a long name"), creator: "Creator Name".into(), url: format!("https://www.fab.com/listings/{i:040}"), license: "CC BY 4.0".into() })
+            .collect();
+        let (caption, pinned) = caption_with_credits("Headline\n\n#AnimationNews".into(), &many);
+        assert!(caption.contains("Asset credits in the pinned comment."));
+        assert!(caption.encode_utf16().count() <= 2200);
+        assert!(pinned.unwrap().contains("Prop number 39"));
+        assert_eq!(caption_with_credits("x".into(), &[]), ("x".to_string(), None));
+    }
     use atlas_storyboard::two_anchor_script::AnchorRole;
 
     fn line(start: f32, duration: f32) -> VoicedLine {

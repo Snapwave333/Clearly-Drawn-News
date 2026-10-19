@@ -141,6 +141,15 @@ one JSON line per call. `atlas news director-check` shows the chain and which ke
 - Description: per story the source links, region tag, original headline (translated stories), official
   announcement line and "Via" credits; the AI and synthetic-media disclosure; a sourcing line that only claims
   two sources (or a studio's own announcement) when every story has one.
+- Asset credits (CC BY 4.0 requires attribution): every description ends with an `Asset credits` block, one line per
+  studio prop with title, creator, URL and license. It is read from `asset_credits` in `studio_manifest.json`
+  (`title`/`name`, `creator`/`author`, `url`/`source`, `license`; override path `ATLAS_STUDIO_MANIFEST`), falling back to
+  `AtlasStudioOffice/assets/fab_cc_by/CREDITS_CC_BY.md` (`Title, Creator, URL (note)` lines; `ATLAS_ASSET_CREDITS`).
+  The block is reserved with the disclosure, so stories are trimmed before credits are. No credits found is a
+  publish hold. TikTok: the compact block goes in the caption before the hashtags when it fits 2,200 characters;
+  otherwise the caption says "Asset credits in the pinned comment." and the text is written to
+  `publish/tiktok_pinned_comment.txt` to pin by hand after posting (the API cannot post comments). Code:
+  `crates/atlas-cli/src/news_credits.rs`, `news_tiktok::caption_with_credits`.
 - Captions `captions_en.srt` from the voice timeline (84 characters per cue, 42 per line).
 - Thumbnail: `blender/story_cards.py card` brand card (plain Python, no Blender), scaled to a 1280x720 PNG of 2 MB or less.
 

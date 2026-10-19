@@ -21,6 +21,7 @@ mod memory;
 mod news;
 mod news_aired;
 mod news_attribution;
+mod news_credits;
 mod news_translate;
 mod news_health;
 mod news_lipsync;

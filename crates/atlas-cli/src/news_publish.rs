@@ -220,6 +220,7 @@ pub(crate) fn build_metadata(
     retros: &[crate::news_retro::Retrospective],
     transcript: String,
     privacy: &str,
+    credits: &[crate::news_credits::AssetCredit],
 ) -> NewsVideoMetadata {
     let title = clip_chars(&format!("{} {}", atlas_core::SHOW_TITLE, script.episode_title), TITLE_LIMIT);
     let mut description = format!(
@@ -246,6 +247,8 @@ pub(crate) fn build_metadata(
         show = atlas_core::SHOW_TITLE,
         company = atlas_core::COMPANY_NAME,
     );
+    // CC BY attribution is mandatory, so it is reserved up front with the disclosure and never trimmed.
+    let disclosure = format!("{}{disclosure}", crate::news_credits::description_block(credits));
     for story in &report.passed_stories {
         let region = match story.sourcing.region.as_str() {
             "" | "US" | "Global" => String::new(),
@@ -520,7 +523,14 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
             let retros: Vec<crate::news_retro::Retrospective> = read_value(&episode_dir.join("fact_check.json"))
                 .and_then(|v| serde_json::from_value(v["retrospectives"].clone()).ok())
                 .unwrap_or_default();
-            let metadata = build_metadata(script, report, &retros, transcript, privacy);
+            let credits = crate::news_credits::load_asset_credits();
+            if credits.is_empty() {
+                holds.push(format!(
+                    "CC BY asset credits not found (studio_manifest.json asset_credits or {}); attribution is required",
+                    crate::news_credits::credits_file_path().display()
+                ));
+            }
+            let metadata = build_metadata(script, report, &retros, transcript, privacy, &credits);
             std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
             println!("  Metadata: {} ({} chars description, {} tags, category {})", metadata.title, metadata.description.chars().count(), metadata.tags.len(), metadata.category_id);
             println!("  Captions: {} cues", srt.matches(" --> ").count());
@@ -530,7 +540,17 @@ pub(crate) async fn publish_episode(store: &Store, episode_dir: &Path, request: 
                 Err(error) => holds.push(format!("thumbnail could not be built: {error}")),
             }
             let final_video = status["final_video"].as_str().map(PathBuf::from);
-            let caption = news_tiktok::build_caption(&headline, &episode_id, report, existing_youtube.as_deref());
+            let (caption, pinned) =
+                news_tiktok::caption_with_credits(news_tiktok::build_caption(&headline, &episode_id, report, existing_youtube.as_deref()), &credits);
+            let pinned_path = publish_dir.join("tiktok_pinned_comment.txt");
+            match &pinned {
+                Some(text) => {
+                    std::fs::write(&pinned_path, text)?;
+                    println!("  TikTok asset credits do not fit the caption; pin the comment in {}", pinned_path.display());
+                }
+                None if pinned_path.is_file() => std::fs::remove_file(&pinned_path)?,
+                None => {}
+            }
             match news_tiktok::build_package(episode_dir, final_video.as_deref(), &timeline.lines, caption).await {
                 Ok(cut) => {
                     println!(
