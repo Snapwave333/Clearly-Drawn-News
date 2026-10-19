@@ -1,9 +1,31 @@
 use super::*;
+use atlas_core::SHOW_TITLE;
+use atlas_policy::telegram::notify_best_effort;
 
 pub(crate) const MAX_PRODUCTION_ATTEMPTS: u32 = 3;
 pub(crate) const PRODUCTION_RETRY_BASE_MINUTES: i64 = 30;
 const AUTO_PRUNE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(7 * 86_400);
 const AUTO_PRUNE_RETENTION: std::time::Duration = std::time::Duration::from_secs(30 * 86_400);
+/// Loopback port held while a daemon runs, so a restart loop or a second Task Scheduler start never doubles up.
+/// Released automatically when the process dies. Override with `ATLAS_DAEMON_LOCK_PORT`.
+const DEFAULT_DAEMON_LOCK_PORT: u16 = 47613;
+
+fn daemon_lock_port(lookup: impl Fn(&str) -> Option<String>) -> u16 {
+    lookup("ATLAS_DAEMON_LOCK_PORT")
+        .and_then(|value| value.trim().parse().ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(DEFAULT_DAEMON_LOCK_PORT)
+}
+
+/// Single-instance guard: `None` when another daemon already holds the lock.
+fn acquire_daemon_lock(port: u16) -> Option<std::net::TcpListener> {
+    std::net::TcpListener::bind(("127.0.0.1", port)).ok()
+}
+
+/// Liveness marker the launcher and `HANDOFF.md` health checks read (RFC 3339, local loop time).
+fn write_heartbeat(daemon_dir: &Path, now: chrono::DateTime<Utc>) {
+    let _ = std::fs::write(daemon_dir.join("heartbeat"), now.to_rfc3339());
+}
 
 fn auto_prune_if_due(
     data_dir: &Path,
@@ -176,6 +198,17 @@ async fn run_daily_news(store: &Store, daemon_dir: &Path, now: chrono::DateTime<
             let attempts = failures.record_failure(&key, &error.to_string(), now);
             failures.save(&failures_path)?;
             eprintln!("News slot {slot} attempt {attempts}/{MAX_PRODUCTION_ATTEMPTS} failed; backing off: {error}");
+            let next = if attempts >= MAX_PRODUCTION_ATTEMPTS {
+                "quarantined; delete its entry in daemon/production_failures.json to retry".to_string()
+            } else {
+                "retrying after the back-off".to_string()
+            };
+            let reason = error.to_string();
+            let reason: String = reason.chars().take(300).collect();
+            notify_best_effort(&format!(
+                "⚠ {SHOW_TITLE} slot {slot} failed (attempt {attempts}/{MAX_PRODUCTION_ATTEMPTS}), {next}: {reason}"
+            ))
+            .await;
         }
     }
     Ok(())
@@ -197,9 +230,16 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
             news_only,
         } => {
             std::fs::create_dir_all(&daemon_dir)?;
+            let lock_port = daemon_lock_port(env_var);
+            let Some(_instance_lock) = acquire_daemon_lock(lock_port) else {
+                println!("Another ATLAS daemon is already running (lock 127.0.0.1:{lock_port}); exiting.");
+                // Exit code 3 tells scripts/cdn-news-daemon.cmd not to restart.
+                std::process::exit(3);
+            };
             if pause_path.is_file() {
                 std::fs::remove_file(&pause_path)?;
             }
+            write_heartbeat(&daemon_dir, Utc::now());
             if news_only {
                 println!("ATLAS daemon started for Clearly Drawn News only (explainer publisher off).");
             } else {
@@ -219,6 +259,7 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
                 (false, None) => println!("Clearly Drawn News: {} slots/day at {listed} local time, but ATLAS_NEWS_APPROVAL=telegram has no TELEGRAM_BOT_TOKEN, so nothing will run.", hours.len()),
             }
             loop {
+                write_heartbeat(&daemon_dir, Utc::now());
                 if pause_path.is_file() {
                     println!("ATLAS continuous publisher paused.");
                     break;
@@ -243,6 +284,14 @@ pub(crate) async fn cmd_daemon(store: &Store, action: DaemonAction) -> anyhow::R
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(poll_seconds.max(60))).await;
+            }
+        }
+        DaemonAction::Notify { message } => {
+            // Best effort by design: the launcher calls this after a crash; never fail the caller.
+            if notify_best_effort(&message).await {
+                println!("Telegram notice sent.");
+            } else {
+                println!("Telegram not configured or unreachable; notice skipped.");
             }
         }
         DaemonAction::Pause => {
@@ -572,6 +621,19 @@ mod tests {
 
     fn local(stamp: &str) -> chrono::NaiveDateTime {
         at(stamp).naive_utc()
+    }
+
+    #[test]
+    fn daemon_lock_allows_one_instance() {
+        let port = 47_000 + (std::process::id() % 900) as u16;
+        let first = acquire_daemon_lock(port);
+        assert!(first.is_some());
+        assert!(acquire_daemon_lock(port).is_none());
+        drop(first);
+        assert!(acquire_daemon_lock(port).is_some());
+        assert_eq!(daemon_lock_port(|_| None), DEFAULT_DAEMON_LOCK_PORT);
+        assert_eq!(daemon_lock_port(|_| Some("5000".into())), 5000);
+        assert_eq!(daemon_lock_port(|_| Some("x".into())), DEFAULT_DAEMON_LOCK_PORT);
     }
 
     #[test]

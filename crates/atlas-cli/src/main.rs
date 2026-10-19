@@ -425,6 +425,11 @@ enum DaemonAction {
         news_only: bool,
     },
     Pause,
+    /// Best-effort Telegram notice (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID); used by the launcher after a crash. Never fails.
+    Notify {
+        #[arg(long)]
+        message: String,
+    },
 }
 
 #[derive(Subcommand)]

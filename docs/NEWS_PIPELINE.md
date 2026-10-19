@@ -181,13 +181,30 @@ atlas daemon start --news-only                       # scheduled slots, no expla
 
 ## Scheduling
 
-`scripts/cdn-news-daemon.cmd` starts `target\release\atlas.exe daemon start --news-only` from `Marker\` and
-appends to `%LOCALAPPDATA%\atlas-studio\atlas\data\daemon\daemon.log`. The Task Scheduler task
-`CDN News Daemon` runs it at logon and is registered **disabled**. To go live:
+`scripts/cdn-news-daemon.cmd` is a self-healing supervisor. It starts `target\release\atlas.exe daemon start --news-only`
+from `Marker\` and appends to `%LOCALAPPDATA%\atlas-studio\atlas\data\daemon\daemon.log`. If the daemon exits, the
+supervisor sends a Telegram notice (`atlas daemon notify`, best effort), waits 1 minute times the restart count (15 minutes at
+most), and starts it again. The log rotates to `daemon.log.1` at 20 MB. The supervisor stops for good after `atlas daemon pause`, or
+when another daemon already holds the single-instance lock (loopback port `ATLAS_DAEMON_LOCK_PORT`, default 47613; the second
+copy exits with code 3). The daemon writes `daemon\heartbeat` on every loop, and a failed slot sends a Telegram notice with its
+attempt count. Director calls fail over from Anthropic to NVIDIA NIM.
+
+Task Scheduler task `CDN News Daemon` runs the supervisor at logon. If the supervisor itself dies, Task Scheduler restarts it every
+minute, up to 999 times. StartWhenAvailable is set, there is no time limit, and only one instance can run. The task is registered
+**disabled** by `scripts/register-cdn-daemon.ps1`.
+
+```mermaid
+flowchart LR
+  TS["Task Scheduler (disabled)"] --> L["cdn-news-daemon.cmd"] --> D["atlas daemon start --news-only"]
+  D -- exit --> N["Telegram notice"] --> B["back-off"] --> L
+  D -- pause / lock held --> X["stop"]
+```
+
+To go live, only after Eli says go:
 
 ```powershell
 [Environment]::SetEnvironmentVariable('ATLAS_NEWS_PUBLISH','on','User')
 [Environment]::SetEnvironmentVariable('ATLAS_NEWS_TIKTOK','on','User')    # optional, after TikTok setup
-Enable-ScheduledTask -TaskName 'CDN News Daemon'
+powershell -ExecutionPolicy Bypass -File atlas-studio\scripts\register-cdn-daemon.ps1 -Enable
 Start-ScheduledTask -TaskName 'CDN News Daemon'   # or log off and on
 ```
