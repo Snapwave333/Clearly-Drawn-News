@@ -1,6 +1,6 @@
 # CDN Studio Handoff (Blender v3 set)
 
-Updated 2026-10-18, 6:10 PM MDT. Read this first if you are picking up the studio work.
+Updated 2026-10-18, 6:16 PM MDT. Read this first if you are picking up the studio work.
 
 ## Files
 
@@ -114,3 +114,59 @@ Updated 2026-10-18, 6:10 PM MDT. Read this first if you are picking up the studi
   - Import heavy assets one at a time and save after each.
   - Decimate meshes and keep textures at 2K or below.
   - Prefer collection instances.
+
+## Current state (6:16 PM MDT)
+- Blender: PID 30716 (headed, listener on 9877). The blend was saved after every build.
+- Committed: kitchen, debate and lockers docs, plus this handoff.
+- Shelf dressing:
+  - IN PROGRESS. The 19 Poly Haven CC0 assets are downloaded and staged at `polish\ph_shelves.zip`, not yet imported. They are book_encyclopedia_set_01, CheeseBox_01, alarm_clock_01, ammo_box, brass_pot_01/02, brass_vase_03/04, ceramic_vase_03, concrete_cat_statue, horse_statue_01, medical_box, rubber_duck_toy, vintage_video_camera, Camera_01, wooden_bowl_02, oil_tin, measuring_tape_01 and spray_paint_bottles.
+  - Review cams exist in 12_REVIEW_CAMS: REVIEW_SHELVES_WEST, _NORTH, _EAST and _KITCHEN.
+  - "Before" renders go to `polish\shelf_before\`.
+
+## Shelf dressing plan (Eli: "the shelves are too empty")
+1. Expand ph_shelves.zip into `news_intro\assets\polyhaven\props\`, then run `c_cr2.py`. It imports any missing PM_ masters; import a few at a time and save.
+2. Find the shelf levels by raycasting down through a live rack instance. Use PI_worn_metal_rack.008, rot 0, at (4.4, 5.1, -0.05): its local level z values apply to every worn_metal_rack.
+3. Build 4 loadout variants as collections (DRESS_RACK_V1..V4) under BTS_PROP_MASTERS, which is excluded from the view layer. Use linked duplicates of the PM_ meshes laid out in rack-local coordinates.
+   - Vary the order, gaps, rotation (±15° plus some 90° turns) and scale (0.9–1.1) so the shelves read as lived-in, not tiled.
+   - Contents: books, binders, office_notepads, boxes (cardboard_box_01 at 0.5x, ammo_box, medical_box, metal_toolbox), "film cans" (CheeseBox_01 and russian_food_cans_01 as round-tin stand-ins), cables and tape (medical_tape, measuring_tape_01), mugs and cups (tea_set_01 and the Fab mugs), trophies (brass_goblets, brass_vase_03/04), figurines (horse_statue_01, concrete_cat_statue, rubber_duck_toy; all generic and uncopyrighted), and retro gear (vintage_video_camera, Camera_01, alarm_clock_01).
+   - There are no CC0 VHS/DVD case models. Use boxes and binders in their place, or Fab CC BY items if any match, and credit them.
+4. Put one collection-instance empty on each of the 18 worn_metal_rack instances, matching their matrix_world and picking a random variant. Do the same for the 2 industrial_storage_carts with their own variant.
+5. Kitchen: dress the KITCHEN_TallDrawers top shelves and the back counter with brass pots, ceramic_vase_03 jars, wooden bowls, pot_enamel, the cutting board and tea cups (CC0), plus the Fab frying pan once it is imported.
+6. Use low-sample renders only (24 samples, 40%), and never render while importing. Save after each step.
+7. Acceptance:
+   - Every rack and shelf is visibly full in the after renders (`polish\shelf_after\`, copied to `/workspace/news-intro/polish/shelves_{before,after}_*.png`).
+   - No new items are visible in desk, interview, kitchen or debate cams. Run c_kchk with SETC set to the dressing collection and FORB_EXTRA set to the kitchen and debate cams; FORBIDDEN must be {}. Exception: kitchen shelves may appear in kitchen cams.
+   - No floating items, and nothing intersecting rack posts.
+   - No plants.
+   - The blend is saved and committed.
+
+## Fab CC BY 4.0 props: import plan
+- **Source:** `AtlasStudioOffice\assets\fab_cc_by\` and CREDITS_CC_BY.md. All 15 are reported "AI use allowed"; re-check each one against CREDITS_CC_BY.md and its Fab page.
+- **Files:** studio-softbox-light.zip, studio-umbrella-light.zip, cinema-camera.zip, camcorder_fab.blend, coffee-machine.zip, coffee_machine_mazor_fbx.zip, coffee_machine.blend, cappuccino_mug_blender.zip, coffee_mug.fbx, mug.zip, folding-tables.zip, lockers.zip, teleprompter-dbv2020.zip, frying_pan_blender.zip, office-chair.zip.
+- **Process for each asset, one at a time:**
+  1. Unzip to `assets\fab_cc_by\<name>\`. Delete the zip only if disk space is tight (about 8 GB free at 6:07 PM).
+  2. Import it as a PM_<name> master in BTS_PROP_MASTERS. Append .blend files via bpy.data.libraries.load; import .fbx and .gltf with the importers.
+  3. Scale it to real-world size.
+  4. Decimate meshes over 100k tris (Decimate modifier, ratio around 0.3, then apply).
+  5. Downsize textures over 2K to 2K: image.scale, then save to the asset folder.
+  6. Keep Principled PBR materials.
+  7. Save, then audit.
+- **Placement:**
+  - Crafty: coffee machines and mugs, replacing the thermos/airpot duplicates where they match. The folding tables replace the dining_table (crafty).
+  - Teleprompters go on the BTS camera pedestals.
+  - The cinema camera and camcorder go on the crew carts (industrial_storage_cart, tool cart).
+  - Softbox and umbrella lights become crew rigs next to the BTS tripod lights. They are props, so light-link them or keep them unlit.
+  - The frying pan replaces brass_pan_01 on the kitchen cooktop.
+  - Office chairs go at the crew desks (PI_metal_office_desk around x 15, y -6).
+  - Lockers.zip: do NOT replace the CC0 Innerscene lockers without Eli's OK, because Eli said "CC0 only" for the lockers.
+- **Credits:** add the manifest `asset_credits` array, one entry per asset: name, creator, url, license "CC BY 4.0", ai_use "allowed", file, used_in. Add a matching docs table so the pipeline can put them in episode description credits.
+- **Acceptance:**
+  - Every prop is placed and instanced at real-world scale.
+  - asset_credits is complete.
+  - Audits are clean.
+  - A render shows the props (`fab_props_*.png`).
+  - Committed.
+
+## Other open items
+- The debate wide shot was re-checked: a floating PI_metal_toolbox (left over when the tool cart moved) was moved with the cart and saved.
+- verify_studio must still PASS after each step. Expect 3 pending (Armature_Elena, Armature_Marcus, Armature_Chef).
